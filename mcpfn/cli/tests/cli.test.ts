@@ -9,13 +9,43 @@ import {
   structuredResult,
 } from "@mcpfn/core";
 
-import { loadManifestSource, loadScenarios, runCli } from "../src/index.js";
+import {
+  authHeadersFromEnvironment,
+  loadManifestSource,
+  loadScenarios,
+  runCli,
+} from "../src/index.js";
 
 describe("mcpfn CLI", () => {
   const roots: string[] = [];
 
   afterEach(async () => {
+    delete process.env.MCPFN_TEST_TOKEN;
+    delete process.env.MCPFN_TEST_KEY;
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  });
+
+  it("loads bounded bearer and API-key credentials from the environment", () => {
+    process.env.MCPFN_TEST_TOKEN = "oauth-token";
+    process.env.MCPFN_TEST_KEY = "api-key";
+    expect(authHeadersFromEnvironment({ bearerTokenEnv: "MCPFN_TEST_TOKEN" })
+      ?.get("authorization")).toBe("Bearer oauth-token");
+    expect(authHeadersFromEnvironment({
+      apiKeyEnv: "MCPFN_TEST_KEY",
+      apiKeyHeader: "x-skillplane-key",
+    })?.get("x-skillplane-key")).toBe("api-key");
+    expect(() => authHeadersFromEnvironment({
+      bearerTokenEnv: "MCPFN_TEST_TOKEN",
+      apiKeyEnv: "MCPFN_TEST_KEY",
+    })).toThrow(/mutually exclusive/);
+    expect(() => authHeadersFromEnvironment({ apiKeyHeader: "authorization" }))
+      .toThrow(/requires --api-key-env/);
+    expect(() => authHeadersFromEnvironment({ apiKeyEnv: "DOES_NOT_EXIST" }))
+      .toThrow(/is not set/);
+    expect(() => authHeadersFromEnvironment({
+      apiKeyEnv: "MCPFN_TEST_KEY",
+      apiKeyHeader: "Host",
+    })).toThrow(/not allowed/);
   });
 
   it("returns usage exit code 2 when a command is missing or unknown", async () => {

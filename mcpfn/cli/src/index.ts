@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { InMemoryTaskStore } from "@modelcontextprotocol/sdk/experimental/tasks/stores/in-memory.js";
-import { cac } from "cac";
+import { cac, type Command } from "cac";
 import { diagnoseMcpAuthorization } from "@mcpfn/auth";
 import {
   stdioTarget,
@@ -19,6 +19,7 @@ import {
   McpFnTestClient,
   McpFnAssertionError,
   assertManifestContract,
+  runAuthenticatedOfficialConformance,
   runOfficialConformance,
   runMcpFnTargetSuite,
   runScenarios,
@@ -38,6 +39,19 @@ export interface CliRunOptions {
 export const MCPFN_CLI_EXIT_SUCCESS = 0;
 export const MCPFN_CLI_EXIT_TEST_FAILURE = 1;
 export const MCPFN_CLI_EXIT_USAGE = 2;
+
+export interface CliAuthOptions {
+  bearerTokenEnv?: string;
+  apiKeyEnv?: string;
+  apiKeyHeader?: string;
+}
+
+function addAuthOptions(command: Command) {
+  return command
+    .option("--bearer-token-env <variable>", "Read an OAuth bearer token from an environment variable")
+    .option("--api-key-env <variable>", "Read an API key from an environment variable")
+    .option("--api-key-header <name>", "API-key header name (default: x-api-key)");
+}
 
 export async function runCli(
   argv = process.argv.slice(2),
@@ -150,7 +164,7 @@ export async function runCli(
       }
     });
 
-  cli.command("conformance <url>", "Run the official MCP conformance package against a server")
+  addAuthOptions(cli.command("conformance <url>", "Run the official MCP conformance package against a server"))
     .option("--suite <suite>", "active, all, or pending")
     .option("--scenario <scenario>", "Run one official scenario")
     .option("--expected-failures <path>", "Expected-failures baseline")
@@ -164,8 +178,9 @@ export async function runCli(
       outputDir?: string;
       specVersion?: string;
       verbose?: boolean;
-    }) => {
-      const result = await runOfficialConformance({
+    } & CliAuthOptions) => {
+      const headers = authHeadersFromEnvironment(options);
+      const conformanceOptions = {
         url,
         suite: options.suite,
         scenario: options.scenario,
@@ -177,13 +192,16 @@ export async function runCli(
         verbose: options.verbose,
         cwd,
         stdio: "pipe",
-      });
+      } as const;
+      const result = headers
+        ? await runAuthenticatedOfficialConformance({ ...conformanceOptions, headers })
+        : await runOfficialConformance(conformanceOptions);
       if (result.stdout) stdout(result.stdout);
       if (result.stderr) stderr(result.stderr);
       exitCode = result.exitCode;
     });
 
-  cli.command("inspect <target>", "Inventory an HTTP or stdio MCP target")
+  addAuthOptions(cli.command("inspect <target>", "Inventory an HTTP or stdio MCP target"))
     .option("--stdio", "Treat target as an executable instead of an HTTP URL")
     .option("--args <json>", "JSON array of stdio executable arguments")
     .option("--output <path>", "Write the redacted JSON snapshot")
@@ -191,7 +209,7 @@ export async function runCli(
       stdio?: boolean;
       args?: string;
       output?: string;
-    }) => {
+    } & CliAuthOptions) => {
       const target = parseTarget(targetValue, options, cwd);
       const inspector = McpFnInspector.create({ target });
       try {
@@ -206,20 +224,38 @@ export async function runCli(
       }
     });
 
-  cli.command("test-target <target> <scenarios>", "Run scenarios against an HTTP or stdio MCP target")
+  addAuthOptions(cli.command("test-target <target> <scenarios>", "Run scenarios against an HTTP or stdio MCP target"))
     .option("--stdio", "Treat target as an executable instead of an HTTP URL")
     .option("--args <json>", "JSON array of stdio executable arguments")
+    .option("--manifest <path>", "Validate the live target against an explicit McpFn contract")
     .option("--output <path>", "Write the JSON report")
+    .option("--max-report-bytes <bytes>", "Maximum aggregate JSON report size")
     .action(async (targetValue: string, scenariosPath: string, options: {
       stdio?: boolean;
       args?: string;
+      manifest?: string;
       output?: string;
-    }) => {
+      maxReportBytes?: string;
+    } & CliAuthOptions) => {
+      const manifest = options.manifest
+        ? validateManifest(JSON.parse(await readFile(path.resolve(cwd, options.manifest), "utf8")))
+        : undefined;
+      const outputMaxBytes = parsePositiveInteger(
+        options.maxReportBytes,
+        "--max-report-bytes",
+      );
+      if (outputMaxBytes !== undefined && outputMaxBytes < 1_025) {
+        throw new Error("--max-report-bytes must be an integer of at least 1025");
+      }
       const report = await runMcpFnTargetSuite({
         target: parseTarget(targetValue, options, cwd),
         scenarios: await loadScenarios(scenariosPath, cwd),
+        manifest,
+        maxReportBytes: outputMaxBytes === undefined ? undefined : outputMaxBytes - 1,
       });
-      const serialized = `${JSON.stringify(report, null, 2)}\n`;
+      const serialized = outputMaxBytes === undefined
+        ? `${JSON.stringify(report, null, 2)}\n`
+        : `${JSON.stringify(report)}\n`;
       if (options.output) {
         await writeFile(path.resolve(cwd, options.output), serialized, "utf8");
       }
@@ -274,12 +310,18 @@ function parsePositiveInteger(value: string | undefined, name: string): number |
 
 function parseTarget(
   targetValue: string,
-  options: { stdio?: boolean; args?: string },
+  options: { stdio?: boolean; args?: string } & CliAuthOptions,
   cwd: string,
 ): McpFnTarget {
   if (!options.stdio) {
     if (options.args) throw new Error("--args requires --stdio");
-    return streamableHttpTarget(targetValue);
+    const headers = authHeadersFromEnvironment(options);
+    return streamableHttpTarget(targetValue, headers
+      ? { requestInit: { headers } }
+      : undefined);
+  }
+  if (hasAuthOptions(options)) {
+    throw new Error("Credential options are only supported for HTTP targets");
   }
   let args: string[] | undefined;
   if (options.args) {
@@ -290,4 +332,40 @@ function parseTarget(
     args = parsed;
   }
   return stdioTarget({ command: targetValue, args, cwd });
+}
+
+function hasAuthOptions(options: CliAuthOptions): boolean {
+  return Boolean(options.bearerTokenEnv || options.apiKeyEnv || options.apiKeyHeader);
+}
+
+/** Resolve bounded credentials without ever accepting secret values in argv. */
+export function authHeadersFromEnvironment(options: CliAuthOptions): Headers | undefined {
+  if (options.bearerTokenEnv && options.apiKeyEnv) {
+    throw new Error("--bearer-token-env and --api-key-env are mutually exclusive");
+  }
+  if (options.apiKeyHeader && !options.apiKeyEnv) {
+    throw new Error("--api-key-header requires --api-key-env");
+  }
+  const variable = options.bearerTokenEnv ?? options.apiKeyEnv;
+  if (!variable) return undefined;
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(variable)) {
+    throw new Error("Credential environment variable name is invalid");
+  }
+  const credential = process.env[variable];
+  if (!credential) throw new Error(`Credential environment variable ${variable} is not set`);
+  if (/\r|\n/.test(credential)) throw new Error("Credential contains an invalid line break");
+  const headers = new Headers();
+  if (options.bearerTokenEnv) {
+    headers.set("authorization", `Bearer ${credential}`);
+  } else {
+    const name = options.apiKeyHeader ?? "x-api-key";
+    if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name)) {
+      throw new Error("API-key header name is invalid");
+    }
+    if (["host", "connection", "content-length", "transfer-encoding"].includes(name.toLowerCase())) {
+      throw new Error("API-key header name is not allowed");
+    }
+    headers.set(name, credential);
+  }
+  return headers;
 }

@@ -95,6 +95,19 @@ Start a real Streamable HTTP endpoint, then run:
 mcpfn conformance http://127.0.0.1:3000/mcp --suite active
 ```
 
+For an authenticated loopback server, inject a short-lived credential from the
+environment:
+
+```sh
+MCP_TOKEN="$(issue-test-token)" mcpfn conformance \
+  http://127.0.0.1:3000/mcp --suite active --bearer-token-env MCP_TOKEN
+```
+
+The command never accepts the credential value as an argument. API keys use
+`--api-key-env` and optionally `--api-key-header`. Programmatic consumers can
+pass an OAuth provider directly to `streamableHttpTarget`, or use
+`runAuthenticatedOfficialConformance({ url, headers })` for the official suite.
+
 McpFn delegates to the pinned official conformance npm package and returns its exit code. The current pinned runner requires Node.js 22 or newer. Use an expected-failures file only for reviewed, time-bounded exceptions; do not turn new failures into a silent baseline update.
 
 ## Superfunctions release gate
