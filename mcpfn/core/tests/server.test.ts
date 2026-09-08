@@ -16,6 +16,120 @@ describe("McpFnServer", () => {
     await Promise.all(closeables.splice(0).map((value) => value.close().catch(() => undefined)));
   });
 
+  it("projects and enriches one authenticated client profile before strict validation", async () => {
+    let reached = false;
+    const registry = new McpFnRegistry<{ tenant?: string }>().register({
+      name: "scoped",
+      description: "Uses a server-owned tenant.",
+      inputSchema: {
+        type: "object",
+        properties: { query: { type: "string" }, tenant: { type: "string" } },
+        required: ["query", "tenant"],
+        additionalProperties: false,
+      },
+      handler: async ({ query, tenant }) => {
+        reached = true;
+        return structuredResult({ query, tenant });
+      },
+    });
+    const server = createMcpFnServer({
+      info: { name: "profiled", version: "1.0.0" },
+      registry,
+      context: () => ({ tenant: "trusted" }),
+      clientProfiles: {
+        verifiedIdentity: (context) => context.tenant ? { id: "authenticated" } : undefined,
+        selectProfile: ({ verifiedIdentity }) => ({ id: verifiedIdentity?.id ?? "anonymous" }),
+        projectCatalog: ({ tools }) => tools.map((tool) => ({
+          ...tool,
+          inputSchema: {
+            ...tool.inputSchema,
+            properties: { query: { type: "string" } },
+            required: ["query"],
+          },
+        })),
+        enrichArguments: ({ arguments: args, context }) => ({
+          ...args,
+          tenant: context.tenant,
+        }),
+      },
+    });
+    const client = new Client({ name: "forged-self-report", version: "1" }, { capabilities: {} });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    closeables.push(client, server);
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    const [tool] = (await client.listTools()).tools;
+    expect(tool.inputSchema).toMatchObject({ required: ["query"], properties: { query: {} } });
+    expect(tool.inputSchema).not.toHaveProperty("properties.tenant");
+    const result = await client.callTool({
+      name: "scoped",
+      arguments: { query: "ok", tenant: "forged" },
+    });
+    expect(result.structuredContent).toEqual({ query: "ok", tenant: "trusted" });
+    expect(reached).toBe(true);
+  });
+
+  it("retains exact AJV diagnostics for an unknown root property", async () => {
+    const registry = new McpFnRegistry().register({
+      name: "strict",
+      description: "Strict input.",
+      inputSchema: { type: "object", properties: {}, additionalProperties: false },
+      handler: async () => structuredResult({ unreachable: true }),
+    });
+    await expect(registry.callTool("strict", { surprise: "redact-me" }, undefined, {} as never))
+      .rejects.toMatchObject({
+        details: { issues: [{
+          path: "/",
+          instancePath: "",
+          schemaPath: "#/additionalProperties",
+          keyword: "additionalProperties",
+          additionalProperty: "surprise",
+          params: { additionalProperty: "surprise" },
+        }] },
+      });
+  });
+
+  it("fails before the handler when projection and enrichment are asymmetric", async () => {
+    let reached = false;
+    const registry = new McpFnRegistry().register({
+      name: "asymmetric",
+      description: "Requires trusted context.",
+      inputSchema: {
+        type: "object",
+        properties: { tenant: { type: "string" } },
+        required: ["tenant"],
+        additionalProperties: false,
+      },
+      handler: async () => {
+        reached = true;
+        return structuredResult({ ok: true });
+      },
+    });
+    const server = createMcpFnServer({
+      info: { name: "asymmetric", version: "1.0.0" },
+      registry,
+      clientProfiles: {
+        projectCatalog: ({ tools }) => tools.map((tool) => ({
+          ...tool,
+          inputSchema: { type: "object", properties: {}, additionalProperties: false },
+        })),
+        enrichArguments: ({ arguments: args }) => args, // missing trusted tenant
+      },
+    });
+    const client = new Client({ name: "test", version: "1" }, { capabilities: {} });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    closeables.push(client, server);
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    await expect(client.callTool({ name: "asymmetric", arguments: {} })).resolves.toMatchObject({
+      isError: true,
+      structuredContent: {
+        error: { details: { issues: [expect.objectContaining({ keyword: "required" })] } },
+      },
+    });
+    expect(reached).toBe(false);
+  });
+
   it("round-trips a validated tool over the official in-memory transport", async () => {
     const registry = new McpFnRegistry().register({
       name: "add",

@@ -33,6 +33,18 @@ import type {
 
 export type McpFnJsonSchema = Record<string, unknown>;
 
+/** Stable, structured JSON Schema diagnostic emitted by strict validation. */
+export interface McpFnSchemaIssue {
+  /** @deprecated Use instancePath. Retained for backwards compatibility. */
+  path: string;
+  instancePath: string;
+  schemaPath: string;
+  keyword: string;
+  message: string;
+  params: Record<string, unknown>;
+  additionalProperty?: string;
+}
+
 export type McpFnObjectSchema = McpFnJsonSchema & {
   type: "object";
   properties?: Record<string, McpFnJsonSchema>;
@@ -73,7 +85,7 @@ export interface McpFnToolDefinition<TContext = undefined> {
   /** Optional domain-specific mapping for JSON Schema argument failures. */
   handleInvalidArguments?(
     args: Record<string, unknown>,
-    issues: Array<{ path: string; message: string; keyword: string }>,
+    issues: McpFnSchemaIssue[],
     context: TContext,
     extra: McpFnRequestExtra,
   ): CallToolResult | Promise<CallToolResult>;

@@ -23,6 +23,7 @@ import type {
   McpFnObjectSchema,
   McpFnPromptDefinition,
   McpFnRequestExtra,
+  McpFnSchemaIssue,
   McpFnResourceDefinition,
   McpFnResourceTemplateDefinition,
   McpFnTaskRequestExtra,
@@ -53,15 +54,18 @@ type ResourceMatch<TContext> =
       variables: Record<string, string | string[]>;
     };
 
-function formatErrors(errors: ErrorObject[] | null | undefined): Array<{
-  path: string;
-  message: string;
-  keyword: string;
-}> {
+function formatErrors(errors: ErrorObject[] | null | undefined): McpFnSchemaIssue[] {
   return (errors ?? []).map((error) => ({
     path: error.instancePath || "/",
+    instancePath: error.instancePath || "",
+    schemaPath: error.schemaPath,
     message: error.message ?? "Schema validation failed",
     keyword: error.keyword,
+    params: { ...error.params },
+    ...(error.keyword === "additionalProperties" &&
+      typeof error.params.additionalProperty === "string"
+      ? { additionalProperty: error.params.additionalProperty }
+      : {}),
   }));
 }
 

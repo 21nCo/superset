@@ -92,6 +92,34 @@ const server = createMcpFnServer({
 
 Do not accept workspace, tenant, actor, or credential identifiers as tool arguments. The context factory receives the official SDK request metadata and runs before every tool call.
 
+For clients whose model-visible catalog differs from the canonical server
+schema, configure `clientProfiles`. `verifiedIdentity` must derive identity from
+authenticated server state; `selectProfile` receives that identity separately
+from self-reported initialization metadata. `projectCatalog` runs for both
+`tools/list` and call eligibility, then `enrichArguments` injects trusted fields
+before the registry performs strict validation. With no hooks, the generic
+profile preserves the canonical catalog and arguments.
+
+```ts
+clientProfiles: {
+  verifiedIdentity: (_context, extra) =>
+    extra.authInfo ? { id: extra.authInfo.clientId } : undefined,
+  selectProfile: ({ verifiedIdentity }) => ({
+    id: verifiedIdentity?.id === "approved-client" ? "approved/v1" : "generic",
+  }),
+  projectCatalog: ({ tools, profile }) =>
+    profile.id === "approved/v1" ? hideServerOwnedFields(tools) : tools,
+  enrichArguments: ({ arguments: args, context }) => ({
+    ...args,
+    tenantId: context.tenantId, // trusted value overwrites a forged one
+  }),
+}
+```
+
+Schema errors expose structured `instancePath`, `schemaPath`, `keyword`,
+validator `params`, and `additionalProperty` diagnostics. Argument values are
+not copied into those diagnostics.
+
 Invalid input returns `MCPFN_INVALID_ARGUMENTS`; invalid declared output returns `MCPFN_INVALID_OUTPUT`; other handler failures return `MCPFN_TOOL_ERROR`. Error objects that already expose a string `code` keep it. `handleInvalidArguments` is available for existing domain packages that must map schema failures into a stable legacy envelope.
 
 When a tool declares a success `outputSchema`, error details remain in its JSON text content and `structuredContent` is omitted so the official SDK does not validate an error envelope against the success schema. Tools without an output schema retain both structured and text error envelopes.

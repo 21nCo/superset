@@ -1,6 +1,6 @@
 # Testing and CI
 
-A regression-free MCP project needs five independent layers.
+A regression-free MCP project needs six independent layers.
 
 Scenario arrays remain readable for compatibility, while new portable bundles
 use the version 1 `mcpfn.scenarios` artifact. Every scenario can declare a
@@ -13,9 +13,16 @@ the maintained compatibility matrix.
 | --- | --- | --- |
 | Unit/domain | Handler logic, authorization, persistence, policy | Existing package tests |
 | Contract | Tools, resources, prompts, tasks, extensions, host requirements | Hashed manifest plus `mcpfn diff` |
+| Deterministic client profile | Authenticated identity, effective catalog, schema portability, enrichment, and strict calls | `runMcpFnClientProfileContract()` |
 | Semantic protocol | Real client/server calls and stable business envelopes | `@mcpfn/testing` scenarios |
 | Authentication | API keys, OAuth challenges, scopes, audience, expiry, revocation, PKCE, refresh, and client metadata | `@mcpfn/testing/auth` and `@mcpfn/testing/playwright` |
 | Protocol conformance | Initialization, JSON-RPC, transport, and MCP specification behavior | Official `@modelcontextprotocol/conformance` via `mcpfn conformance` |
+
+These gates answer different questions. Protocol conformance proves the wire
+contract. Profile compatibility proves a deterministic authenticated catalog
+and call-preparation path. Product scenarios prove domain behavior. Controlled
+live-client evidence remains non-deterministic evidence about one deployed
+client version and does not replace any of the other gates.
 
 ## Contract baseline
 

@@ -32,6 +32,11 @@ import {
 import { errorResult } from "./errors.js";
 import { assertMcpAppContracts } from "./apps.js";
 import { createManifest, type CreateManifestOptions } from "./manifest.js";
+import {
+  MCPFN_GENERIC_CLIENT_PROFILE_ID,
+  type McpFnClientProfile,
+  type McpFnClientProfileHooks,
+} from "./client-profiles.js";
 import type { McpFnRegistry } from "./registry.js";
 import type {
   McpFnClientRequestOptions,
@@ -65,6 +70,8 @@ export interface McpFnServerOptions<TContext> extends CreateManifestOptions {
   toolVisibility?: (
     input: McpFnToolVisibilityInput<TContext>,
   ) => boolean | Promise<boolean>;
+  /** Shared tools/list projection and pre-validation tools/call preparation lifecycle. */
+  clientProfiles?: McpFnClientProfileHooks<TContext>;
   /** Maximum entries returned by each list request. Defaults to 100. */
   pageSize?: number;
   additionalCapabilities?: ServerCapabilities;
@@ -193,6 +200,7 @@ export class McpFnServer<TContext = undefined> {
     extra: McpFnRequestExtra,
   ) => TContext | Promise<TContext>;
   private readonly toolVisibility?: McpFnServerOptions<TContext>["toolVisibility"];
+  private readonly clientProfiles?: McpFnClientProfileHooks<TContext>;
   private readonly manifestOptions: CreateManifestOptions;
   private readonly pageSize: number;
   private readonly serverOptions: McpFnServerOptions<TContext>;
@@ -206,6 +214,7 @@ export class McpFnServer<TContext = undefined> {
     assertMcpAppContracts(this.registry);
     this.contextFactory = options.context ?? (() => undefined as TContext);
     this.toolVisibility = options.toolVisibility;
+    this.clientProfiles = options.clientProfiles;
     this.pageSize = options.pageSize ?? 100;
     if (!Number.isInteger(this.pageSize) || this.pageSize < 1) {
       throw new Error("McpFn pageSize must be a positive integer");
@@ -255,17 +264,33 @@ export class McpFnServer<TContext = undefined> {
     if (this.capabilities.tools) {
       this.protocol.setRequestHandler(ListToolsRequestSchema, async (request, extra) => {
         const tools = this.registry.listTools();
+        const context = await this.contextFactory(extra);
         const visibleTools = this.toolVisibility
-          ? await this.filterVisibleTools(tools, await this.contextFactory(extra), extra)
+          ? await this.filterVisibleTools(tools, context, extra)
           : tools;
-        const result = page(visibleTools, request.params?.cursor, this.pageSize);
+        const profile = await this.resolveClientProfile(context, extra);
+        const projectedTools = this.clientProfiles?.projectCatalog
+          ? await this.clientProfiles.projectCatalog({
+            tools: structuredClone(visibleTools), profile, context, extra,
+          })
+          : visibleTools;
+        const result = page(projectedTools, request.params?.cursor, this.pageSize);
         return { tools: result.values, ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}) };
       });
       this.protocol.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
         const context = await this.contextFactory(extra);
-        const listedTool = this.registry.listTools().find((tool) => tool.name === request.params.name);
-        if (!listedTool || (this.toolVisibility
-          && !(await this.toolVisibility({ tool: listedTool, context, extra })))) {
+        const profile = await this.resolveClientProfile(context, extra);
+        const canonicalTools = this.registry.listTools();
+        const visibleTools = this.toolVisibility
+          ? await this.filterVisibleTools(canonicalTools, context, extra)
+          : canonicalTools;
+        const effectiveTools = this.clientProfiles?.projectCatalog
+          ? await this.clientProfiles.projectCatalog({
+            tools: structuredClone(visibleTools), profile, context, extra,
+          })
+          : visibleTools;
+        const listedTool = effectiveTools.find((tool) => tool.name === request.params.name);
+        if (!listedTool) {
           throw new McpError(ErrorCode.MethodNotFound, `Tool ${request.params.name} not found`);
         }
         const taskSupport = this.registry.taskSupport(request.params.name);
@@ -283,18 +308,28 @@ export class McpFnServer<TContext = undefined> {
           );
         }
         try {
+          const rawArguments = request.params.arguments ?? {};
+          const preparedArguments = this.clientProfiles?.enrichArguments
+            ? await this.clientProfiles.enrichArguments({
+              tool: listedTool,
+              arguments: structuredClone(rawArguments),
+              profile,
+              context,
+              extra,
+            })
+            : rawArguments;
           if (isTaskRequest) {
             if (!extra.taskStore) throw new Error("No task store is available");
             return await this.registry.createToolTask(
               request.params.name,
-              request.params.arguments,
+              preparedArguments,
               context,
               extra as McpFnTaskRequestExtra,
             );
           }
           return await this.registry.callTool(
             request.params.name,
-            request.params.arguments,
+            preparedArguments,
             context,
             extra,
           );
@@ -380,6 +415,30 @@ export class McpFnServer<TContext = undefined> {
         );
       });
     }
+  }
+
+  private async resolveClientProfile(
+    context: TContext,
+    extra: McpFnRequestExtra,
+  ): Promise<McpFnClientProfile> {
+    const verifiedIdentity = await this.clientProfiles?.verifiedIdentity?.(context, extra);
+    const protocol = this.protocol as unknown as {
+      getClientVersion?(): import("@modelcontextprotocol/sdk/types.js").Implementation | undefined;
+      getClientCapabilities?(): import("@modelcontextprotocol/sdk/types.js").ClientCapabilities | undefined;
+    };
+    const initialization = {
+      clientInfo: protocol.getClientVersion?.(),
+      capabilities: protocol.getClientCapabilities?.(),
+    };
+    const selected = await this.clientProfiles?.selectProfile?.({
+      verifiedIdentity, initialization, context, extra,
+    });
+    return {
+      id: selected?.id ?? MCPFN_GENERIC_CLIENT_PROFILE_ID,
+      ...(selected?.version ? { version: selected.version } : {}),
+      ...(verifiedIdentity ? { verifiedIdentity } : {}),
+      initialization,
+    };
   }
 
   private async filterVisibleTools(

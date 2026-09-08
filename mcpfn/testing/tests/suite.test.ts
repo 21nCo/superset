@@ -3,9 +3,58 @@ import { describe, expect, it, vi } from "vitest";
 import { customTarget } from "@mcpfn/client";
 import { McpFnRegistry, createMcpFnServer, structuredResult } from "@mcpfn/core";
 
-import { runMcpFnTargetSuite } from "../src/index.js";
+import { catalogHash, runMcpFnClientProfileContract, runMcpFnTargetSuite } from "../src/index.js";
 
 describe("McpFn target suite", () => {
+  it("records effective profile catalogs, fixtures, portability, and stale snapshots", async () => {
+    const target = () => customTarget({
+      kind: "profile-fixture",
+      open: async () => {
+        const server = createMcpFnServer({
+          info: { name: "profile-contract", version: "1.0.0" },
+          registry: new McpFnRegistry().register({
+            name: "echo",
+            description: "Echo safely.",
+            inputSchema: {
+              type: "object",
+              properties: { value: { type: "string" } },
+              required: ["value"],
+              additionalProperties: false,
+            },
+            handler: async (input) => structuredResult(input),
+          }),
+        });
+        const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+        await server.connect(serverTransport);
+        return { transport: clientTransport, close: () => server.close() };
+      },
+    });
+    const expected = catalogHash([{
+      name: "echo",
+      description: "Echo safely.",
+      inputSchema: {
+        type: "object",
+        properties: { value: { type: "string" } },
+        required: ["value"],
+        additionalProperties: false,
+      },
+    }]);
+    const report = await runMcpFnClientProfileContract([
+      {
+        id: "generic/v1",
+        target,
+        expectedCatalogHash: expected,
+        fixtures: [{ id: "echo-minimal", tool: "echo", arguments: { value: "secret-not-reported" } }],
+      },
+      { id: "stale/v1", target, expectedCatalogHash: "sha256:stale" },
+    ]);
+    expect(report.ok).toBe(false);
+    expect(report.profiles[0]).toMatchObject({ ok: true, toolNames: ["echo"], fixtures: [{ ok: true }] });
+    expect(JSON.stringify(report)).not.toContain("secret-not-reported");
+    expect(report.profiles[1].issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "catalog-snapshot-mismatch" }),
+    ]));
+  });
   it("uses one target/session engine for external-shaped and in-memory targets", async () => {
     const server = createMcpFnServer({
       info: { name: "suite-target", version: "1.0.0" },
