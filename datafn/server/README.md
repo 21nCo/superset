@@ -37,6 +37,41 @@ permission-directory projection. See
 for configuration, error, WebSocket, consistency, migration, and operations
 contracts.
 
+### Resource selectors for gateways and authorization plugins
+
+Use `extractDatafnResourceSelectors` as the supported security-sensitive
+integration point when routing or authorizing a parsed DataFn request before
+dispatch. Pass the action derived from the matched route, the validated JSON
+payload, the exported protocol-envelope version, and the server's DataFn
+schema:
+
+```ts
+import {
+  DATAFN_PROTOCOL_ENVELOPE_VERSION,
+  extractDatafnResourceSelectors,
+} from "@datafn/server";
+
+const selectors = extractDatafnResourceSelectors(
+  {
+    version: DATAFN_PROTOCOL_ENVELOPE_VERSION,
+    action: "transact",
+    payload: parsedJson,
+  },
+  datafnSchema,
+);
+```
+
+The result contains schema-validated resource names in first-seen order with
+duplicates removed. The parser understands every DataFn route shape, including
+batch operations and wrapped or bare transaction steps. Operations that omit an
+optional resource list, such as search and clone, resolve to the full schema.
+
+Do not recursively inspect request JSON. Records, filters, metadata, relation
+values, and other application-owned objects may legitimately contain keys named
+`resource` or `resources`; the selector API deliberately ignores them. Invalid
+selectors, malformed protocol structure, and unsupported envelope versions
+throw `DatafnResourceSelectorError` with a stable `code` and `path`.
+
 ### Initial region placement
 
 DataFn provides reusable region selection without embedding a product's data
