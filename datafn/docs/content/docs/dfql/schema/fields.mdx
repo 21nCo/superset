@@ -45,7 +45,7 @@ type DatafnFieldSchema = {
 | `string`  | `string`                  | Text     | General-purpose text values.                                                   |
 | `number`  | `number`                  | Numeric  | NaN is rejected during validation.                                             |
 | `boolean` | `boolean`                 | Boolean  | Strict `true`/`false` only.                                                    |
-| `date`    | `string \| number`        | Epoch ms | Accepts ISO 8601 strings or epoch milliseconds. Stored as epoch ms internally. |
+| `date`    | `string \| number`        | Epoch ms | Accepts ISO 8601 strings or epoch milliseconds. Stored as epoch ms internally. ISO datetimes without a timezone designator are interpreted as UTC, so validation and storage resolve the same instant in any server timezone. |
 | `object`  | `Record<string, unknown>` | JSON     | Plain objects only. Arrays are rejected; `null` requires `nullable: true`.     |
 | `array`   | `unknown[]`               | JSON     | Array values only.                                                             |
 | `file`    | `string`                  | Text     | File reference (URL or path). Validated as a string.                           |

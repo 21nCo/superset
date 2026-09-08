@@ -40,21 +40,26 @@ export function executeQuery(
   // Phase 15: Aggregate queries
   if (query.groupBy || hasTemporalGrouping(query as any)) {
     const resourceName = query.resource as string;
-    const records = store.getRecords(resourceName);
+    const aggregateResourceSchema = schema.resources.find(
+      (r) => r.name === resourceName,
+    );
+    // Aggregates never pass through materializeSelect, so normalize persisted
+    // nulls here to keep group keys and outputs on the read contract
+    // (cleared non-nullable fields read as absent).
+    const records = store
+      .getRecords(resourceName)
+      .map((record) =>
+        stripNullsForNonNullableFields(record, aggregateResourceSchema),
+      );
     return executeAggregateQuery(query as any, records, schema, store, temporalConfig);
   }
 
-  // Get all records for the resource. Normalize persisted nulls for
-  // non-nullable fields up front so filters (e.g. $is_null) and results both
-  // observe the same record contract as the materialized output.
-  const queryResourceSchema = schema.resources.find(
-    (r) => r.name === query.resource,
-  );
-  let records = store
-    .getRecords(query.resource)
-    .map((record) =>
-      stripNullsForNonNullableFields(record, queryResourceSchema),
-    );
+  // Get all records for the resource. Filters and sorting intentionally run
+  // against the stored representation so in-memory results match the
+  // FULL_PUSHDOWN strategy (e.g. $eq: null matches stored SQL NULLs via
+  // IS NULL). materializeSelect normalizes persisted nulls for the returned
+  // records, so the read contract is unaffected.
+  let records = store.getRecords(query.resource);
 
   // Apply filters
   if (query.filters) {

@@ -207,13 +207,11 @@ export async function executeLocalQuery(
     records = await storage.listRecords(resource);
   }
 
-  // Normalize persisted nulls for non-nullable fields once, up front, so
-  // filters (e.g. $is_null), sorting, and no-select results all observe the
-  // same record contract as the server: cleared fields read as absent.
+  // Filters and sorting intentionally run against the stored representation
+  // so local results match the server (e.g. $eq: null matches the persisted
+  // NULL that a replace-clear wrote). Persisted nulls are normalized to the
+  // read contract at the result boundary below.
   const localResourceSchema = schema.resources.find((r) => r.name === resource);
-  records = records.map((record) =>
-    stripNullsForNonNullableFields(record, localResourceSchema),
-  );
 
   // Apply filters only when not fully satisfied by the indexed path (CLI-012)
   if (query.filters && !filterFullySatisfied) {
@@ -245,6 +243,7 @@ export async function executeLocalQuery(
 
   // Select / Expansion
   if (query.select) {
+    // materializeSelect normalizes persisted nulls per record already.
     records = await materializeSelect(
       storage,
       schema,
@@ -252,6 +251,12 @@ export async function executeLocalQuery(
       records,
       query.select as string[],
       query.metadata as Record<string, unknown> | undefined,
+    );
+  } else {
+    // No select token: normalize once at the boundary so cleared non-nullable
+    // fields read as absent, same as the server's materialized output.
+    records = records.map((record) =>
+      stripNullsForNonNullableFields(record, localResourceSchema),
     );
   }
 

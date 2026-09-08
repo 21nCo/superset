@@ -89,7 +89,11 @@ export function executeAggregateQuery(
         query.resource as string,
         resourceSchema,
       );
-      row[field] = val;
+      // Cleared non-nullable fields normalize to absent; keep that contract
+      // in group rows instead of materializing an undefined key.
+      if (val !== undefined) {
+        row[field] = val;
+      }
     });
     for (const group of temporalGroups) {
       row[group.alias] = resolveTemporalBucketValue(groupRecords[0], group);

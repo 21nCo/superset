@@ -176,13 +176,24 @@ describe("field builder type preservation", () => {
   });
 
   it("rejects other-kind options on reusable option objects", () => {
-    // Excess-key checks do not apply to variables, so the reusable-options
-    // overload must still refuse keys that belong to another field kind.
+    // Excess-key checks do not apply to variables, so the builder overload
+    // must still refuse keys that belong to another field kind.
     const opts = { required: true, min: 1 };
     // @ts-expect-error min does not apply to string fields
     field.string("title", opts);
     const numberOpts: DatafnNumberFieldOptions = { min: 0, max: 10 };
     field.number("estimate", numberOpts);
+  });
+
+  it("rejects arbitrary unknown keys on reusable option objects", () => {
+    // Generic inference captures the variable's full shape, so typo keys that
+    // no field kind declares must not leak into the runtime schema either.
+    const opts = { required: true, requird: true };
+    // @ts-expect-error requird is not a known field option
+    field.string("title", opts);
+    const fileOpts = { contentType: "image/png" };
+    // @ts-expect-error contentType is not a known field option
+    field.file("attachment", fileOpts);
   });
 
   it("returns plain DatafnFieldSchema-compatible values", () => {

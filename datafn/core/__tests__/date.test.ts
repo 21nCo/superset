@@ -151,6 +151,32 @@ describe("parseDateFieldsToDate (TV-DTE-002)", () => {
   });
 });
 
+describe("timezone-less datetime parsing contract", () => {
+  const TZ_LESS = "2026-06-15T12:00:00";
+  const UTC_EPOCH = Date.parse("2026-06-15T12:00:00.000Z");
+
+  it("toEpochMs, fromEpochMs, and toBoundsEpochMs resolve the same instant", () => {
+    expect(toEpochMs(TZ_LESS)).toBe(UTC_EPOCH);
+    expect(fromEpochMs(TZ_LESS).getTime()).toBe(UTC_EPOCH);
+    expect(toBoundsEpochMs(TZ_LESS)).toBe(UTC_EPOCH);
+  });
+
+  it("parsing does not depend on the process timezone", () => {
+    // Run in a child process pinned to a non-UTC zone: the canonical
+    // conversion must still resolve the timezone-less string as UTC.
+    const script =
+      'import { toEpochMs, toBoundsEpochMs, fromEpochMs } from "./src/date.ts";' +
+      `if (toEpochMs(${JSON.stringify(TZ_LESS)}) !== ${UTC_EPOCH}) throw new Error("toEpochMs diverged");` +
+      `if (toBoundsEpochMs(${JSON.stringify(TZ_LESS)}) !== ${UTC_EPOCH}) throw new Error("toBoundsEpochMs diverged");` +
+      `if (fromEpochMs(${JSON.stringify(TZ_LESS)}).getTime() !== ${UTC_EPOCH}) throw new Error("fromEpochMs diverged");`;
+    const result = Bun.spawnSync(["bun", "-e", script], {
+      cwd: import.meta.dir + "/..",
+      env: { ...process.env, TZ: "America/New_York" },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+});
+
 describe("toBoundsEpochMs", () => {
   it("parses timezone-less ISO datetimes as UTC", () => {
     expect(toBoundsEpochMs("2026-06-15T12:00:00")).toBe(

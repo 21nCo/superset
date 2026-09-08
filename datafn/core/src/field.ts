@@ -99,20 +99,6 @@ type KeysOfUnion<Value> = Value extends Value ? keyof Value : never;
 type StrictOptions<Options, Shape> = Options &
   Record<Exclude<keyof Options, KeysOfUnion<Shape>>, never>;
 
-type AllFieldOptionKeys = KeysOfUnion<
-  DatafnFieldOptionsByType[keyof DatafnFieldOptionsByType]
->;
-
-/**
- * Exact-key variant of a field options shape for reusable option objects.
- * Excess-key checks only apply to object literals, so a variable typed
- * structurally (for example `{ required: true, min: 1 }` passed to
- * `field.string`) would otherwise leak options from another field kind into
- * the built schema. Keys that belong to other field kinds are typed `never`.
- */
-type ExactOptions<Shape> = Shape &
-  Partial<Record<Exclude<AllFieldOptionKeys, KeysOfUnion<Shape>>, never>>;
-
 type BooleanOption<
   Options,
   Key extends "required" | "nullable",
@@ -182,10 +168,6 @@ type DatafnFieldBuilder<
     name: Name,
     options: StrictOptions<Options, OptionsShape>,
   ): DatafnBuiltField<Name, Type, Options>;
-  <const Name extends string>(
-    name: Name,
-    options: ExactOptions<OptionsShape>,
-  ): DatafnBuiltField<Name, Type, OptionsShape>;
 };
 
 function createFieldBuilder<

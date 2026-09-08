@@ -5,7 +5,9 @@
 import type { DatafnResourceSchema } from "./types.js";
 
 // Resource schemas are long-lived singletons, so cache the per-resource field
-// scan instead of repeating it for every record in a query result.
+// scan. Contract: DatafnResourceSchema objects are treated as immutable for
+// their lifetime (validateSchema normalizes into fresh objects); mutating a
+// schema's fields array after first use would leave this cache stale.
 const nonNullableFieldNamesCache = new WeakMap<DatafnResourceSchema, string[]>();
 
 function getNonNullableFieldNames(resource: DatafnResourceSchema): string[] {

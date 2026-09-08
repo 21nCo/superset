@@ -642,4 +642,55 @@ describe("validateSchema date bounds", () => {
     );
     expect(nullDefault.ok).toBe(true);
   });
+
+  it("rejects an unparseable string default on a bounded date field", () => {
+    const result = validateSchema(
+      schemaWithDateField({
+        name: "startsAt",
+        type: "date",
+        required: false,
+        min: 100,
+        max: 200,
+        default: "not-a-date",
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("SCHEMA_INVALID");
+  });
+
+  it("rejects a non-date object default on a bounded date field", () => {
+    const result = validateSchema(
+      schemaWithDateField({
+        name: "startsAt",
+        type: "date",
+        required: false,
+        min: 100,
+        max: 200,
+        default: { when: "soon" },
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("SCHEMA_INVALID");
+  });
+
+  it("keeps the e2ee-envelope default exception on a bounded date field", () => {
+    const result = validateSchema(
+      schemaWithDateField({
+        name: "startsAt",
+        type: "date",
+        required: false,
+        encrypt: true,
+        min: 100,
+        max: 200,
+        default: {
+          __datafnE2ee: 1,
+          alg: "AES-GCM",
+          keyRef: "key-1",
+          iv: "aXY=",
+          data: "ZGF0YQ==",
+        },
+      }),
+    );
+    expect(result.ok).toBe(true);
+  });
 });

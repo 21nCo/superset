@@ -99,6 +99,18 @@ export function buildReplaceRecord(
       continue;
     }
 
+    // Readonly fields are rejected by write validation, so clients cannot
+    // supply them in a replacement. Carry the stored value forward instead
+    // of clearing it to null/default. A key already present in newRecord is
+    // server-injected (e.g. injectCapabilityFieldsOnUpdate sets updatedAt),
+    // so it wins.
+    if (field.readonly) {
+      result[key] = Object.prototype.hasOwnProperty.call(newRecord, key)
+        ? newRecord[key]
+        : existingRecord[key];
+      continue;
+    }
+
     // Normal fields
     if (Object.prototype.hasOwnProperty.call(newRecord, key)) {
       result[key] = newRecord[key];

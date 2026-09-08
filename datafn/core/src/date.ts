@@ -16,6 +16,26 @@ function assertFiniteEpoch(value: number): void {
 }
 
 /**
+ * ISO datetimes without a timezone designator (date-only forms are already
+ * parsed as UTC by ECMAScript, so they are excluded here).
+ */
+const TIMEZONE_LESS_DATETIME_RE =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
+
+/**
+ * Canonical string-to-epoch conversion shared by validation, persistence,
+ * and read coercion. Timezone-less ISO datetimes are interpreted as UTC so
+ * the same accepted string resolves to the same instant regardless of the
+ * process timezone. Returns NaN for unparseable strings.
+ */
+function parseDateStringEpochMs(value: string): number {
+  const normalized = TIMEZONE_LESS_DATETIME_RE.test(value)
+    ? `${value}Z`
+    : value;
+  return Date.parse(normalized);
+}
+
+/**
  * Convert a Date, ISO string, or epoch number to epoch milliseconds.
  * Idempotent: if already a number, returns it directly.
  */
@@ -30,7 +50,7 @@ export function toEpochMs(value: unknown): number {
     return ms;
   }
   if (typeof value === "string") {
-    const ms = new Date(value).getTime();
+    const ms = parseDateStringEpochMs(value);
     assertFiniteEpoch(ms);
     return ms;
   }
@@ -51,19 +71,12 @@ export function fromEpochMs(value: unknown): Date {
     return new Date(value);
   }
   if (typeof value === "string") {
-    const d = new Date(value);
-    assertFiniteEpoch(d.getTime());
-    return d;
+    const ms = parseDateStringEpochMs(value);
+    assertFiniteEpoch(ms);
+    return new Date(ms);
   }
   dfqlInvalid(`Cannot convert to Date: ${String(value)}`);
 }
-
-/**
- * ISO datetimes without a timezone designator (date-only forms are already
- * parsed as UTC by ECMAScript, so they are excluded here).
- */
-const TIMEZONE_LESS_DATETIME_RE =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
 
 /**
  * Epoch milliseconds for min/max bounds comparison. Timezone-less ISO
@@ -74,12 +87,7 @@ const TIMEZONE_LESS_DATETIME_RE =
 export function toBoundsEpochMs(value: unknown): number {
   if (typeof value === "number") return value;
   if (value instanceof Date) return value.getTime();
-  if (typeof value === "string") {
-    const normalized = TIMEZONE_LESS_DATETIME_RE.test(value)
-      ? `${value}Z`
-      : value;
-    return Date.parse(normalized);
-  }
+  if (typeof value === "string") return parseDateStringEpochMs(value);
   return Number.NaN;
 }
 

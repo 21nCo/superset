@@ -24,6 +24,7 @@ import type {
 import type { DatafnEnvelope } from "./errors.js";
 import { ok, err } from "./errors.js";
 import { toBoundsEpochMs } from "./date.js";
+import { isDatafnE2eeEnvelope } from "./e2ee.js";
 import {
   CAPABILITY_FIELD_DEFS,
   getCapabilityFields,
@@ -428,6 +429,20 @@ export function validateSchema(schema: unknown): DatafnEnvelope<DatafnSchema> {
           (min !== undefined || max !== undefined)
         ) {
           const defaultEpoch = toBoundsEpochMs(f.default);
+          // Reject defaults that do not parse as dates (e.g. "not-a-date" or
+          // a plain object): replace/merge-create apply defaults without
+          // mutation-time bounds checks, so an unparseable default would be
+          // persisted as-is. Opaque e2ee envelopes stay exempt.
+          if (
+            !Number.isFinite(defaultEpoch) &&
+            !isDatafnE2eeEnvelope(f.default)
+          ) {
+            return err(
+              "SCHEMA_INVALID",
+              `Invalid schema: date field "${f.name}" default must be a valid date`,
+              { path: `resources.${r.name}.fields.${f.name}.default` },
+            );
+          }
           if (Number.isFinite(defaultEpoch)) {
             if (typeof min === "number" && defaultEpoch < min) {
               return err(
