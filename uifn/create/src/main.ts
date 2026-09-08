@@ -14,6 +14,7 @@ import {
   type PresetAxis,
   type UIFnPresetV1,
 } from '@uifn/registry/preset';
+import '@uifn/components/styles.css';
 
 const VIEWPORTS = {
   desktop: 1120,

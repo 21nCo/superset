@@ -58,12 +58,15 @@ function resolveInput(options: PresetMutationOptions): UIFnPresetV1 {
   throw new UIFnPresetError('UIFN_PRESET_USAGE', 'A preset object or code is required.');
 }
 
-function serializeState(plan: PresetCompilePlan, files: Record<string, string>): string {
-  const managed = Object.fromEntries(
+function serializeState(plan: PresetCompilePlan, files: Record<string, string>, previous: Record<string, string> = {}): string {
+  const managed = {
+    ...previous,
+    ...Object.fromEntries(
     Object.entries(files)
       .filter(([relativePath]) => relativePath !== PRESET_STATE_PATH)
       .map(([relativePath, contents]) => [relativePath, checksumContent(contents)]),
-  );
+    ),
+  };
   const state: PresetProjectState = {
     schemaVersion: 1,
     code: plan.code,
@@ -83,7 +86,7 @@ function appSource(plan: PresetCompilePlan): string {
 }
 
 function mainSource(): string {
-  return `import { StrictMode } from 'react';\nimport { createRoot } from 'react-dom/client';\nimport { App } from './App';\nimport './uifn-theme.css';\n\ncreateRoot(document.getElementById('root')!).render(\n  <StrictMode>\n    <App />\n  </StrictMode>,\n);\n`;
+  return `import { StrictMode } from 'react';\nimport { createRoot } from 'react-dom/client';\nimport { App } from './App';\nimport '@uifn/components/styles.css';\nimport './uifn-theme.css';\n\ncreateRoot(document.getElementById('root')!).render(\n  <StrictMode>\n    <App />\n  </StrictMode>,\n);\n`;
 }
 
 function indexHtml(): string {
@@ -112,7 +115,7 @@ function mergePackageDependencies(
 }
 
 function packageJson(plan: PresetCompilePlan): string {
-  const dependencies = Object.fromEntries(plan.project.packages.map((entry) => [entry.name, entry.version]));
+  const dependencies = Object.fromEntries(plan.project.packages.map((entry) => [entry.name, entry.version]).sort(([left], [right]) => left.localeCompare(right)));
   return `${JSON.stringify({
     name: 'uifn-app',
     private: true,
@@ -130,10 +133,10 @@ function packageJson(plan: PresetCompilePlan): string {
   }, null, 2)}\n`;
 }
 
-function desiredFiles(plan: PresetCompilePlan, domains: Array<'full' | PartialPresetDomain>): Record<string, string> {
+function desiredFiles(plan: PresetCompilePlan, domains: Array<'full' | PartialPresetDomain>, scaffold = true, previous: Record<string, string> = {}): Record<string, string> {
   const files: Record<string, string> = {};
   if (domains.includes('full') || domains.includes('theme') || domains.includes('font')) files[PRESET_THEME_PATH] = themeCss(plan);
-  if (domains.includes('full')) {
+  if (domains.includes('full') && scaffold) {
     files['index.html'] = indexHtml();
     files['vite.config.ts'] = viteConfig();
     files['tsconfig.json'] = tsconfig();
@@ -142,8 +145,40 @@ function desiredFiles(plan: PresetCompilePlan, domains: Array<'full' | PartialPr
     files[PRESET_MAIN_PATH] = mainSource();
     files['README.md'] = `# uifn app\n\nPreset \`${plan.code}\`\n\n\`\`\`bash\n${plan.commands.decode}\n${plan.commands.apply}\n\`\`\`\n`;
   }
-  files[PRESET_STATE_PATH] = serializeState(plan, files);
+  files[PRESET_STATE_PATH] = serializeState(plan, files, previous);
   return files;
+}
+
+const THEME_FIELDS = ['style', 'baseColor', 'theme', 'chartColor', 'radius', 'density', 'menuTreatment'] as const;
+const FONT_FIELDS = ['font', 'headingFont'] as const;
+
+function partialPreset(rootDir: string, incoming: UIFnPresetV1, only?: PartialPresetDomain[]): UIFnPresetV1 {
+  if (!only?.length) return incoming;
+  const current = readProjectPreset(rootDir);
+  if (!current.ok) {
+    throw new UIFnPresetError('UIFN_PRESET_PROJECT_MISSING', 'Partial application requires an existing .uifn/preset.json state file.');
+  }
+  const merged = { ...current.state.preset };
+  if (only.includes('theme')) for (const field of THEME_FIELDS) merged[field] = incoming[field] as never;
+  if (only.includes('font')) for (const field of FONT_FIELDS) merged[field] = incoming[field] as never;
+  return normalizePreset(merged);
+}
+
+function assertExistingProject(rootDir: string): void {
+  const manifestPath = path.join(rootDir, 'package.json');
+  if (!existsSync(manifestPath)) {
+    throw new UIFnPresetError('UIFN_PRESET_PROJECT_AMBIGUOUS', 'Existing-project application requires a package.json at the project root.');
+  }
+  try {
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+    const dependencies = { ...manifest.dependencies, ...manifest.devDependencies };
+    if (!dependencies.react) {
+      throw new UIFnPresetError('UIFN_PRESET_UNSUPPORTED_COMBINATION', 'The approved V1 existing-project adapter supports React projects only.');
+    }
+  } catch (cause) {
+    if (cause instanceof UIFnPresetError) throw cause;
+    throw new UIFnPresetError('UIFN_PRESET_INVALID_JSON', 'Existing project package.json could not be parsed.');
+  }
 }
 
 function readManagedHashes(rootDir: string): Record<string, string> {
@@ -216,7 +251,8 @@ function mutate(options: PresetMutationOptions, mode: 'init' | 'apply'): PresetM
   const template = options.template ?? 'react-vite';
   const only = options.only?.length ? options.only : undefined;
   try {
-    const preset = resolveInput(options);
+    const incomingPreset = resolveInput(options);
+    const preset = mode === 'apply' ? partialPreset(path.resolve(options.rootDir), incomingPreset, only) : incomingPreset;
     assertApprovedInit(preset, template);
     const plan = compilePreset(preset, template);
     const rootDir = path.resolve(options.rootDir);
@@ -232,10 +268,18 @@ function mutate(options: PresetMutationOptions, mode: 'init' | 'apply'): PresetM
       }
     } else if (!existsSync(rootDir)) {
       return flag('UIFN_PRESET_PROJECT_MISSING', 'Consumer project root does not exist.');
+    } else {
+      assertExistingProject(rootDir);
     }
 
     const domains: Array<'full' | PartialPresetDomain> = mode === 'init' || !only ? ['full'] : only;
-    const files = desiredFiles(plan, domains);
+    const previousManaged = readManagedHashes(rootDir);
+    const files = desiredFiles(plan, domains, mode === 'init', previousManaged);
+    if (mode === 'apply' && domains.includes('full')) {
+      files['package.json'] = mergePackageDependencies(readFileSync(path.join(rootDir, 'package.json'), 'utf8'),
+        plan.project.packages.map((entry) => ({ name: entry.name, resolvedVersion: entry.version, operation: 'add' as const })));
+      files[PRESET_STATE_PATH] = serializeState(plan, files, previousManaged);
+    }
 
     let artifactChanges: TransactionChange[] = [];
     let artifactFiles: Array<{ path: string; operation: 'create' | 'update' | 'unchanged' }> = [];
@@ -244,7 +288,7 @@ function mutate(options: PresetMutationOptions, mode: 'init' | 'apply'): PresetM
       if (!installed.ok) return { ok: false, dryRun: Boolean(options.dryRun), written: [], unchanged: [], error: installed.error };
       if (files['package.json']) {
         files['package.json'] = mergePackageDependencies(files['package.json'], installed.plan.dependencies);
-        files[PRESET_STATE_PATH] = serializeState(plan, files);
+        files[PRESET_STATE_PATH] = serializeState(plan, files, previousManaged);
       }
       artifactChanges = installed.plan.changes.filter((change) => change.path !== 'package.json');
       artifactFiles = installed.plan.files

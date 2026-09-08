@@ -10,49 +10,49 @@ export function fixtureMarkup(plan: PresetCompilePlan): string {
     <p>These fixtures are painted only with public <code>--uifn-*</code> variables. Catalog CSS does not own component appearance.</p>
   </header>
   <div class="uifn-fixture-grid">
-    <article class="uifn-card">
+    <article class="uifn-card" data-uifn-component="card" data-uifn-part="root">
       <h2>Actions</h2>
       <div class="uifn-row">
-        <button class="uifn-button" type="button">Continue</button>
-        <button class="uifn-button uifn-button--secondary" type="button">Secondary</button>
-        <button class="uifn-button uifn-button--ghost" type="button">Ghost</button>
-        <button class="uifn-button uifn-button--danger" type="button">Delete</button>
+        <button data-uifn-component="button" data-uifn-part="root" type="button">Continue</button>
+        <button data-uifn-component="button" data-uifn-part="root" data-uifn-variant="secondary" type="button">Secondary</button>
+        <button data-uifn-component="button" data-uifn-part="root" data-uifn-variant="outline" type="button">Outline</button>
+        <button data-uifn-component="button" data-uifn-part="root" data-uifn-variant="danger" type="button">Delete</button>
       </div>
     </article>
-    <article class="uifn-card">
+    <article class="uifn-card" data-uifn-component="card" data-uifn-part="root">
       <h2>Field</h2>
-      <label class="uifn-field">
-        <span>Project name</span>
-        <input class="uifn-input" value="Northwind" />
+      <label class="uifn-field" data-uifn-component="field" data-uifn-part="root">
+        <span data-uifn-component="field" data-uifn-part="label">Project name</span>
+        <input data-uifn-component="input" data-uifn-part="root" value="Northwind" />
       </label>
       <label class="uifn-check">
-        <input type="checkbox" checked />
+        <input data-uifn-component="checkbox" data-uifn-part="control" data-state="checked" type="checkbox" checked />
         <span>Send weekly digest</span>
       </label>
       <label class="uifn-switch">
-        <input type="checkbox" role="switch" checked />
+        <input data-uifn-component="switch" data-uifn-part="control" data-state="checked" type="checkbox" role="switch" checked />
         <span>Live preview</span>
       </label>
     </article>
-    <article class="uifn-card">
+    <article class="uifn-card" data-uifn-component="card" data-uifn-part="root">
       <h2>Navigation</h2>
       <div class="uifn-tabs" role="tablist">
-        <button type="button" role="tab" aria-selected="true">Overview</button>
-        <button type="button" role="tab">Members</button>
-        <button type="button" role="tab">Billing</button>
+        <button data-uifn-component="tabs" data-uifn-part="trigger" type="button" role="tab" aria-selected="true">Overview</button>
+        <button data-uifn-component="tabs" data-uifn-part="trigger" type="button" role="tab">Members</button>
+        <button data-uifn-component="tabs" data-uifn-part="trigger" type="button" role="tab">Billing</button>
       </div>
       <div class="uifn-menu" data-treatment="${preset.menuTreatment}">
         <button type="button">Open menu</button>
         <div class="uifn-menu-panel">
-          <button type="button">Duplicate</button>
-          <button type="button">Archive</button>
-          <button type="button">Share</button>
+          <button data-uifn-component="menu" data-uifn-part="item" type="button">Duplicate</button>
+          <button data-uifn-component="menu" data-uifn-part="item" type="button">Archive</button>
+          <button data-uifn-component="menu" data-uifn-part="item" type="button">Share</button>
         </div>
       </div>
     </article>
-    <article class="uifn-card">
+    <article class="uifn-card" data-uifn-component="card" data-uifn-part="root">
       <h2>Table</h2>
-      <table class="uifn-table">
+      <table class="uifn-table" data-uifn-component="table" data-uifn-part="root">
         <thead><tr><th>Name</th><th>Status</th><th>Load</th></tr></thead>
         <tbody>
           <tr><td>Ingest</td><td>Ready</td><td>12%</td></tr>
@@ -71,23 +71,15 @@ export function fixtureCss(): string {
 .uifn-fixture h1,.uifn-fixture h2{font-family:var(--uifn-typography-family-heading);margin:0 0 .5rem;}
 .uifn-kicker{color:var(--uifn-color-text-muted);text-transform:uppercase;letter-spacing:.08em;font-size:.75rem;margin:0 0 .35rem;}
 .uifn-fixture-grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));}
-.uifn-card{background:var(--uifn-color-surface-raised);border:1px solid var(--uifn-color-border-default);border-radius:var(--uifn-radius-lg);padding:1rem;box-shadow:0 8px 24px rgb(15 23 42 / 8%);}
+.uifn-card{padding:1rem;}
 .uifn-row,.uifn-tabs{display:flex;flex-wrap:wrap;gap:.5rem;}
-.uifn-button{min-height:var(--uifn-control-size-md);padding:0 1rem;border:0;border-radius:var(--uifn-radius-md);background:var(--uifn-color-accent-solid);color:var(--uifn-color-accent-contrast);font:inherit;cursor:pointer;}
-.uifn-button--secondary{background:var(--uifn-color-accent-subtle);color:var(--uifn-color-text-primary);}
-.uifn-button--ghost{background:transparent;color:var(--uifn-color-text-primary);border:1px solid var(--uifn-color-border-default);}
-.uifn-button--danger{background:var(--uifn-color-danger-solid);color:var(--uifn-color-danger-contrast);}
 .uifn-field{display:grid;gap:.35rem;margin:0 0 .75rem;color:var(--uifn-color-text-secondary);}
-.uifn-input{min-height:var(--uifn-control-size-md);border:1px solid var(--uifn-color-border-default);border-radius:var(--uifn-radius-md);background:var(--uifn-color-surface-sunken);color:var(--uifn-color-text-primary);padding:0 .75rem;font:inherit;}
 .uifn-check,.uifn-switch{display:flex;gap:.5rem;align-items:center;margin:.4rem 0;color:var(--uifn-color-text-secondary);}
-.uifn-tabs button{min-height:var(--uifn-control-size-sm);border:0;background:transparent;color:var(--uifn-color-text-secondary);border-bottom:2px solid transparent;font:inherit;}
-.uifn-tabs button[aria-selected="true"]{color:var(--uifn-color-text-primary);border-bottom-color:var(--uifn-color-accent-solid);}
 .uifn-menu{position:relative;margin-top:.75rem;}
 .uifn-menu-panel{margin-top:.5rem;display:grid;background:var(--uifn-color-surface-overlay);border:1px solid var(--uifn-color-border-default);border-radius:var(--uifn-radius-md);overflow:hidden;}
 .uifn-menu[data-treatment="inset"] .uifn-menu-panel{background:var(--uifn-color-surface-sunken);}
 .uifn-menu[data-treatment="bordered"] .uifn-menu-panel{border-width:2px;border-color:var(--uifn-color-border-strong);}
 .uifn-menu[data-treatment="elevated"] .uifn-menu-panel{box-shadow:0 18px 48px rgb(15 23 42 / 16%);}
-.uifn-menu-panel button{border:0;background:transparent;color:inherit;text-align:left;padding:.65rem .85rem;font:inherit;}
 .uifn-table{width:100%;border-collapse:collapse;font-size:.9rem;}
 .uifn-table th,.uifn-table td{border-bottom:1px solid var(--uifn-color-border-subtle);padding:.45rem 0;text-align:left;}
 .uifn-chart{display:flex;gap:.4rem;margin-top:.75rem;}

@@ -51,6 +51,10 @@ uifn apply --preset uifn1_... --only theme,font --dry-run
 
 Mutating commands plan first. Reapplying an identical preset is a no-op. Consumer-modified managed files return `UIFN_REGISTRY_DIRTY_CONFLICT` with base/local/incoming hashes. Interrupted writes roll back through the existing registry transaction.
 
+Full application to an existing project requires a detectable React `package.json`. It merges missing dependencies and creates the managed theme/state files without replacing the consumer's application entry points, scripts, metadata, or README. Partial application requires existing preset state and updates only the approved theme and/or font axes.
+
+The editor and initialized template load `@uifn/components/styles.css`; preview fixtures use the same public `data-uifn-component` and `data-uifn-part` contract as package and source delivery. Fixture-local CSS is limited to page composition and does not redefine component appearance.
+
 ## Compatibility
 
 V1 decoders must remain available for the life of schema version 1. Adding a field requires a new schema version, documented defaults, and a new code prefix.

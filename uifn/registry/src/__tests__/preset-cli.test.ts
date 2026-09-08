@@ -5,7 +5,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runCli } from '../cli';
 import { encodePreset, normalizePreset } from '../preset';
-import { applyPreset, initProject } from '../preset/project';
+import { PRESET_STATE_PATH, applyPreset, initProject } from '../preset/project';
 
 function snapshot(rootDir: string): string {
   const entries: string[] = [];
@@ -69,6 +69,32 @@ describe('preset CLI and project workflows', () => {
       expect(result.ok).toBe(true);
       expect(readFileSync(path.join(rootDir, 'src/uifn-theme.css'), 'utf8')).toContain('IBM Plex Sans');
       expect(existsSync(path.join(rootDir, 'components'))).toBe(false);
+    });
+  });
+
+  it('merges dependencies into existing React projects without replacing consumer files', async () => {
+    await withProject(async (rootDir) => {
+      writeFileSync(path.join(rootDir, 'package.json'), `${JSON.stringify({ name: 'consumer', scripts: { test: 'vitest' }, dependencies: { react: '^18.3.1' } }, null, 2)}\n`);
+      writeFileSync(path.join(rootDir, 'README.md'), '# consumer-owned\n');
+      const result = applyPreset({ rootDir, preset: code });
+      expect(result.ok).toBe(true);
+      expect(readFileSync(path.join(rootDir, 'README.md'), 'utf8')).toBe('# consumer-owned\n');
+      const manifest = JSON.parse(readFileSync(path.join(rootDir, 'package.json'), 'utf8')) as { name: string; scripts: Record<string, string>; dependencies: Record<string, string> };
+      expect(manifest.name).toBe('consumer');
+      expect(manifest.scripts.test).toBe('vitest');
+      expect(manifest.dependencies['@uifn/components-react']).toBeDefined();
+      expect(manifest.dependencies['lucide-react']).toBeDefined();
+    });
+  });
+
+  it('rejects ambiguous and unsupported existing projects without writes', async () => {
+    await withProject(async (rootDir) => {
+      const missingManifest = applyPreset({ rootDir, preset: code });
+      expect(missingManifest).toMatchObject({ ok: false, error: { code: 'UIFN_PRESET_PROJECT_AMBIGUOUS' } });
+      writeFileSync(path.join(rootDir, 'package.json'), '{"dependencies":{"svelte":"5.0.0"}}\n');
+      const unsupported = applyPreset({ rootDir, preset: code });
+      expect(unsupported).toMatchObject({ ok: false, error: { code: 'UIFN_PRESET_UNSUPPORTED_COMBINATION' } });
+      expect(existsSync(path.join(rootDir, PRESET_STATE_PATH))).toBe(false);
     });
   });
 

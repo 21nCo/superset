@@ -32,4 +32,14 @@ describe('create editor contract', () => {
     expect(plan.commands.init).toContain(encodePreset(preset));
     expect(presetFromUrl(plan.url).style).toBe('atlas');
   });
+
+  it('renders fixtures through the public styled-component contract', () => {
+    const editor = readFileSync(path.join(__dirname, 'main.ts'), 'utf8');
+    const fixtures = readFileSync(path.join(__dirname, '../../registry/src/preset/fixtures.ts'), 'utf8');
+    expect(editor).toContain("import '@uifn/components/styles.css'");
+    expect(fixtures).toContain('data-uifn-component="button"');
+    expect(fixtures).toContain('data-uifn-part="root"');
+    expect(fixtures).not.toContain('.uifn-button{');
+    expect(fixtures).not.toContain('.uifn-input{');
+  });
 });

@@ -15,6 +15,7 @@ export interface FontSpec {
 export interface IconSpec {
   id: string;
   packageName: string;
+  version: string;
   license: string;
 }
 
@@ -144,9 +145,9 @@ const FONTS: Record<UIFnPresetV1['font'] | 'source-serif' | 'space-grotesk', Fon
 };
 
 const ICONS: Record<UIFnPresetV1['iconLibrary'], IconSpec> = {
-  lucide: { id: 'lucide', packageName: 'lucide-react', license: 'MIT' },
-  phosphor: { id: 'phosphor', packageName: '@phosphor-icons/react', license: 'MIT' },
-  heroicons: { id: 'heroicons', packageName: '@heroicons/react', license: 'MIT' },
+  lucide: { id: 'lucide', packageName: 'lucide-react', version: '0.575.0', license: 'ISC' },
+  phosphor: { id: 'phosphor', packageName: '@phosphor-icons/react', version: '2.1.10', license: 'MIT' },
+  heroicons: { id: 'heroicons', packageName: '@heroicons/react', version: '2.2.0', license: 'MIT' },
 };
 
 const CHARTS: Record<UIFnPresetV1['chartColor'], string[]> = {
@@ -238,31 +239,39 @@ function cssFromVars(vars: Record<string, string>, selector: string): string {
 }
 
 function frameworkPackages(preset: UIFnPresetV1): Array<{ name: string; version: string; relationship: 'runtime' | 'peer' }> {
+  const iconPackage = { name: ICONS[preset.iconLibrary].packageName, version: ICONS[preset.iconLibrary].version, relationship: 'runtime' as const };
+  const componentStyles = { name: '@uifn/components', version: '0.0.1', relationship: 'runtime' as const };
   if (preset.framework === 'svelte') {
     return [
       { name: '@uifn/components-svelte', version: '0.0.1', relationship: 'runtime' },
+      componentStyles,
       { name: '@uifn/svelte', version: '0.0.1', relationship: 'runtime' },
       { name: '@uifn/recipes', version: '0.0.1', relationship: 'runtime' },
       { name: '@uifn/theme', version: '0.0.1', relationship: 'runtime' },
       { name: 'svelte', version: '5.46.4', relationship: 'peer' },
+      iconPackage,
     ];
   }
   if (preset.framework === 'solid') {
     return [
       { name: '@uifn/components-solid', version: '0.0.1', relationship: 'runtime' },
+      componentStyles,
       { name: '@uifn/solid', version: '0.0.1', relationship: 'runtime' },
       { name: '@uifn/recipes', version: '0.0.1', relationship: 'runtime' },
       { name: '@uifn/theme', version: '0.0.1', relationship: 'runtime' },
       { name: 'solid-js', version: '1.9.13', relationship: 'peer' },
+      iconPackage,
     ];
   }
   return [
     { name: '@uifn/components-react', version: '0.0.1', relationship: 'runtime' },
+    componentStyles,
     { name: '@uifn/react', version: '0.0.1', relationship: 'runtime' },
     { name: '@uifn/recipes', version: '0.0.1', relationship: 'runtime' },
     { name: '@uifn/theme', version: '0.0.1', relationship: 'runtime' },
     { name: 'react', version: '18.3.1', relationship: 'peer' },
     { name: 'react-dom', version: '18.3.1', relationship: 'peer' },
+    iconPackage,
   ];
 }
 
