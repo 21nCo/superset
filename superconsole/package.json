@@ -34,7 +34,7 @@
     "svelte": "5.46.4"
   },
   "devDependencies": {
-    "@authfn/admin": "0.1.1",
+    "@authfn/admin": "0.2.0",
     "@authfn/password": "0.1.1",
     "@authfn/two-factor": "0.1.1",
     "@clifn/admin": "0.1.0",

@@ -187,7 +187,7 @@ describe('generic resource list ordering', () => {
   });
 
   it('sends POST detail inputs in the request body instead of the URL', async () => {
-    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({
       ok: true,
       data: { item: { uploadSessionId: 'upload_1' } },
     }), { status: 200, headers: { 'content-type': 'application/json' } }));
