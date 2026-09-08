@@ -97,7 +97,7 @@ export async function recomputeAncestorInactive(
               {
                 field: ANCESTOR_INACTIVE_FIELD,
                 operator: "eq",
-                value: typeof previous === "boolean" ? previous : null,
+                value: previous ?? null,
               },
             ],
             data: { [ANCESTOR_INACTIVE_FIELD]: next },

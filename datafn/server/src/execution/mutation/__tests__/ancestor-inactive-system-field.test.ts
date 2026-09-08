@@ -322,6 +322,22 @@ describe("isAncestorInactive as a system field (server)", () => {
       expect((await get("tasks", "task:2")).isAncestorInactive).toBe(false);
     });
 
+    it("normalizes legacy non-boolean stored values", async () => {
+      for (const [id, value] of [["task:1", 0], ["task:2", "false"]] as const) {
+        await db.update({
+          model: "tasks",
+          where: [{ field: "id", operator: "eq", value: id }],
+          data: { isAncestorInactive: value },
+          namespace: NS,
+        });
+      }
+      const result = await recomputeAncestorInactiveAll(db, schema, { namespace: NS });
+      expect(result.converged).toBe(true);
+      expect(result.updated).toBe(2);
+      expect((await get("tasks", "task:1")).isAncestorInactive).toBe(false);
+      expect((await get("tasks", "task:2")).isAncestorInactive).toBe(false);
+    });
+
     it("is resumable through cursors and bounded by batchSize", async () => {
       await corrupt();
       const visited: string[] = [];
