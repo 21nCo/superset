@@ -1,0 +1,4 @@
+Sanity check
+
+&#x20;[DATA-5 — Canonical namespace storage metadata](https://linear.app/21n/issue/DATA-5/expose-canonical-namespace-storage-metadata-for-datafn-operations).
+&#x20;[DATA-6 — Canonical structural resource-selector extraction](https://linear.app/21n/issue/DATA-6/expose-canonical-structural-resource-selector-extraction).
