@@ -1,0 +1,53 @@
+You are fixing a build failure in the monorepo at /Users/serro/Documents/dev/n/superfunctions-dev (GitHub repo `21nCo/super-functions`). The base branch for all work is `dev`.
+
+A previous attempt at this task was interrupted by a model-usage limit. Before creating anything new, inspect existing state:
+- Check whether a worktree already exists under `/Users/serro/Documents/dev/n/worktrees/superfunctions/` with a name like `docsfn-svelte-ssr-noexternal` (or similar).
+- Check whether a local or remote branch like `codex/docsfn-svelte-ssr-noexternal` already exists, and whether a PR against `dev` was already opened.
+- If a worktree/branch already has in-progress changes, resume from there rather than starting over. If a PR already exists as `thyaravind` covering this fix, stop and report the URL instead of opening a duplicate.
+
+## Context: the bug
+
+CI runs an unfiltered `npx turbo run build`. On the `dev` branch that build currently dies at `@filefn/docs#build` with a rollup parse error. This blocks every pull request in the repo from getting a green `JavaScript` check, so fixing it is high value.
+
+Root cause as previously diagnosed (please re-verify rather than trusting this blindly):
+
+- `@docsfn/svelte@0.0.3` is consumed as a **published registry package** from `node_modules` (note: the `docsfn/` source tree does not exist on the `dev` branch, so this is not a workspace link on `dev`).
+- That published package ships **raw, unpreprocessed `.svelte` files** containing `<script lang="ts">` blocks.
+- `filefn/docs/vite.config.ts` sets up aliases that point directly at those files inside `node_modules`.
+- Its `ssr.noExternal` array lists only `@docsfn/core`, so vite treats `@docsfn/svelte` as external and never runs the svelte preprocessor over it.
+- Rollup then chokes on TypeScript syntax in the template, with the reported failure pointing at a type annotation like `activePath?: string`.
+
+`authfn/docs/vite.config.ts` was reported to have a byte-identical configuration against the same package version, so it is expected to fail the same way once a build actually reaches it. Treat this as a docs-site-wide problem, not a single-package one.
+
+## Task
+
+1. Set up an isolated worktree off the latest `origin/dev` so you do not disturb the user's main checkout, which has unrelated uncommitted changes and other worktrees in flight. Use the existing convention: create it under `/Users/serro/Documents/dev/n/worktrees/superfunctions/` with a descriptive directory name such as `docsfn-svelte-ssr-noexternal`, on a new branch such as `codex/docsfn-svelte-ssr-noexternal`. Run `git fetch origin` first. Reuse an existing worktree/branch if the previous attempt already created one.
+
+2. Reproduce the failure before changing anything. Build `@filefn/docs` (for example `npx turbo run build --filter=@filefn/docs`) and capture the exact error output. You will need node modules installed; the repo root already has an install, and the worktree may need `npm ci` or `npm install` — use whichever is consistent with how the repo is set up, and be aware a full install takes a couple of minutes. Confirm the error genuinely matches the diagnosis above (unpreprocessed TypeScript in a `.svelte` file from `@docsfn/svelte`). If the real cause turns out to be different, follow the evidence and fix the actual cause instead, and say so clearly in your report.
+
+3. Survey the full scope before fixing. Search every `vite.config.*` and `svelte.config.*` in the repository for sites that alias into or depend on `@docsfn/svelte` (and check whether any other published `@docsfn/*` or similar package has the same raw-svelte problem). Enumerate every affected docs site, not just `filefn/docs` and `authfn/docs`. Grep for `noExternal` across the repo to see the existing conventions.
+
+4. Apply the minimal, consistent fix: add `@docsfn/svelte` to the `ssr.noExternal` array in each affected site's vite config, matching the surrounding code style exactly. If the survey shows a shared config module that all the docs sites extend, prefer fixing it in that one shared place instead of duplicating the entry across sites — use your judgement and explain the choice.
+
+5. Verify. Build each affected package and confirm it now succeeds. Then run a broader `npx turbo run build` to see how much further the overall build gets, and report the next failure point if one exists (there may well be additional pre-existing breakage further along — do NOT fix unrelated failures, just report them precisely). Also run any tests that exist for the affected packages.
+
+6. Commit with a clear conventional-commit message explaining the why, not just the what. Push the branch to `origin`.
+
+7. Open a pull request against the `dev` branch. **Create the PR as the `thyaravind` GitHub account** by prefixing the command with `GH_CONFIG_DIR=~/.config/gh-other`, e.g. `GH_CONFIG_DIR=~/.config/gh-other gh pr create --repo 21nCo/super-functions --base dev ...`. Verify with `GH_CONFIG_DIR=~/.config/gh-other gh auth status` that this config is authenticated as `thyaravind` before creating the PR. Do not run `gh auth switch` and do not modify any gh config. Check whether the repo has a pull request template (look in `.github/PULL_REQUEST_TEMPLATE/` or for `pull_request_template.md`) and follow it if present.
+
+   The PR description should explain: the failing task, the root cause chain (published package ships raw svelte → aliased directly from node_modules → not in `ssr.noExternal` → never preprocessed → rollup sees TypeScript), which sites were affected, why the fix is scoped the way it is, and the verification you ran. Mention that this unblocks the repo-wide `turbo run build` and therefore the `JavaScript` CI check for all PRs.
+
+## Constraints
+
+- Do NOT include any `.conduct/` files in the commit or PR.
+- Do NOT fix unrelated build failures you encounter; report them instead.
+- Do NOT modify the user's main working tree at /Users/serro/Documents/dev/n/superfunctions-dev.
+- Do not touch PR #142 or its branch `codex/uifn-examples-turbo-build-order`.
+
+## Report back
+
+- Whether the reproduction matched the diagnosis, with the key error lines.
+- The complete list of affected sites you found and what you changed in each.
+- Build and test results proving the fix works.
+- How far the repo-wide `turbo run build` gets now, and the next failure if any.
+- The PR URL and confirmation it was authored by `thyaravind`.
