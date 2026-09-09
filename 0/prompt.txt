@@ -1,0 +1,31 @@
+Unblock PR 133 JavaScript: `@uifn/svelte#test` timed out rendering 69 compound roots.
+
+Do NOT modify `/Users/serro/Documents/dev/n/superfunctions-dev`. Isolated worktree off `origin/dev` under `/Users/serro/Documents/dev/n/worktrees/superfunctions/`. Suggested: `uifn-svelte-catalog-timeout` / `codex/uifn-svelte-catalog-timeout`. Do not clobber PR 133 worktree.
+
+## Failure
+
+PR 133 run 33858246394, HEAD `c56071b0`:
+```
+@uifn/svelte#test
+tests/phase-12-svelte.test.ts
+renders all 69 public compound roots from the generated catalog
+Test timed out in 5000ms (actual ~5654ms)
+```
+`dev` JavaScript SUCCESS (scoped; this test not in the affected set). Full-graph 133 CI is slower.
+
+## Task
+
+1. Do **not** bump 5s → 6s. Give real headroom (e.g. 15s or 20s per-test or package `testTimeout`). Keep the test.
+
+2. **Sweep** sibling catalog-complete tests (`@uifn/react`, `@uifn/solid`, `@uifn/components-*` phase-12 / “69 public compound roots”) and apply the same timeout so the next peel is not React/Solid.
+
+3. PR against `dev` as thyaravind (`GH_CONFIG_DIR=~/.config/gh-other`). Merge `--merge` if no P1. Merge `origin/dev` into PR 133, push, comment. Do NOT merge 133.
+
+4. No git config, no `--no-verify`, no `.conduct/`, never force-push `dev`.
+
+## Report
+
+- Timeouts applied and files
+- PR URL + merge SHA
+- PR 133 new HEAD
+- Next step (wait for JS)
