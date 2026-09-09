@@ -1,0 +1,36 @@
+Unblock PR 133 JavaScript by fixing remaining mdfn Vitest 10s timeouts on `dev` in **one PR**, not one test per cycle.
+
+Do NOT modify `/Users/serro/Documents/dev/n/superfunctions-dev`. Isolated worktree under `/Users/serro/Documents/dev/n/worktrees/superfunctions/` off latest `origin/dev`. Suggested: `mdfn-collab-ci-timeout` / `codex/mdfn-collab-ci-timeout`. Do not clobber PR 133 worktree `docsfn-next-to-dev-20260829`.
+
+## Known failure
+
+PR 133 full JS (run 33849093984, HEAD `18df2b33f`): **`@mdfn/collab#test`**
+```
+collaboration > accepts valid default-sized collaboration updates above the old one MiB cap
+Test timed out in 10000ms
+```
+Test ran ~27s. PR does not touch `mdfn/collab`. `dev` scoped JS passed because it only ran server/solid.
+
+Already done:
+- PR 158: `@mdfn/testing` 5s/12s budgets, vitest 30s
+- PR 159: `@mdfn/server` coarse-resync 30s; solid `waitFor`
+
+## Task
+
+1. Confirm the collab test at `mdfn/collab/src/collab.test.ts` (~157). Give it a documented 30s+ timeout like server tests. If the test is doing something pathologically slow that should be smaller, prefer making the fixture cheaper **without** weakening the “above 1 MiB cap” assertion.
+
+2. **Sweep** `mdfn/**/*.test.*` for other tests likely to exceed 10s on loaded GHA (large buffers, 1MiB+, resync, large documents, loops). Apply the same named-constant timeout. Also check package-level `testTimeout` in vitest configs — raising the default for heavy mdfn packages may be cleaner than tagging every `it()`.
+
+3. Verify `npx turbo run test --filter=@mdfn/collab` and any other packages you touch.
+
+4. PR against `dev` as **thyaravind** (`GH_CONFIG_DIR=~/.config/gh-other`). Merge `--merge` if no P1. Then merge `origin/dev` into PR 133, push, comment. Do NOT merge 133.
+
+5. No git config, no `--no-verify`, no `.conduct/`, never force-push `dev`.
+
+## Report
+
+- Tests/packages given longer timeouts
+- Whether you shrank the 1MiB fixture or only raised timeout
+- New PR URL + merge SHA
+- PR 133 new HEAD
+- Next step (wait for JS on 133)
