@@ -1,0 +1,1 @@
+does the server code still gets executed near the db?
