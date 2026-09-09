@@ -1,0 +1,6 @@
+```chat_selection
+agent_id: 9137c7f8-568b-42ee-b3ea-59a326a6bebe
+selected_text:
+Want me to delete the comment and repost it as thyaravind?
+```
+ yes please
