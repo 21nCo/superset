@@ -1,0 +1,33 @@
+Watch JavaScript CI on GitHub PR 133 for `21nCo/super-functions` and merge it only if that check is SUCCESS.
+
+PR: https://github.com/21nCo/super-functions/pull/133
+Branch: `codex/docsfn-next-to-dev-20260829`
+Expected HEAD: `0d32ec075bb186d4d9510f67bcbad47bec59bd3b` (docsfn config test unlinks `.docsfn.*.mjs` before recursive rm; 15s timeout reverted). If HEAD moved, use current HEAD — do not reset.
+
+## Identity
+
+```
+GH_CONFIG_DIR=~/.config/gh-other gh ...
+```
+thyaravind. No `gh auth switch`. No git config. Never force-push `dev`/`main`. Do not modify `/Users/serro/Documents/dev/n/superfunctions-dev`.
+
+## Context
+
+Docs Guardrails expected FAIL — ignore. Merge 133 if JavaScript is SUCCESS even if Docs Guardrails is red. `gh pr merge --merge`.
+
+The user is tired of the CI onion-peel. If JavaScript FAILS, report the failing task clearly and stop. Do not start another peel in this task.
+
+## Procedure
+
+1. Confirm 133 open, targeting `dev`. Find latest CI run for this HEAD.
+2. Poll JavaScript 30–60s. Do not merge while IN_PROGRESS.
+3. **SUCCESS:** `GH_CONFIG_DIR=~/.config/gh-other gh pr merge 133 --repo 21nCo/super-functions --merge`. Report merge SHA.
+4. **FAILURE:** logs, failing turbo task, 133 vs `dev`. Do NOT merge. Do NOT start a new fix.
+5. Cancelled/timed out: report, do not merge.
+
+## Report
+
+- JavaScript conclusion
+- Merged or not (merge SHA)
+- If failed: task name, 133 vs `dev`, and stop
+- Next step
