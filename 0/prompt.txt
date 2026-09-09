@@ -1,0 +1,35 @@
+what do you think of this another evaluation of the same commits?
+
+## Verdict
+
+PR #133 is **not merge-ready** at head `e4c7cb580`. The five commits add substantial tests and several sound fixes, but leave one release blocker and three reproducible regressions.
+
+## Findings
+
+- **[P1] Package metadata now fails the repository’s release contract.** Commit `2f6f5fb09` narrowed React support to `^18.3.0` and Svelte support to `>=5.20.0 <6` in [React metadata](/Users/serro/Documents/dev/n/worktrees/superfunctions/docsfn-next-to-dev-20260829/docsfn/react/package.json:11) and [Svelte metadata](/Users/serro/Documents/dev/n/worktrees/superfunctions/docsfn-next-to-dev-20260829/docsfn/svelte/package.json:140). The release gate explicitly requires React `^18.0.0 || ^19.0.0` and Svelte `^4.0.0 || ^5.0.0` in [release-gate.mjs](/Users/serro/Documents/dev/n/worktrees/superfunctions/docsfn-next-to-dev-20260829/docsfn/scripts/release-gate.mjs:312). The gate fails immediately on React; inspection shows Svelte would fail next.
+
+- **[P2] Imported TypeScript-config helpers remain cached after edits.** The random compiled config filename in [config.ts](/Users/serro/Documents/dev/n/worktrees/superfunctions/docsfn-next-to-dev-20260829/docsfn/core/src/config.ts:341) busts the config module cache, but sibling imports retain stable URLs. Reproduction: load a config importing `theme.js`, change its title from `Before` to `After`, reload—both loads return `Before`. Dev mode therefore needs a process restart for imported configuration changes.
+
+- **[P2] Slow TypeScript configs can make `docsfn dev` rebuild itself continuously.** The fallback writes `.docsfn.<random>.mjs` beside the config, while provider watch metadata always includes the repository root in [watch.ts](/Users/serro/Documents/dev/n/worktrees/superfunctions/docsfn-next-to-dev-20260829/docsfn/provider-fs/src/watch.ts:36). A valid config with 250 ms top-level await produced observable `add` and `unlink` events for that temporary file; the handler in [CLI index.ts](/Users/serro/Documents/dev/n/worktrees/superfunctions/docsfn-next-to-dev-20260829/docsfn/cli/src/index.ts:642) rebuilds on both, creating another temporary file each time.
+
+- **[P2] Search silently misses exact tokens longer than 128 characters.** [searchfn-adapter.ts](/Users/serro/Documents/dev/n/worktrees/superfunctions/docsfn-next-to-dev-20260829/docsfn/core/src/searchfn-adapter.ts:11) caps edge n-grams at 128 without retaining the original token. Reproduction: a 128-character prefix returns the document; the full 140-character token returns no results.
+
+## Commit quality
+
+| Commit | Assessment |
+|---|---|
+| `8d595357c` | Mixed. Broad 26-file remediation with useful security/LLM coverage, but introduced the 128-character search regression and required substantial follow-up rewriting. |
+| `8a1cfe72c` | Generally positive, especially compile/RSS/sanitization tests, but still a large corrective pass over the preceding commit. |
+| `b688bba03` | Mixed. Good shared fence/routing work, but the new temporary-file config loader has incomplete reload semantics. |
+| `2f6f5fb09` | Weakest commit. Attempts to fix config races and CLI flags, but introduces package metadata that directly fails the release gate. |
+| `e4c7cb580` | Test-heavy and directionally useful, but incomplete: it leaves the gate red and does not cover imported-config reloads or long search tokens. |
+
+The range changes 46 files by `+1541/-199`, including 595 added test lines. There is also heavy corrective churn: 2,226 lines touched commit-by-commit versus 1,740 in the final combined diff.
+
+Validation snapshot:
+
+- Core, React, Svelte, and dogfood suites: **229 tests passed**.
+- Full DocsFn release gate: **failed at package metadata**; later release stages were skipped.
+- SonarCloud: still failing; duplication increased from 10.7% at `e80bcf156` to 11.6%, and reliability moved from C to D.
+- PR state: open, `mergeStateStatus=DIRTY`.
+- Exact review worktree remained clean; no source edits, staging, commits, or pushes were made.
