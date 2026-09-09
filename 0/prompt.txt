@@ -1,0 +1,1 @@
+Perform thorough audit and code review of MCP-2 worktree against [https://linear.app/21n/issue/MCP-2/make-mcpfn-the-batteries-included-mcp-sdk-and-quality-platform](https://linear.app/21n/issue/MCP-2/make-mcpfn-the-batteries-included-mcp-sdk-and-quality-platform)
