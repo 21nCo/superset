@@ -1,0 +1,1 @@
+there is a app called goldfish on this computer which keeps restarting even when I quit it... check why is that happening
