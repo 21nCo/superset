@@ -1,0 +1,1 @@
+does this also work for filefn? in future if we want to support regional file servers and signed uploads etc?
