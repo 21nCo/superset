@@ -1,0 +1,5 @@
+splane work linear issue (use cached skill if Skillplane MCP isn't available)
+
+Work in a new worktree based on latest dev end to end
+
+[https://linear.app/21n/issue/MCP-2/make-mcpfn-the-batteries-included-mcp-sdk-and-quality-platform](https://linear.app/21n/issue/MCP-2/make-mcpfn-the-batteries-included-mcp-sdk-and-quality-platform)
