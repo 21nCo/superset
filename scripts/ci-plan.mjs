@@ -23,8 +23,8 @@ const JS_GLOBAL_PATTERNS = [
 ];
 
 const PYTHON_GLOBAL_PATTERNS = [
-  /^\.github\/workflows\//,
-  /^scripts\/ci-.*\.mjs$/,
+  /^scripts\/ci-run-python-package\.mjs$/,
+  /^scripts\/ci-utils\.mjs$/,
 ];
 
 const MCPFN_PATTERNS = [
