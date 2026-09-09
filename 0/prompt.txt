@@ -1,0 +1,1 @@
+inventory all superfunctions worktrees and let me know which worktrees can be removed
