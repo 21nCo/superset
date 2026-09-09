@@ -1,0 +1,35 @@
+Watch JavaScript CI on GitHub PR 133 for `21nCo/super-functions` and merge it only if that check is SUCCESS.
+
+PR: https://github.com/21nCo/super-functions/pull/133
+Branch: `codex/docsfn-next-to-dev-20260829`
+Expected HEAD: `dbfa48e8ca81572f639939287a80e7bfe7034cd7` (31 additional local vitest configs including metrics). If HEAD moved, use current HEAD — do not reset.
+
+Known run: https://github.com/21nCo/super-functions/actions/runs/33843024679
+
+## Identity
+
+```
+GH_CONFIG_DIR=~/.config/gh-other gh ...
+```
+thyaravind. No `gh auth switch`. No git config. Never force-push `dev`/`main`. Do not modify `/Users/serro/Documents/dev/n/superfunctions-dev`.
+
+## Context
+
+Docs Guardrails expected FAIL — ignore. Merge 133 if JavaScript is SUCCESS even if Docs Guardrails is red. `gh pr merge --merge`.
+
+`dev` was failing `@mdfn/testing#test` (large-document budget timeout). If PR 133 JS now fails on that same task, treat as pre-existing `dev` and do not merge. If it fails on another missing vitest config, that is a miss in the 31-package sweep — report the package.
+
+## Procedure
+
+1. Confirm 133 open, targeting `dev`. Confirm HEAD.
+2. Poll JavaScript 30–60s. Do not merge while IN_PROGRESS.
+3. **SUCCESS:** merge with `GH_CONFIG_DIR=~/.config/gh-other gh pr merge 133 --repo 21nCo/super-functions --merge`. Report merge SHA.
+4. **FAILURE:** logs, failing turbo task, 133 vs `dev`. Do NOT merge.
+5. Cancelled/timed out: report, do not merge.
+
+## Report
+
+- JavaScript conclusion
+- Merged or not (merge SHA)
+- If failed: task name, 133 vs `dev`
+- Next step
