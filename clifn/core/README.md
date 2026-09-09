@@ -98,8 +98,8 @@ process.exitCode = exitCode;
 
 The current repository already uses all three parser styles:
 
-- `contentfn/cli` and `hostfn/cli` use `commander`
-- `apifn/cli` and `docsfn/cli` use `cac`
+- `hostfn/cli`, `plugfn/cli`, and `extfn/cli` use `commander`
+- `apifn/cli` uses `cac`
 - `datafn/cli` uses raw `node:util.parseArgs`
 
 The parser canaries under `clifn/core/tests/fixtures/*` prove that `runAction()` and the shared output service work in each style without adding parser libraries to `clifn` runtime dependencies.
@@ -267,8 +267,8 @@ These module entrypoints are the generic surface that repository CLIs can share:
 `clifn` is the shared home for generic CLI-builder concerns that appear across existing repository CLIs such as:
 
 - `packages/cli` and `apifn/cli` for config loading patterns
-- `hostfn/cli`, `recfn/cli`, and `apifn/cli` for output and command-runner patterns
-- `docsfn/cli` and `plugfn/cli` for structured diagnostics and test/reporting surfaces
+- `hostfn/cli`, `plugfn/cli`, and `apifn/cli` for output and command-runner patterns
+- `plugfn/cli` and `mcpfn/cli` for structured diagnostics and test/reporting surfaces
 
 Responsibilities that belong in `clifn`:
 

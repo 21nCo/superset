@@ -25,15 +25,6 @@ const JS_GLOBAL_PATTERNS = [
 const PYTHON_GLOBAL_PATTERNS = [
   /^\.github\/workflows\//,
   /^scripts\/ci-.*\.mjs$/,
-  /^scripts\/publish-python\.sh$/,
-];
-
-const DOCS_PATTERNS = [
-  /^docs\//,
-  /^docsfn\//,
-  /^packages\/docs-theme\//,
-  /^scripts\/check-docs-/,
-  /^scripts\/docs-coverage-check\.mjs$/,
 ];
 
 const MCPFN_PATTERNS = [
@@ -258,7 +249,6 @@ const pythonDirs = new Set(pythonByDir.keys());
 
 let fullJs = false;
 let fullPython = false;
-let runDocs = false;
 
 const changedJsDirs = new Set();
 const changedPythonNames = new Set();
@@ -272,10 +262,6 @@ for (const entry of changedEntries) {
 
     if (matchesAny(PYTHON_GLOBAL_PATTERNS, changedPath)) {
       fullPython = true;
-    }
-
-    if (matchesAny(DOCS_PATTERNS, changedPath)) {
-      runDocs = true;
     }
 
     const jsDir = findNearestManifestDir(changedPath, jsDirs);
@@ -340,7 +326,6 @@ const summary = {
   changedFiles: changedPaths,
   fullJs,
   fullPython,
-  runDocs,
   runMcpfn,
   mcpfnOnly,
   jsPackages: selectedJsPackages.map((manifest) => manifest.name).sort(),
@@ -364,6 +349,5 @@ writeOutput("js_typecheck_filters", fullJs ? "" : buildTurboFilters(jsTypecheckP
 writeOutput("run_python", String(fullPython || pythonMatrix.length > 0));
 writeOutput("full_python", String(fullPython));
 writeOutput("python_matrix", JSON.stringify(pythonMatrix));
-writeOutput("run_docs", String(runDocs));
 writeOutput("run_mcpfn", String(runMcpfn));
 writeOutput("mcpfn_only", String(mcpfnOnly));
