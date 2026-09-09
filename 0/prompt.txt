@@ -1,0 +1,31 @@
+Watch JavaScript CI on GitHub PR 133 for `21nCo/super-functions` and merge it only if that check is SUCCESS.
+
+PR: https://github.com/21nCo/super-functions/pull/133
+Branch: `codex/docsfn-next-to-dev-20260829`
+Expected HEAD: `41b3d44974c4b57eb77ab37f8195e50443e9a2d6` (origin/dev including PR 156 superconsole vitePreprocess). If HEAD moved, use current HEAD — do not reset.
+
+## Identity
+
+```
+GH_CONFIG_DIR=~/.config/gh-other gh ...
+```
+thyaravind. No `gh auth switch`. No git config. Never force-push `dev`/`main`. Do not modify `/Users/serro/Documents/dev/n/superfunctions-dev`.
+
+## Context
+
+PR 156 (`130b30c`) is on `dev`: `superconsole/svelte.config.js` has `vitePreprocess({ script: true })`. Docs Guardrails expected FAIL — ignore. Merge 133 if JavaScript is SUCCESS even if Docs Guardrails is red. `gh pr merge --merge`.
+
+## Procedure
+
+1. Confirm 133 open, targeting `dev`. Find the latest CI run for this HEAD.
+2. Poll JavaScript 30–60s. Do not merge while IN_PROGRESS.
+3. **SUCCESS:** `GH_CONFIG_DIR=~/.config/gh-other gh pr merge 133 --repo 21nCo/super-functions --merge`. Report merge SHA.
+4. **FAILURE:** logs, failing turbo task. Do NOT merge. Do not peel a large new issue. One small fix cycle only if you just introduced it. If new pre-existing `dev` failure, report and stop.
+5. Cancelled/timed out: report, do not merge.
+
+## Report
+
+- JavaScript conclusion
+- Merged or not (merge SHA)
+- If failed: task name, 133 vs `dev`
+- Next step
