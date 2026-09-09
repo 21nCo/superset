@@ -1,0 +1,2 @@
+the issue: [https://linear.app/21n/issue/DATA-6/expose-canonical-structural-resource-selector-extraction](https://linear.app/21n/issue/DATA-6/expose-canonical-structural-resource-selector-extraction)
+considering this
