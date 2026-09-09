@@ -1,0 +1,41 @@
+Unblock the next pre-existing `dev` JavaScript CI failure on `21nCo/super-functions`: `superconsole#typecheck`.
+
+Do NOT modify `/Users/serro/Documents/dev/n/superfunctions-dev`. Isolated worktree under `/Users/serro/Documents/dev/n/worktrees/superfunctions/` off latest `origin/dev`. Suggested: dir `superconsole-typecheck`, branch `codex/superconsole-typecheck`. `git fetch origin` first. Do not clobber `docsfn-next-to-dev-20260829` (PR 133) or `superconsole-svelte-preprocess` (PR 156).
+
+## Failure (re-verify locally)
+
+`dev` and PR 133 both fail after build succeeds:
+
+**`superconsole#typecheck`** — 13 svelte-check errors:
+
+1. `superconsole/src/lib/components/resource-pages.ts:284` — `method === 'HEAD'` unreachable (method type excludes `'HEAD'`)
+2. `superconsole/tests/server/super-console.test.ts` — missing export `createAuthFnOperatorAuth` from `@authfn/admin`; several implicit `any` bindings
+3. `superconsole/tests/ui/resource-pages.test.ts:215` — empty mock tuple destructuring
+
+CI: https://github.com/21nCo/super-functions/actions/runs/33837693195 (PR 133) and 33837679227 (`dev` at `130b30c`).
+
+May have been exposed by PR 156 `vitePreprocess({ script: true })` or may have been latent. Reproduce with `npx turbo run typecheck --filter=superconsole` (or the package’s actual typecheck script).
+
+## Task
+
+1. Reproduce and get the full svelte-check list. Do not guess.
+
+2. Fix with honest types, not `as any` unless there is no honest option (then say why).
+   - HEAD: either add `'HEAD'` to the method union if HEAD is a real HTTP verb this code handles, or delete the unreachable branch if it cannot happen.
+   - `createAuthFnOperatorAuth`: find the real export name in `@authfn/admin` (or whether it moved). Update the test import to the current API; do not invent a shim export on authfn unless the production code also needs it.
+   - implicit `any` / empty mock tuple: type the mocks properly.
+
+3. Verify `npx turbo run typecheck --filter=superconsole` passes. Also re-run `build --filter=superconsole` so you do not regress 156. Report next turbo typecheck/build failure if you run broader; do not peel it.
+
+4. Commit, push, PR against `dev` as **thyaravind** (`GH_CONFIG_DIR=~/.config/gh-other`). No auth switch. Follow PR templates.
+
+5. If no real P1 on the type fixes, merge with `--merge`, then merge `origin/dev` into PR 133 and push. Comment on 133. Do NOT merge 133.
+
+6. No git config, no `--no-verify`, no `.conduct/`, never force-push `dev`.
+
+## Report
+
+- Exact errors and how each was fixed
+- New PR URL + merge SHA if merged
+- PR 133 new HEAD
+- Next step (wait for JS on 133)
