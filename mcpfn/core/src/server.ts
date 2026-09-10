@@ -47,6 +47,18 @@ import type {
   McpFnListedTool,
 } from "./types.js";
 
+/** A profile is selected from verified request context, never client-reported metadata. */
+export interface McpFnClientProfile<TContext> {
+  id: string;
+  version: string;
+  verifiedIdentity: Record<string, unknown>;
+  protocolCapabilities?: Record<string, unknown>;
+  projectTool?(input: { tool: McpFnListedTool; context: TContext; extra: McpFnRequestExtra; profile: McpFnClientProfile<TContext> }): McpFnListedTool | null | Promise<McpFnListedTool | null>;
+  enrichArguments?(input: { tool: McpFnListedTool; arguments: Record<string, unknown>; context: TContext; extra: McpFnRequestExtra; profile: McpFnClientProfile<TContext> }): Record<string, unknown> | Promise<Record<string, unknown>>;
+}
+
+export type McpFnClientProfileResolver<TContext> = (input: { context: TContext; extra: McpFnRequestExtra }) => McpFnClientProfile<TContext> | undefined | Promise<McpFnClientProfile<TContext> | undefined>;
+
 export interface McpFnToolVisibilityInput<TContext> {
   tool: McpFnListedTool;
   context: TContext;
@@ -65,6 +77,7 @@ export interface McpFnServerOptions<TContext> extends CreateManifestOptions {
   toolVisibility?: (
     input: McpFnToolVisibilityInput<TContext>,
   ) => boolean | Promise<boolean>;
+  clientProfile?: McpFnClientProfileResolver<TContext>;
   /** Maximum entries returned by each list request. Defaults to 100. */
   pageSize?: number;
   additionalCapabilities?: ServerCapabilities;
@@ -193,6 +206,7 @@ export class McpFnServer<TContext = undefined> {
     extra: McpFnRequestExtra,
   ) => TContext | Promise<TContext>;
   private readonly toolVisibility?: McpFnServerOptions<TContext>["toolVisibility"];
+  private readonly clientProfileResolver?: McpFnClientProfileResolver<TContext>;
   private readonly manifestOptions: CreateManifestOptions;
   private readonly pageSize: number;
   private readonly serverOptions: McpFnServerOptions<TContext>;
@@ -206,6 +220,7 @@ export class McpFnServer<TContext = undefined> {
     assertMcpAppContracts(this.registry);
     this.contextFactory = options.context ?? (() => undefined as TContext);
     this.toolVisibility = options.toolVisibility;
+    this.clientProfileResolver = options.clientProfile;
     this.pageSize = options.pageSize ?? 100;
     if (!Number.isInteger(this.pageSize) || this.pageSize < 1) {
       throw new Error("McpFn pageSize must be a positive integer");
@@ -255,19 +270,27 @@ export class McpFnServer<TContext = undefined> {
     if (this.capabilities.tools) {
       this.protocol.setRequestHandler(ListToolsRequestSchema, async (request, extra) => {
         const tools = this.registry.listTools();
+        const context = await this.contextFactory(extra);
         const visibleTools = this.toolVisibility
-          ? await this.filterVisibleTools(tools, await this.contextFactory(extra), extra)
+          ? await this.filterVisibleTools(tools, context, extra)
           : tools;
-        const result = page(visibleTools, request.params?.cursor, this.pageSize);
+        const result = page(await this.projectTools(visibleTools, context, extra), request.params?.cursor, this.pageSize);
         return { tools: result.values, ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}) };
       });
       this.protocol.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
         const context = await this.contextFactory(extra);
+        const profile = await this.resolveProfile(context, extra);
         const listedTool = this.registry.listTools().find((tool) => tool.name === request.params.name);
         if (!listedTool || (this.toolVisibility
           && !(await this.toolVisibility({ tool: listedTool, context, extra })))) {
           throw new McpError(ErrorCode.MethodNotFound, `Tool ${request.params.name} not found`);
         }
+        if (profile && !(await this.projectTool(listedTool, profile, context, extra))) {
+          throw new McpError(ErrorCode.MethodNotFound, `Tool ${request.params.name} not found`);
+        }
+        const argumentsWithTrustedContext = profile?.enrichArguments
+          ? await profile.enrichArguments({ tool: listedTool, arguments: request.params.arguments ?? {}, context, extra, profile })
+          : request.params.arguments;
         const taskSupport = this.registry.taskSupport(request.params.name);
         const isTaskRequest = Boolean(request.params.task);
         if (taskSupport === "required" && !isTaskRequest) {
@@ -287,14 +310,14 @@ export class McpFnServer<TContext = undefined> {
             if (!extra.taskStore) throw new Error("No task store is available");
             return await this.registry.createToolTask(
               request.params.name,
-              request.params.arguments,
+              argumentsWithTrustedContext,
               context,
               extra as McpFnTaskRequestExtra,
             );
           }
           return await this.registry.callTool(
             request.params.name,
-            request.params.arguments,
+            argumentsWithTrustedContext,
             context,
             extra,
           );
@@ -391,6 +414,26 @@ export class McpFnServer<TContext = undefined> {
     const decisions = await Promise.all(tools.map((tool) =>
       this.toolVisibility!({ tool, context, extra })));
     return tools.filter((_, index) => decisions[index]);
+  }
+
+  private async resolveProfile(context: TContext, extra: McpFnRequestExtra): Promise<McpFnClientProfile<TContext> | undefined> {
+    const profile = await this.clientProfileResolver?.({ context, extra });
+    if (!profile) return undefined;
+    if (!profile.id || !profile.version) throw new Error("McpFn client profiles require stable id and version");
+    return profile;
+  }
+
+  private async projectTool(tool: McpFnListedTool, profile: McpFnClientProfile<TContext>, context: TContext, extra: McpFnRequestExtra): Promise<McpFnListedTool | null> {
+    const projected = await profile.projectTool?.({ tool, context, extra, profile }) ?? tool;
+    if (projected && projected.name !== tool.name) throw new Error(`Client profile ${profile.id} must not rename tool ${tool.name}`);
+    return projected;
+  }
+
+  private async projectTools(tools: McpFnListedTool[], context: TContext, extra: McpFnRequestExtra): Promise<McpFnListedTool[]> {
+    const profile = await this.resolveProfile(context, extra);
+    if (!profile) return tools;
+    const projected = await Promise.all(tools.map((tool) => this.projectTool(tool, profile, context, extra)));
+    return projected.filter((tool): tool is McpFnListedTool => tool !== null);
   }
 
   manifest(): McpFnManifest {

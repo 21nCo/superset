@@ -403,6 +403,41 @@ describe("McpFnServer", () => {
     expect(called).toBe(false);
   });
 
+  it("projects model-visible schemas and restores trusted arguments before canonical validation", async () => {
+    let received: Record<string, unknown> | undefined;
+    const registry = new McpFnRegistry().register({
+      name: "scoped", description: "Uses server-owned tenant context.",
+      inputSchema: { type: "object", properties: { query: { type: "string" }, tenantId: { type: "string" } }, required: ["query", "tenantId"], additionalProperties: false },
+      handler: async (args) => { received = args; return structuredResult({ ok: true }); },
+    });
+    const server = createMcpFnServer({
+      info: { name: "profiles", version: "1.0.0" }, registry,
+      context: () => ({ tenantId: "verified-tenant" }),
+      clientProfile: ({ context }) => ({
+        id: "trusted-client", version: "1", verifiedIdentity: { tenantId: context.tenantId },
+        projectTool: ({ tool }) => ({ ...tool, inputSchema: { ...tool.inputSchema, properties: { query: { type: "string" } }, required: ["query"] } }),
+        enrichArguments: ({ arguments: args }) => ({ ...args, tenantId: context.tenantId }),
+      }),
+    });
+    const client = new Client({ name: "untrusted-name", version: "1.0.0" }, { capabilities: {} });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport); await client.connect(clientTransport); closeables.push(client, server);
+    expect((await client.listTools()).tools[0]?.inputSchema).toMatchObject({ required: ["query"] });
+    await expect(client.callTool({ name: "scoped", arguments: { query: "hello", tenantId: "forged-by-client" } })).resolves.toMatchObject({ isError: false });
+    expect(received).toEqual({ query: "hello", tenantId: "verified-tenant" });
+  });
+
+  it("retains rejected additional-property diagnostics without retaining its value", async () => {
+    const registry = new McpFnRegistry().register({ name: "strict", description: "Reject unknown arguments.", inputSchema: { type: "object", additionalProperties: false }, handler: async () => structuredResult({ ok: true }) });
+    const server = createMcpFnServer({ info: { name: "strict", version: "1.0.0" }, registry });
+    const client = new Client({ name: "test-client", version: "1.0.0" }, { capabilities: {} });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport); await client.connect(clientTransport); closeables.push(client, server);
+    const result = await client.callTool({ name: "strict", arguments: { forged: "secret-value" } });
+    expect(result.structuredContent).toMatchObject({ error: { details: { issues: [{ path: "/", schemaPath: "#/additionalProperties", keyword: "additionalProperties", additionalProperty: "forged" }] } } });
+    expect(JSON.stringify(result)).not.toContain("secret-value");
+  });
+
   it("allows domain packages to retain their stable invalid-argument envelope", async () => {
     const registry = new McpFnRegistry().register({
       name: "domain_validation",

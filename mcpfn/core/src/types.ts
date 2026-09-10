@@ -73,7 +73,7 @@ export interface McpFnToolDefinition<TContext = undefined> {
   /** Optional domain-specific mapping for JSON Schema argument failures. */
   handleInvalidArguments?(
     args: Record<string, unknown>,
-    issues: Array<{ path: string; message: string; keyword: string }>,
+    issues: McpFnValidationIssue[],
     context: TContext,
     extra: McpFnRequestExtra,
   ): CallToolResult | Promise<CallToolResult>;
@@ -263,3 +263,12 @@ export type McpFnElicitationParams = ElicitRequestFormParams | ElicitRequestURLP
 export type McpFnElicitationResult = ElicitResult;
 export type McpFnRootsResult = ListRootsResult;
 export type McpFnClientRequestOptions = RequestOptions;
+
+/** Safe structural detail retained from JSON Schema validation. Never contains argument values. */
+export interface McpFnValidationIssue {
+  path: string;
+  schemaPath: string;
+  message: string;
+  keyword: string;
+  additionalProperty?: string;
+}

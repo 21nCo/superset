@@ -27,6 +27,7 @@ import type {
   McpFnResourceTemplateDefinition,
   McpFnTaskRequestExtra,
   McpFnToolDefinition,
+  McpFnValidationIssue,
 } from "./types.js";
 
 interface RegisteredTool<TContext> {
@@ -53,16 +54,17 @@ type ResourceMatch<TContext> =
       variables: Record<string, string | string[]>;
     };
 
-function formatErrors(errors: ErrorObject[] | null | undefined): Array<{
-  path: string;
-  message: string;
-  keyword: string;
-}> {
-  return (errors ?? []).map((error) => ({
-    path: error.instancePath || "/",
-    message: error.message ?? "Schema validation failed",
-    keyword: error.keyword,
-  }));
+function formatErrors(errors: ErrorObject[] | null | undefined): McpFnValidationIssue[] {
+  return (errors ?? []).map((error) => {
+    const additionalProperty = (error.params as Record<string, unknown>).additionalProperty;
+    return {
+      path: error.instancePath || "/",
+      schemaPath: error.schemaPath,
+      message: error.message ?? "Schema validation failed",
+      keyword: error.keyword,
+      ...(typeof additionalProperty === "string" ? { additionalProperty } : {}),
+    };
+  });
 }
 
 function assertName(kind: string, name: string): void {

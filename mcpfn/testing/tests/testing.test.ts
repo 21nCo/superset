@@ -18,9 +18,19 @@ import {
   createMcpFnScenarioReport,
   runScenarios,
   validateMcpFnScenarios,
+  runClientProfileCompatibilitySuite,
 } from "../src/index.js";
 
 describe("McpFn testing", () => {
+  it("runs bounded client-profile fixtures through the real list and call lifecycle", async () => {
+    const registry = new McpFnRegistry().register({ name: "echo", description: "Echo a value.", inputSchema: { type: "object", properties: { value: { type: "string" } }, required: ["value"], additionalProperties: false }, handler: async ({ value }) => structuredResult({ value }) });
+    const server = createMcpFnServer({ info: { name: "profiles", version: "1" }, registry });
+    const client = await McpFnTestClient.connect(server);
+    try {
+      await expect(runClientProfileCompatibilitySuite(server.manifest(), [{ id: "generic", version: "1", client, expectedToolNames: ["echo"], fixtures: [{ tool: "echo", arguments: { value: "safe" } }] }])).resolves.toMatchObject({ status: "complete", results: [{ status: "passed", tools: ["echo"] }] });
+    } finally { await client.close(); }
+  });
+
   it("checks manifests and deterministic semantic scenarios", async () => {
     const registry = new McpFnRegistry().register({
       name: "echo",

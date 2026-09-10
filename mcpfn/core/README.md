@@ -80,6 +80,14 @@ the hook to both `tools/list` and `tools/call`; a hidden call returns the same
 protocol `MethodNotFound` response as an unknown tool. The static manifest
 continues to describe the complete server contract.
 
+`clientProfile` is an optional request-scoped contract for verified clients.
+Selection receives trusted server context, never self-reported initialization
+metadata. A versioned profile may project a model-visible tool and enrich
+server-owned arguments before canonical validation; it cannot rename a tool.
+Without a profile resolver, generic behavior is unchanged. Validation diagnostics
+retain safe structure (`path`, `schemaPath`, `keyword`, and an unknown property
+name) but never rejected argument values.
+
 ```ts
 const server = createMcpFnServer({
   info: { name: "admin", version: "1.0.0" },

@@ -22,6 +22,12 @@ It includes:
 
 Official conformance validates protocol behavior. McpFn scenarios validate product behavior. Production MCP servers should run both. For a protected local endpoint, use `runAuthenticatedOfficialConformance({ url, headers })`; it requires a literal loopback upstream, binds a temporary loopback-only streaming proxy, pins every request to the configured upstream path, injects the configured headers without printing them, and always closes the proxy after the pinned official runner exits.
 
+`runClientProfileCompatibilitySuite(manifest, profiles)` separately captures
+effective `tools/list` catalogs, checks input schemas, compares optional reviewed
+snapshots, and invokes only explicit safe fixtures through the production call
+lifecycle. Its report is bounded and redacted; it complements rather than
+replaces protocol conformance, product scenarios, or live-client evidence.
+
 Use `runMcpFnTargetSuite({ target, scenarios, manifest })` when a test should
 exercise a subprocess or deployed target. It constructs the same session used
 by applications, the inspector, and CLI. Scenario execution is serial and
