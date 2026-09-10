@@ -54,6 +54,11 @@ export default [
 `mcpfn test` connects the production McpFn client and server with the official
 in-memory transport. `mcpfn test-target` runs the same scenarios against stdio
 or Streamable HTTP. Both check or exercise the real capability boundary.
+For a protected HTTP endpoint, add one or more `--header 'Name: Value'` values;
+the header values are passed to the official transport and are excluded from
+target descriptors and generated reports. Applications that need interactive
+or refreshable OAuth use `streamableHttpTarget(url, { authProvider })` with
+their existing provider rather than a McpFn-native server type.
 `McpFnTestClient` also exposes resources, prompts, completions, subscriptions,
 and experimental task APIs; its `configure` hook installs client-side roots,
 sampling, elicitation, and notification handlers before initialization.
@@ -95,7 +100,19 @@ Start a real Streamable HTTP endpoint, then run:
 mcpfn conformance http://127.0.0.1:3000/mcp --suite active
 ```
 
+For an authenticated local test server, provide a bounded credential header:
+
+```sh
+mcpfn conformance http://127.0.0.1:3000/mcp --suite active \
+  --header "Authorization: Bearer $MCP_CONFORMANCE_TOKEN"
+```
+
 McpFn delegates to the pinned official conformance npm package and returns its exit code. The current pinned runner requires Node.js 22 or newer. Use an expected-failures file only for reviewed, time-bounded exceptions; do not turn new failures into a silent baseline update.
+Because the official runner cannot accept credentials itself, McpFn creates a
+fixed loopback proxy and injects headers only for requests using that proxy's
+authority. This intentionally limits authenticated official conformance to a
+literal loopback upstream and prevents host-manipulation probes from receiving
+credentials.
 
 ## Superfunctions release gate
 

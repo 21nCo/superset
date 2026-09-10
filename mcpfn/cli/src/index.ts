@@ -20,6 +20,7 @@ import {
   McpFnAssertionError,
   assertManifestContract,
   runOfficialConformance,
+  runAuthenticatedOfficialConformance,
   runMcpFnTargetSuite,
   runScenarios,
   createMcpFnScenarioReport,
@@ -160,6 +161,7 @@ export async function runCli(
     .option("--output-dir <path>", "Directory for official conformance artifacts")
     .option("--spec-version <version>", "MCP specification version")
     .option("--verbose", "Show official runner diagnostics")
+    .option("--header <name-value>", "Inject an HTTP header (repeatable; Name: Value)")
     .action(async (url: string, options: {
       suite?: "active" | "all" | "pending";
       scenario?: string;
@@ -167,8 +169,9 @@ export async function runCli(
       outputDir?: string;
       specVersion?: string;
       verbose?: boolean;
+      header?: string | string[];
     }) => {
-      const result = await runOfficialConformance({
+      const conformance = {
         url,
         suite: options.suite,
         scenario: options.scenario,
@@ -180,7 +183,11 @@ export async function runCli(
         verbose: options.verbose,
         cwd,
         stdio: "pipe",
-      });
+      } as const;
+      const headers = parseHttpHeaders(options.header);
+      const result = hasHttpHeaders(headers)
+        ? await runAuthenticatedOfficialConformance({ ...conformance, headers })
+        : await runOfficialConformance(conformance);
       if (result.stdout) stdout(result.stdout);
       if (result.stderr) stderr(result.stderr);
       exitCode = result.exitCode;
@@ -190,12 +197,14 @@ export async function runCli(
     .option("--stdio", "Treat target as an executable instead of an HTTP URL")
     .option("--args <json>", "JSON array of stdio executable arguments")
     .option("--output <path>", "Write the redacted JSON snapshot")
+    .option("--header <name-value>", "Inject an HTTP header (repeatable; Name: Value)")
     .action(async (targetValue: string, options: {
       stdio?: boolean;
       args?: string;
       output?: string;
+      header?: string | string[];
     }) => {
-      const target = parseTarget(targetValue, options, cwd);
+      const target = parseTarget(targetValue, options, cwd, parseHttpHeaders(options.header));
       const inspector = McpFnInspector.create({ target });
       try {
         await inspector.connect();
@@ -213,13 +222,15 @@ export async function runCli(
     .option("--stdio", "Treat target as an executable instead of an HTTP URL")
     .option("--args <json>", "JSON array of stdio executable arguments")
     .option("--output <path>", "Write the JSON report")
+    .option("--header <name-value>", "Inject an HTTP header (repeatable; Name: Value)")
     .action(async (targetValue: string, scenariosPath: string, options: {
       stdio?: boolean;
       args?: string;
       output?: string;
+      header?: string | string[];
     }) => {
       const report = await runMcpFnTargetSuite({
-        target: parseTarget(targetValue, options, cwd),
+        target: parseTarget(targetValue, options, cwd, parseHttpHeaders(options.header)),
         scenarios: await loadScenarios(scenariosPath, cwd),
       });
       const serialized = `${JSON.stringify(report, null, 2)}\n`;
@@ -279,11 +290,15 @@ function parseTarget(
   targetValue: string,
   options: { stdio?: boolean; args?: string },
   cwd: string,
+  headers: Headers = new Headers(),
 ): McpFnTarget {
   if (!options.stdio) {
     if (options.args) throw new Error("--args requires --stdio");
-    return streamableHttpTarget(targetValue);
+    return streamableHttpTarget(targetValue, {
+      ...(hasHttpHeaders(headers) ? { requestInit: { headers } } : {}),
+    });
   }
+  if (hasHttpHeaders(headers)) throw new Error("--header is only supported for HTTP targets");
   let args: string[] | undefined;
   if (options.args) {
     const parsed = JSON.parse(options.args) as unknown;
@@ -293,4 +308,28 @@ function parseTarget(
     args = parsed;
   }
   return stdioTarget({ command: targetValue, args, cwd });
+}
+
+/** Parse credential headers without ever serializing their values into diagnostics. */
+export function parseHttpHeaders(value: string | string[] | undefined): Headers {
+  const headers = new Headers();
+  for (const entry of value === undefined ? [] : Array.isArray(value) ? value : [value]) {
+    const separator = entry.indexOf(":");
+    const name = separator < 1 ? "" : entry.slice(0, separator).trim();
+    const headerValue = separator < 1 ? "" : entry.slice(separator + 1).trim();
+    if (!name || !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name)) {
+      throw new Error("--header must use a valid HTTP header name followed by ': '");
+    }
+    if (!headerValue || /[\r\n]/.test(headerValue)) {
+      throw new Error("--header must use a non-empty single-line value");
+    }
+    headers.set(name, headerValue);
+  }
+  return headers;
+}
+
+function hasHttpHeaders(headers: Headers): boolean {
+  let present = false;
+  headers.forEach(() => { present = true; });
+  return present;
 }

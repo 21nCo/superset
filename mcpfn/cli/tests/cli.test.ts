@@ -14,6 +14,7 @@ import {
   loadManifestSource,
   loadScenarios,
   MCPFN_CLI_VERSION,
+  parseHttpHeaders,
   runCli,
 } from "../src/index.js";
 
@@ -52,6 +53,18 @@ describe("mcpfn CLI", () => {
       "10ms",
     ], { stderr: (value) => { errors += value; } })).toBe(2);
     expect(errors).toContain("--timeout must be a positive integer");
+  });
+
+  it("parses repeatable HTTP credential headers without accepting header injection", () => {
+    const headers = parseHttpHeaders([
+      "Authorization: Bearer test-token",
+      "X-Workspace: fixture",
+    ]);
+    expect(headers.get("authorization")).toBe("Bearer test-token");
+    expect(headers.get("x-workspace")).toBe("fixture");
+    expect(() => parseHttpHeaders("missing separator")).toThrow(/valid HTTP header name/);
+    expect(() => parseHttpHeaders("Authorization: bearer\r\ninjected: value"))
+      .toThrow(/single-line value/);
   });
 
   it("validates and diffs manifests with stable exit codes", async () => {
