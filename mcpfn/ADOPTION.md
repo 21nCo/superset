@@ -28,3 +28,17 @@ Downstream Skillplane work consumes published McpFn packages after the guarded
 release sequence. This repository gate proves the shared packages, examples,
 packed external installation, and protocol fixtures; it does not prove a
 downstream deployment or hosted OAuth registration.
+
+## Third-party server adoption
+
+A server does not need to adopt the McpFn runtime to consume the quality
+platform. Pin released `@mcpfn/testing` and `@mcpfn/cli` versions, describe the
+remote URL, provide credentials through an application-owned provider or named
+environment variable, and run semantic scenarios plus the official conformance
+lane. The SDK-only external example is the compatibility boundary: it imports
+no McpFn server package.
+
+Package upgrades are explicit. Update the testing and CLI pins together, review
+artifact schema or exit-code changes, run the remote regression suite, and only
+then advance the consumer lockfile. A failed upgrade can be rolled back by
+restoring the previous pins without changing the external MCP server.

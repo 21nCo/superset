@@ -23,6 +23,12 @@ tests and package layouts evolve.
 | MCP2-AC-15 | The inspector observes bounded diagnostics and events and exports runner-compatible scenarios. | inspector round-trip and bound tests |
 | MCP2-AC-16 | Node 22 release checks cover packages, examples, installed tarballs, conformance, OAuth, artifacts, and a named consumer. | `npm run gate:mcpfn-release` |
 | MCP2-AC-17 | Workspace, installed, published, controlled-live, and deployed proof are never conflated. | `TESTING.md` proof-level table |
+| MCP1-AC-01 | Released testing and CLI packages can test an authenticated third-party MCP server without McpFn server runtime dependencies. | SDK-only external fixture and packed/published consumer gates |
+| MCP1-AC-02 | Remote credentials are explicit, bounded, redacted, redirect-safe, and released across success or failure. | remote target lifecycle and CLI credential tests |
+| MCP1-AC-03 | Official conformance supports protected loopback targets without exposing credentials to the runner. | authenticated conformance proxy and environment tests |
+| MCP1-AC-04 | Hosted ChatGPT-, Claude-, and DCR-shaped fixtures keep registration and request inputs independent and cover code, PKCE, refresh, extension grants, and unsupported grants. | hosted authorization regression suite |
+| MCP1-AC-05 | Machine artifacts are bounded after serialization, redacted, versioned, and identify scenario plus failure layer. | JSON/JUnit report tests and external fixture gate |
+| MCP1-AC-06 | Pull-request, packed, registry-published, controlled-live, and deployed evidence remain distinct. | release workflow and `TESTING.md` proof-level policy |
 
 The local release gate is authoritative for deterministic workspace and packed
 installation claims. Registry publication, controlled provider smoke tests,

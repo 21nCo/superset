@@ -55,6 +55,19 @@ targets. The inspector records its diagnostics and invokes its facades. The CLI
 constructs its stdio or HTTP targets. This one-way dependency rule prevents
 test-only, inspector-only, or command-line protocol forks.
 
+An authenticated external target is URL plus credential provider, not a server
+implementation contract. The provider acquires bounded headers for one target
+open and may revoke and dispose them. The shared target refuses redirect
+following, omits headers from descriptors and reports, releases once across
+success or failure, and delegates all MCP lifecycle behavior to
+`@mcpfn/client`.
+
+Testing failures retain a machine-readable phase and classify the failing layer
+as McpFn preflight, authorization server, resource server, MCP initialization,
+scenario, or upstream conformance. JSON and JUnit serializers apply redaction
+and aggregate bounds after serialization and include the testing package, report
+schema, and Node runtime versions.
+
 ## Authorization ownership
 
 The official SDK owns RFC discovery, DCR, PKCE construction, token exchange,

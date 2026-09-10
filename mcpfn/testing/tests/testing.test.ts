@@ -12,10 +12,12 @@ import {
   MCPFN_HOST_PROFILES,
   assertManifestContract,
   buildOfficialConformanceArgs,
+  buildOfficialConformanceEnvironment,
   checkHostCompatibility,
   createAuthenticatedConformanceProxy,
   createMcpFnScenarioArtifact,
   createMcpFnScenarioReport,
+  runAuthenticatedOfficialConformance,
   runScenarios,
   validateMcpFnScenarios,
 } from "../src/index.js";
@@ -513,6 +515,16 @@ describe("McpFn testing", () => {
     ]);
   });
 
+  it("does not inherit selected credential environment variables into conformance", () => {
+    const environment = buildOfficialConformanceEnvironment(
+      ["MCPFN_TEST_BEARER"],
+      { PATH: "/usr/bin", MCPFN_TEST_BEARER: "secret", SAFE_VALUE: "kept" },
+    );
+    expect(environment.MCPFN_TEST_BEARER).toBeUndefined();
+    expect(environment.SAFE_VALUE).toBe("kept");
+    expect(environment.PATH).toContain("/usr/bin");
+  });
+
   it("injects credentials through a fixed loopback conformance proxy", async () => {
     const observed: Array<{ authorization?: string; host?: string }> = [];
     const upstream = createServer((request, response) => {
@@ -580,6 +592,25 @@ describe("McpFn testing", () => {
       url: "https://mcp.example.com/mcp",
       headers: { authorization: "Bearer conformance-secret" },
     })).rejects.toThrow(/literal loopback address/);
+    await expect(createAuthenticatedConformanceProxy({
+      url: "http://127.0.0.1:1/mcp",
+      headers: {},
+    })).rejects.toThrow(/at least one credential header/);
+  });
+
+  it("releases authenticated conformance credentials when proxy setup fails", async () => {
+    const revoke = vi.fn();
+    const dispose = vi.fn();
+    await expect(runAuthenticatedOfficialConformance({
+      url: "https://mcp.example.com/mcp",
+      credential: {
+        acquire: () => ({ headers: { authorization: "Bearer conformance-secret" } }),
+        revoke,
+        dispose,
+      },
+    })).rejects.toThrow(/literal loopback address/);
+    expect(revoke).toHaveBeenCalledOnce();
+    expect(dispose).toHaveBeenCalledOnce();
   });
 
   it("closes the conformance proxy while streaming requests are active", async () => {

@@ -1,6 +1,6 @@
 # McpFn Testing
 
-`@mcpfn/testing` provides deterministic MCP regression testing over the official SDK's in-memory transport. It tests the protocol boundary rather than calling handlers directly.
+`@mcpfn/testing` provides deterministic MCP regression testing over the official SDK's in-memory transport and against arbitrary stdio or Streamable HTTP MCP servers. It tests the protocol boundary rather than calling handlers directly; the server under test does not need to use McpFn.
 
 It includes:
 
@@ -18,9 +18,10 @@ It includes:
 - version 1 declarative scenarios for capabilities, tasks, events, and auth phases;
 - per-scenario timeout/cancellation, side-effect and incomplete metadata;
 - bounded, redacted scenario and target-suite reports;
+- JSON and JUnit artifacts with package/runtime provenance and failure layers;
 - orchestration of the official `@modelcontextprotocol/conformance` runner.
 
-Official conformance validates protocol behavior. McpFn scenarios validate product behavior. Production MCP servers should run both. For a protected local endpoint, use `runAuthenticatedOfficialConformance({ url, headers })`; it requires a literal loopback upstream, binds a temporary loopback-only streaming proxy, pins every request to the configured upstream path, injects the configured headers without printing them, and always closes the proxy after the pinned official runner exits.
+Official conformance validates protocol behavior. McpFn scenarios validate product behavior. Production MCP servers should run both. For a protected local endpoint, use `runAuthenticatedOfficialConformance({ url, credential })`; it requires a literal loopback upstream, binds a temporary loopback-only streaming proxy, pins every request to the configured upstream path, injects bounded credential headers without printing them, and always revokes/disposes the credential and closes the proxy after the pinned official runner exits.
 
 Use `runMcpFnTargetSuite({ target, scenarios, manifest })` when a test should
 exercise a subprocess or deployed target. It constructs the same session used
@@ -53,6 +54,40 @@ try {
   await client.close();
 }
 ```
+
+## External authenticated targets
+
+`authenticatedHttpTarget()` accepts a URL plus either a static credential or an
+application-owned provider. The provider is responsible for acquiring the
+credential and may revoke and dispose it. McpFn applies the headers only to the
+fixed target, refuses redirect following, excludes credentials from target
+descriptors and reports, and releases the credential exactly once even when
+initialization fails.
+
+```ts
+import {
+  authenticatedHttpTarget,
+  createMcpFnTargetSuiteJUnit,
+  runMcpFnTargetSuite,
+} from "@mcpfn/testing";
+
+const report = await runMcpFnTargetSuite({
+  target: authenticatedHttpTarget("https://mcp.example.com/mcp", {
+    credential: {
+      kind: "api-key",
+      headers: { "x-api-key": process.env.MCP_API_KEY! },
+    },
+  }),
+  scenarios,
+});
+
+await writeArtifact("mcpfn-report.xml", createMcpFnTargetSuiteJUnit(report));
+```
+
+Use a provider instead of a static credential for short-lived OAuth access
+tokens. Report failures identify `mcpfn-preflight`, `authorization-server`,
+`resource-server`, `mcp-initialization`, `scenario`, or
+`upstream-conformance` without serializing secret material.
 
 Scenarios run serially so stateful workflows and idempotency checks remain
 deterministic. Legacy arrays are readable; portable artifacts use
@@ -97,6 +132,13 @@ await assertAuthRegressionSuite({
 OAuth adapters can additionally enable scope, expiry, resource-binding, and revocation scenarios. Rejected OAuth requests must include a Bearer challenge with `resource_metadata`; API keys intentionally do not inherit that OAuth-specific requirement.
 
 `createOAuthClientMetadataVariants()` returns authorization-code clients with basic, JWT-bearer-extension, device-code-extension, and generic-extension metadata. The compatibility assertion requires authorization-code support while deliberately accepting unrelated grants, which catches closed-world Client ID Metadata validation regressions.
+
+`createHostedAuthorizationFixtures()` keeps registration metadata independent
+from the generated authorization request. The ChatGPT-shaped pre-registration,
+Claude-shaped Client ID Metadata Document, and dynamic-registration cases cover
+authorization code with S256 PKCE and refresh. Advertised JWT bearer, device,
+and custom grants remain compatible when authorization code is supported, while
+an actual unsupported token request must return `unsupported_grant_type`.
 
 ## Playwright fixture
 

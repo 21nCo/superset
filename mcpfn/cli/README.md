@@ -7,11 +7,11 @@ mcpfn manifest ./mcp-server.ts --output mcpfn.manifest.json
 mcpfn validate mcpfn.manifest.json
 mcpfn diff main.manifest.json mcpfn.manifest.json --fail-on-behavioral
 mcpfn test ./mcp-server.ts ./mcp-scenarios.ts --output mcpfn-report.json
-mcpfn test-target https://api.example.com/mcp ./mcp-scenarios.ts
-mcpfn inspect https://api.example.com/mcp --output inspection.json
+mcpfn test-target https://api.example.com/mcp ./mcp-scenarios.ts --bearer-token-env MCP_TOKEN --output report.json --junit report.xml
+mcpfn inspect https://api.example.com/mcp --api-key-env MCP_API_KEY --api-key-header x-api-key --output inspection.json
 mcpfn inspect node --stdio --args '["./dist/server.js"]'
 mcpfn auth-diagnose https://api.example.com/mcp
-mcpfn conformance http://127.0.0.1:3000/mcp --suite active
+mcpfn conformance http://127.0.0.1:3000/mcp --suite active --bearer-token-env MCP_TOKEN --report conformance.json
 ```
 
 - `0`: valid, compatible, or all scenarios passed;
@@ -26,6 +26,16 @@ timelines are redacted, versioned, and aggregate-size bounded. Target open,
 authorization, and execution failures use exit `1`; malformed command or file
 configuration uses exit `2`. `mcpfn test --max-report-bytes` can tighten the
 default one-MiB scenario report cap.
+
+`conformance`, `inspect`, and `test-target` accept either
+`--bearer-token-env NAME` or `--api-key-env NAME`; API keys may override the
+header with `--api-key-header`. The named environment variable is read only at
+runtime, never copied into child-process arguments or artifacts, and is removed
+from the official runner's environment after the loopback proxy captures it.
+The options are mutually exclusive and empty variables are rejected as invalid
+configuration. `test-target` additionally accepts `--manifest`, `--junit`,
+`--visible-tools`, and `--max-report-bytes`; `conformance --report` writes a
+bounded redacted machine report and accepts the same report-size cap.
 
 The conformance command delegates to the pinned official
 `@modelcontextprotocol/conformance` package. It requires Node.js 22 or newer;

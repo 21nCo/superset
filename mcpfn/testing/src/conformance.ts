@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import {
   createServer,
@@ -8,6 +9,18 @@ import {
 import { request as httpsRequest } from "node:https";
 import type { Socket } from "node:net";
 import path from "node:path";
+import { redactOAuthValue } from "@superfunctions/oauth-core";
+
+import {
+  acquireRemoteCredential,
+  validateRemoteCredentialHeaders,
+  type McpFnRemoteCredential,
+  type McpFnRemoteCredentialProvider,
+} from "./remote-target.js";
+import {
+  normalizeMcpFnReportFailure,
+  type McpFnReportFailure,
+} from "./reports.js";
 
 export const OFFICIAL_CONFORMANCE_VERSION = "0.1.16";
 
@@ -21,12 +34,19 @@ export interface OfficialConformanceOptions {
   verbose?: boolean;
   cwd?: string;
   stdio?: "inherit" | "pipe";
+  /** Environment names removed before spawning the upstream runner. */
+  sensitiveEnvironmentVariables?: readonly string[];
 }
 
 export interface OfficialConformanceResult {
+  formatVersion: 1;
+  kind: "mcpfn.official-conformance-report";
+  ok: boolean;
+  suiteVersion: string;
   exitCode: number;
   stdout: string;
   stderr: string;
+  failure?: McpFnReportFailure;
 }
 
 export interface AuthenticatedConformanceProxy {
@@ -43,7 +63,10 @@ export interface AuthenticatedConformanceProxyOptions {
 }
 
 export interface AuthenticatedOfficialConformanceOptions extends OfficialConformanceOptions {
-  headers: HeadersInit;
+  /** Preferred typed credential lifecycle. */
+  credential?: McpFnRemoteCredential | McpFnRemoteCredentialProvider;
+  /** Backward-compatible static header input. Prefer credential. */
+  headers?: HeadersInit;
 }
 
 /**
@@ -74,7 +97,7 @@ export async function createAuthenticatedConformanceProxy(
   const protocol = upstream.protocol === "https:" ? "https:" : "http:";
   const port = upstream.port === "" ? undefined : Number(upstream.port);
   const requestPath = `${upstream.pathname}${upstream.search}`;
-  const injected = new Headers(options.headers);
+  const injected = validateRemoteCredentialHeaders(options.headers);
   const activeRequests = new Set<ReturnType<typeof httpRequest>>();
   const activeSockets = new Set<Socket>();
   let proxyAuthority: string | undefined;
@@ -139,15 +162,19 @@ export async function createAuthenticatedConformanceProxy(
     `http://127.0.0.1:${address.port}`,
   );
   proxyAuthority = url.host;
+  let closePromise: Promise<void> | undefined;
   return {
     url: url.toString(),
-    close: async () => {
-      for (const request of activeRequests) request.destroy();
-      for (const socket of activeSockets) socket.destroy();
-      if (!server.listening) return;
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => (error ? reject(error) : resolve()));
-      });
+    close: () => {
+      closePromise ??= (async () => {
+        for (const request of activeRequests) request.destroy();
+        for (const socket of activeSockets) socket.destroy();
+        if (!server.listening) return;
+        await new Promise<void>((resolve, reject) => {
+          server.close((error) => (error ? reject(error) : resolve()));
+        });
+      })();
+      return closePromise;
     },
   };
 }
@@ -196,6 +223,18 @@ export function buildOfficialConformanceArgs(
   return args;
 }
 
+export function buildOfficialConformanceEnvironment(
+  sensitiveNames: readonly string[] = [],
+  source: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const environment = { ...source };
+  for (const name of sensitiveNames) delete environment[name];
+  environment.PATH = [path.dirname(process.execPath), environment.PATH]
+    .filter(Boolean)
+    .join(path.delimiter);
+  return environment;
+}
+
 export async function runOfficialConformance(
   options: OfficialConformanceOptions,
 ): Promise<OfficialConformanceResult> {
@@ -207,16 +246,14 @@ export async function runOfficialConformance(
   }
   const args = buildOfficialConformanceArgs(options);
   const invocation = npxInvocation(args);
+  const childEnvironment = buildOfficialConformanceEnvironment(
+    options.sensitiveEnvironmentVariables,
+  );
 
-  return await new Promise<OfficialConformanceResult>((resolve, reject) => {
+  return await new Promise<OfficialConformanceResult>((resolve) => {
     const child = spawn(invocation.command, invocation.args, {
       cwd: options.cwd,
-      env: {
-        ...process.env,
-        PATH: [path.dirname(process.execPath), process.env.PATH]
-          .filter(Boolean)
-          .join(path.delimiter),
-      },
+      env: childEnvironment,
       stdio: options.stdio === "inherit" ? "inherit" : "pipe",
     });
     let stdout = "";
@@ -227,9 +264,44 @@ export async function runOfficialConformance(
     child.stderr?.on("data", (chunk) => {
       stderr += chunk.toString();
     });
-    child.once("error", reject);
+    let settled = false;
+    child.once("error", (error) => {
+      if (settled) return;
+      settled = true;
+      const failure = normalizeMcpFnReportFailure(error, "upstream-conformance");
+      resolve({
+        formatVersion: 1,
+        kind: "mcpfn.official-conformance-report",
+        ok: false,
+        suiteVersion: OFFICIAL_CONFORMANCE_VERSION,
+        exitCode: 1,
+        stdout: "",
+        stderr: failure.message,
+        failure,
+      });
+    });
     child.once("close", (code) => {
-      resolve({ exitCode: code ?? 1, stdout, stderr });
+      if (settled) return;
+      settled = true;
+      const exitCode = code ?? 1;
+      const safeStdout = String(redactOAuthValue(stdout, { maxStringLength: 262_144 }));
+      const safeStderr = String(redactOAuthValue(stderr, { maxStringLength: 262_144 }));
+      const failure = exitCode === 0
+        ? undefined
+        : normalizeMcpFnReportFailure(
+          new Error(safeStderr || safeStdout || `Official conformance exited ${exitCode}`),
+          "upstream-conformance",
+        );
+      resolve({
+        formatVersion: 1,
+        kind: "mcpfn.official-conformance-report",
+        ok: exitCode === 0,
+        suiteVersion: OFFICIAL_CONFORMANCE_VERSION,
+        exitCode,
+        stdout: safeStdout,
+        stderr: safeStderr,
+        ...(failure ? { failure } : {}),
+      });
     });
   });
 }
@@ -238,14 +310,29 @@ export async function runOfficialConformance(
 export async function runAuthenticatedOfficialConformance(
   options: AuthenticatedOfficialConformanceOptions,
 ): Promise<OfficialConformanceResult> {
-  const { headers, ...conformance } = options;
-  const proxy = await createAuthenticatedConformanceProxy({
-    url: conformance.url,
-    headers,
-  });
+  const { headers, credential, ...conformance } = options;
+  if ((headers === undefined) === (credential === undefined)) {
+    throw new TypeError("Provide exactly one of credential or headers for authenticated conformance");
+  }
+  const lease = await acquireRemoteCredential(
+    credential ?? { headers: headers! },
+    {
+      url: conformance.url,
+      requestId: randomUUID(),
+    },
+  );
+  let proxy: AuthenticatedConformanceProxy | undefined;
   try {
+    proxy = await createAuthenticatedConformanceProxy({
+      url: conformance.url,
+      headers: lease.credential.headers,
+    });
     return await runOfficialConformance({ ...conformance, url: proxy.url });
   } finally {
-    await proxy.close();
+    try {
+      await proxy?.close();
+    } finally {
+      await lease.release();
+    }
   }
 }

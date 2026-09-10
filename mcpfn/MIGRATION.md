@@ -50,3 +50,13 @@ its own regression suite is added to the release gate.
 
 Run `npm run gate:mcpfn-release` after changes to the shared McpFn runtime or its
 current DataFn adapter. Do not treat that gate as evidence for unmigrated consumers.
+
+## Testing an existing non-McpFn server
+
+Runtime migration is optional for regression adoption. Pin released
+`@mcpfn/testing` and `@mcpfn/cli`, point `mcpfn test-target` at the existing
+Streamable HTTP URL, and supply a bearer token or API key through a named
+environment variable. Add the official conformance command for a protected
+loopback test deployment and retain the bounded JSON/JUnit artifacts. This path
+does not introduce a second server, registry, OAuth state store, or token
+authority.
