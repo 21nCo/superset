@@ -1,4 +1,4 @@
-# MCP-2 requirements
+# McpFn quality-platform requirements
 
 This file is the version-controlled acceptance contract for the first McpFn
 quality-platform release. The identifiers are stable even while individual
@@ -28,3 +28,20 @@ The local release gate is authoritative for deterministic workspace and packed
 installation claims. Registry publication, controlled provider smoke tests,
 and deployment checks remain separate actions and must record their own
 version, endpoint, and timestamp evidence.
+
+## MCP-3 deterministic client-profile requirements
+
+| ID | Requirement | Deterministic evidence |
+| --- | --- | --- |
+| MCP3-AC-01 | Verified identity, self-reported client metadata, protocol capabilities, and catalog behavior are separate public inputs. | core client-profile types and authenticated lifecycle tests |
+| MCP3-AC-02 | Generic and configured clients can enumerate deterministic effective catalogs. | testing profile contract suite and snapshots |
+| MCP3-AC-03 | Visibility, projection, enrichment, and canonical validation share one production request lifecycle. | core list/call integration tests |
+| MCP3-AC-04 | Canonical required server-owned fields can be omitted from the visible schema and restored only from trusted context. | projected lookup fixture |
+| MCP3-AC-05 | Forged server-owned arguments, missing trusted context, and asymmetric projection/enrichment fail before handlers. | negative core and suite fixtures |
+| MCP3-AC-06 | Schema portability validation is recursive and dialect-aware. | draft-07 and 2020-12 portability vectors |
+| MCP3-AC-07 | Explicit minimal-valid and captured-failure fixtures use the production target/session engine. | client-profile contract suite |
+| MCP3-AC-08 | Unknown root properties retain instance path, schema path, keyword, and exact rejected property without values. | structured Ajv diagnostic tests |
+| MCP3-AC-09 | Unmatched generic clients retain the canonical catalog and call behavior. | generic fallback core and suite cases |
+| MCP3-AC-10 | Effective-catalog snapshots detect stale and intentional behavioral changes. | snapshot validation/diff and stale-baseline tests |
+| MCP3-AC-11 | Compatibility reports are bounded, stable, machine-readable, and omit credentials and argument values. | report cap, isolation, and redaction tests |
+| MCP3-AC-12 | Protocol conformance, profile compatibility, product scenarios, authentication, and live-client evidence remain separate gates. | architecture, testing guide, CLI, and release gate |

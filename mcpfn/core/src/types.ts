@@ -1,6 +1,7 @@
 import type {
   Annotations,
   CallToolResult,
+  ClientCapabilities,
   CompleteResult,
   CreateMessageRequest,
   CreateMessageResult,
@@ -40,10 +41,38 @@ export type McpFnObjectSchema = McpFnJsonSchema & {
   additionalProperties?: boolean | McpFnJsonSchema;
 };
 
-export type McpFnRequestExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;
+export type McpFnRequestExtra = RequestHandlerExtra<
+  ServerRequest,
+  ServerNotification
+>;
 export type McpFnTaskRequestExtra = McpFnRequestExtra & {
   taskStore: RequestTaskStore;
 };
+
+/** Safe structural JSON Schema diagnostic. Argument values are never retained. */
+export interface McpFnSchemaIssue {
+  /** Backwards-compatible alias for instancePath; `/` represents the root. */
+  path: string;
+  /** RFC 6901 path to the rejected input location; `/` represents the root. */
+  instancePath: string;
+  /** JSON Schema path reported by the validator. */
+  schemaPath: string;
+  keyword: string;
+  message: string;
+  /** Exact unknown property name for additionalProperties failures. */
+  rejectedProperty?: string;
+  /** Exact missing property name for required failures. */
+  missingProperty?: string;
+}
+
+export type McpFnToolLifecycleStage =
+  | "input-validation"
+  | "handler"
+  | "output-validation";
+
+export interface McpFnToolLifecycleObserver {
+  onStage?(stage: McpFnToolLifecycleStage): void;
+}
 
 export interface McpFnTaskHandler<TContext = undefined> {
   createTask(
@@ -73,7 +102,7 @@ export interface McpFnToolDefinition<TContext = undefined> {
   /** Optional domain-specific mapping for JSON Schema argument failures. */
   handleInvalidArguments?(
     args: Record<string, unknown>,
-    issues: Array<{ path: string; message: string; keyword: string }>,
+    issues: McpFnSchemaIssue[],
     context: TContext,
     extra: McpFnRequestExtra,
   ): CallToolResult | Promise<CallToolResult>;
@@ -189,8 +218,7 @@ export interface McpFnManifestTool {
   metadata?: Record<string, unknown>;
 }
 
-export interface McpFnManifestResource
-  extends Omit<Resource, "_meta"> {
+export interface McpFnManifestResource extends Omit<Resource, "_meta"> {
   /** Whether this concrete resource accepts resources/subscribe requests. */
   subscribable?: boolean;
   metadata?: Record<string, unknown>;
@@ -257,9 +285,19 @@ export type McpFnListedTool = Tool;
 export type McpFnListedResource = Resource;
 export type McpFnListedResourceTemplate = ResourceTemplate;
 
+/** Self-reported initialization information. It is compatibility input, never identity. */
+export interface McpFnReportedClient {
+  info?: Implementation;
+  capabilities?: ClientCapabilities;
+}
+
 export type McpFnSamplingParams = CreateMessageRequest["params"];
-export type McpFnSamplingResult = CreateMessageResult | CreateMessageResultWithTools;
-export type McpFnElicitationParams = ElicitRequestFormParams | ElicitRequestURLParams;
+export type McpFnSamplingResult =
+  | CreateMessageResult
+  | CreateMessageResultWithTools;
+export type McpFnElicitationParams =
+  | ElicitRequestFormParams
+  | ElicitRequestURLParams;
 export type McpFnElicitationResult = ElicitResult;
 export type McpFnRootsResult = ListRootsResult;
 export type McpFnClientRequestOptions = RequestOptions;

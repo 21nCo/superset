@@ -1,4 +1,4 @@
-# MCP-2 deterministic test vectors
+# McpFn deterministic test vectors
 
 These matrices define the maintained compatibility fixtures. Each vector is
 implemented by the auth, client, testing, inspector, CLI, or release-gate test
@@ -66,3 +66,27 @@ Fixture changes require a source note in the change description, review by an
 McpFn owner, and a full release-gate run. Provider-controlled production URLs
 are verified only in a separately authorized controlled-live lane; synthetic
 fixtures are reviewed on every MCP SDK upgrade and at least once per quarter.
+
+## Authenticated client-profile vectors
+
+| Vector | Expected result |
+| --- | --- |
+| No verified identity or no matching profile | canonical generic catalog and arguments |
+| Self-reported client name without matching verified identity | no trusted profile selection |
+| Visibility-hidden tool with a profile transform | absent from both list and call |
+| Profile removes canonical required field and declares trusted enrichment | field absent from catalog and restored before canonical validation |
+| Required field removed without enrichment declaration | catalog projection rejected as asymmetric |
+| Model supplies a declared server-owned field | rejected before handler as forged metadata |
+| Trusted enricher omits a declared server-owned field | missing-context failure before handler |
+| Projector invents or duplicates a tool | catalog projection rejected |
+| Unknown root argument reaches strict validation | exact property, instance path, schema path, and keyword retained; value omitted |
+| Handler throws a validation-shaped domain error | lifecycle remains `handler`, not `input-validation` |
+| draft-07 schema with `definitions` and local `$ref` | compiled with draft-07 |
+| 2020-12 schema with `$defs`, composition, arrays, or local `$ref` | recursively compiled with 2020-12 |
+| Unsupported dialect or unresolved reference | portability error |
+| Reviewed portability-sensitive keyword | warning, or error when policy requires |
+| Stale effective-catalog snapshot | profile contract fails |
+| Captured failure fixture | production list/call path used; arguments absent from report |
+| Mutating fixture without explicit suite opt-in | not executed; report marked incomplete |
+| One profile target fails to open | failed profile receipt; remaining profiles still execute |
+| Oversized compatibility receipt | bounded truncation with explicit incomplete status |
