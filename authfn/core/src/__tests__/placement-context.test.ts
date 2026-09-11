@@ -249,6 +249,9 @@ describe('AuthFn placement-bound auth context', () => {
       keyring
     });
     expect((await paddedIssuer.derive(padded.request)).homeRegion).toBe('us-east-1');
+
+    const paddedRecord = await setupIssuer({ regionId: '  us-east-1  ' });
+    expect((await paddedRecord.issuer.derive(paddedRecord.request)).homeRegion).toBe('us-east-1');
   });
 
   it('refuses a client-selected audience and omits raw user IDs unless opted in', async () => {
