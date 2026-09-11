@@ -168,7 +168,7 @@ export function createAuthFnPlacementContextIssuer(
   const routing = getMultiRegionPluginConfig(options.config)?.routing;
   const cellRegionId = routing?.mode === 'gateway' ? routing.cell?.regionId : undefined;
   const regionId = (options.regionId ?? cellRegionId)?.trim();
-  if (!regionId || (cellRegionId && regionId !== cellRegionId)) {
+  if (!regionId || (typeof cellRegionId === 'string' && regionId !== cellRegionId.trim())) {
     throw new AuthFnConfigError('Placement-context issuance requires the region owning config.database');
   }
   const placementDirectory = options.placementDirectory
