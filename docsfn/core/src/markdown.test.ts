@@ -420,3 +420,14 @@ describe("resolveMarkdownRelativeLinks", () => {
     );
   });
 });
+
+it("rejects executable table HTML through the compiler", () => {
+  expect(() => compileMarkdown({ source: "| X |\n| --- |\n| <svg/onload=alert(1)> |" })).toThrow();
+});
+
+it("sanitizes browser URL whitespace and slash handlers in trusted HTML tables", () => {
+  const compiled = compileMarkdown({ source: '| X |\n| --- |\n| <svg/onload=alert(1)> <a href="java&#x09;script:alert(1)">click</a> |', allowRawHtml: true });
+  const table = compiled.blocks.find((block) => block.type === "table");
+  expect(table).toBeDefined();
+  expect(JSON.stringify(table)).not.toMatch(/onload=|java&#x09;script:/);
+});

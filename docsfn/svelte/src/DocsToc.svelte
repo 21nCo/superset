@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import type { DocHeading } from "@docsfn/core/browser";
   import type { DocsPageSurface } from "./DocsLayout.svelte";
 
@@ -11,45 +11,30 @@
 
   $: resolvedHeadings = headings ?? surface?.headings ?? [];
 
-  // Auto-detect active heading based on scroll position
+  let mounted = false;
+  let observer: IntersectionObserver | undefined;
+  let generation = 0;
+  $: if (mounted) void observeHeadings(resolvedHeadings, activeHash);
+
+  async function observeHeadings(items: DocHeading[], controlled: string | undefined) {
+    const request = ++generation;
+    observer?.disconnect();
+    currentHash = controlled ?? "";
+    if (controlled !== undefined) return;
+    await tick();
+    if (!mounted || request !== generation || typeof IntersectionObserver === "undefined") return;
+    observer = new IntersectionObserver((entries) => {
+      const entry = entries.find((item) => item.isIntersecting);
+      if (entry?.target.id) currentHash = `#${entry.target.id}`;
+    }, { rootMargin: "-80px 0px -80% 0px", threshold: 0 });
+    for (const heading of items) {
+      const element = document.getElementById(heading.slug);
+      if (element) observer.observe(element);
+    }
+  }
   onMount(() => {
-    if (typeof window === "undefined" || typeof document === "undefined") {
-      return;
-    }
-
-    if (activeHash !== undefined) {
-      currentHash = activeHash;
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            const id = entry.target.getAttribute('id');
-            if (id) {
-              currentHash = `#${id}`;
-              break; // first (topmost) intersecting heading wins
-            }
-          }
-        }
-      },
-      {
-        rootMargin: '-80px 0px -80% 0px',
-        threshold: 0,
-      }
-    );
-
-    resolvedHeadings.forEach((h: DocHeading) => {
-      const element = document.getElementById(h.slug);
-      if (element) {
-        observer.observe(element);
-      }
-    });
-
-    return () => {
-      observer.disconnect();
-    };
+    mounted = true;
+    return () => { mounted = false; generation += 1; observer?.disconnect(); };
   });
 
   function handleClick(e: MouseEvent, slug: string) {

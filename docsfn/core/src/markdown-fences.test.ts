@@ -47,3 +47,19 @@ describe("markdown fence scanning", () => {
     expect(states.every((state) => !state.inFence && !state.isFenceLine)).toBe(true);
   });
 });
+
+it("does not end a root fence on a literal list marker", () => {
+  const states = scanStates(["```", "- ```", "<Tabs>", "```", "after"].join("\n"));
+  expect(states[1].isFenceLine).toBe(false);
+  expect(states[2].inFence).toBe(true);
+  expect(states[4].inFence).toBe(false);
+});
+it("ends an unclosed fence when its list or quote container ends", () => {
+  for (const opener of ["- ```", "> ```"]) {
+    expect(scanStates([opener, "outside"].join("\n"))[1].inFence).toBe(false);
+  }
+});
+it("distinguishes quote-inside-list from list-inside-quote", () => {
+  const states = scanStates(["- > ```", "> - text"].join("\n"));
+  expect(states[1].inFence).toBe(false);
+});

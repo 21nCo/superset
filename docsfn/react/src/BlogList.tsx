@@ -72,6 +72,7 @@ export function BlogList({ posts, selectedTag, onTagClick }: BlogListProps) {
               <a href={post.path} className="docsfn-blog-post-link">
                 <time className="docsfn-blog-post-date">
                   {new Date(post.publishedAt ?? post.date).toLocaleDateString("en-US", {
+                    timeZone: "UTC",
                     year: "numeric",
                     month: "long",
                     day: "numeric",

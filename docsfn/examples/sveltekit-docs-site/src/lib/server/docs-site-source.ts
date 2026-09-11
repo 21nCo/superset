@@ -96,6 +96,7 @@ async function buildSearchProbe(
 async function createDocsSiteSource(): Promise<DocsSiteSource> {
   const fixtureRoot = resolveFixtureRoot();
   const config = await loadDocsConfig({ cwd: fixtureRoot });
+  config.blog = { routeBase: "/blog", feedPath: "/blog/rss.xml" };
   const manifest = await buildManifest(new FsContentProvider({ root: fixtureRoot }), config);
   const searchArtifact = await buildSearchIndex(manifest, {
     search: config.search,

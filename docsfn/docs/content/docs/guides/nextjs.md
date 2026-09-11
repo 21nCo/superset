@@ -110,7 +110,7 @@ import {
   DocsSidebar,
   Pagination,
 } from "@docsfn/react";
-import { compileReactContent } from "@docsfn/core";
+import { compileReactContent, resolveMarkdownRelativeLinks } from "@docsfn/core";
 
 const manifestPromise = getManifest();
 const configPromise = getDocsConfig();
@@ -177,9 +177,10 @@ export default async function DocsPage({
   const sidebar = manifest.sidebars[sidebarId];
 
   if (routeEntry.kind === "page") {
-    const compiled = compileReactContent({
-      source: routeEntry.page.body,
-      compatPreset: config.compat?.preset ?? "none",
+    const compiled = resolveMarkdownRelativeLinks({
+      compiled: compileReactContent({ source: routeEntry.page.body, sourcePath: routeEntry.page.id, compatPreset: config.compat?.preset ?? "none" }),
+      route: routeEntry.route,
+      sourcePath: routeEntry.page.id,
     });
     return (
       <div className="docs-layout">

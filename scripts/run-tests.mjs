@@ -15,6 +15,8 @@ const command = isFileFnServerContractRun
         "--yes",
         "--package=vitest@3.2.4",
         "vitest",
+        "--config",
+        "filefn/server/vitest.config.ts",
         "--run",
         "filefn/server/tests/client-contract.test.ts",
       ],

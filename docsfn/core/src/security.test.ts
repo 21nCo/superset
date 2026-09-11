@@ -255,3 +255,8 @@ describe("security", () => {
     expect(findUnsafeHtml("`<script>\nexample`")).toEqual([]);
   });
 });
+
+// Browsers accept slash-delimited attributes and strip ASCII URL whitespace.
+it.each(['| X |\n| --- |\n| <svg/onload=alert(1)> |', '<a href="java&#x09;script:alert(1)">click</a>', '<a href="java&#10;script:alert(1)">click</a>'])("rejects browser executable HTML: %s", (source) => {
+  expect(() => assertCompiledContentTrusted({ source })).toThrow();
+});

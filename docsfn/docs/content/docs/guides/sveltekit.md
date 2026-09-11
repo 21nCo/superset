@@ -272,7 +272,7 @@ Pass **`loadSearchArtifact`** if you do not have the artifact in `data` (see Ste
 ```ts
 // src/routes/docs/[...slug]/+page.server.ts
 import { error } from "@sveltejs/kit";
-import { compileSvelteContent } from "@docsfn/core";
+import { compileSvelteContent, resolveMarkdownRelativeLinks } from "@docsfn/core";
 import type { Sidebar } from "@docsfn/core";
 import { resolveDocsPageSurface, resolveDocsRouteDataOrThrow } from "@docsfn/sveltekit";
 import type { PageServerLoad } from "./$types";
@@ -319,9 +319,10 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 
   const compiled =
     routeEntry.kind === "page"
-      ? compileSvelteContent({
-          source: routeEntry.page.body,
-          compatPreset: source.compatPreset,
+      ? resolveMarkdownRelativeLinks({
+          compiled: compileSvelteContent({ source: routeEntry.page.body, sourcePath: routeEntry.page.id, compatPreset: source.compatPreset }),
+          route: routeEntry.route,
+          sourcePath: routeEntry.page.id,
         })
       : undefined;
 
@@ -433,7 +434,7 @@ export const load: PageLoad = async ({ parent }) => {
 
 ```ts
 import { error } from "@sveltejs/kit";
-import { compileSvelteContent } from "@docsfn/core";
+import { compileSvelteContent, resolveMarkdownRelativeLinks } from "@docsfn/core";
 import { getPostData } from "@docsfn/sveltekit";
 import type { PageServerLoad } from "./$types";
 

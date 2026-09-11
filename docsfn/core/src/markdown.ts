@@ -1,4 +1,5 @@
 import { marked } from "marked";
+import { decodeHTML } from "entities";
 import { parseMarkdown } from "@mdfn/markdown";
 import { extractDocument, renderHtml } from "@mdfn/render";
 import { defaultExtensions } from "@mdfn/extensions";
@@ -40,8 +41,8 @@ const LIST_UNORDERED_REGEX = /^[-*+]\s+/;
 const LIST_ORDERED_REGEX = /^\d+[.)]\s+/;
 const TABLE_ROW_REGEX = /^\|.+\|/;
 
-const UNSAFE_HREF_RE = /(\bhref\s*=\s*["'])\s*javascript:[^"']*/gi;
-const EVENT_ATTR_RE = /\s+on[a-z][a-z0-9]*\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi;
+const URL_ATTRIBUTE_RE = /(\b(?:href|src|xlink:href)\s*=\s*)(["'])(.*?)\2/gi;
+const EVENT_ATTR_RE = /(?:\s+|\/)on[a-z][a-z0-9]*\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi;
 
 interface ParseBlocksOptions {
   source: string;
@@ -109,7 +110,10 @@ function parseComponentProps(rawAttributes: string): Record<string, string | num
 
 function sanitizeMarkdownHtml(html: string): string {
   return html
-    .replace(UNSAFE_HREF_RE, "$1#")
+    .replace(URL_ATTRIBUTE_RE, (attribute, prefix, quote, value) => {
+      const normalized = decodeHTML(value).replace(/[\t\n\r]/g, "").trim();
+      return /^javascript:/i.test(normalized) ? `${prefix}${quote}#${quote}` : attribute;
+    })
     .replace(EVENT_ATTR_RE, "");
 }
 

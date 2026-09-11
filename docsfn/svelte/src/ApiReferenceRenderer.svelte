@@ -237,7 +237,7 @@
   function toggleOperation(operationRoute: string) {
     expandedOperations = {
       ...expandedOperations,
-      [operationRoute]: !expandedOperations[operationRoute],
+      [operationRoute]: !(expandedOperations[operationRoute] ?? api.path === operationRoute),
     };
   }
 
@@ -272,7 +272,7 @@
       <h2>Operations</h2>
       <div class="docsfn-api-endpoints-scroll">
           {#each model.operations as operation (operation.routePath)}
-            {@const expanded = Boolean(expandedOperations[operation.routePath])}
+            {@const expanded = expandedOperations[operation.routePath] ?? api.path === operation.routePath}
 
             <div class="docsfn-api-method method-{operation.method.toLowerCase()}">
               <button

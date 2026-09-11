@@ -432,3 +432,31 @@ describe("loadDocsConfig", () => {
     });
   });
 });
+
+it("reloads transitive ESM config imports and cleans temporary modules", async () => {
+  const cwd = await createTempDir();
+  await writeFile(join(cwd, "docsfn.config.mjs"), 'import { title } from "./theme.mjs"; export default { schemaVersion: 1, site: { title }, content: { root: "." } };');
+  await writeFile(join(cwd, "theme.mjs"), 'export { title } from "./title.mjs";');
+  await writeFile(join(cwd, "title.mjs"), 'export const title = "Before";');
+  expect((await loadDocsConfig({ cwd })).site.title).toBe("Before");
+  await writeFile(join(cwd, "title.mjs"), 'export const title = "After";');
+  expect((await loadDocsConfig({ cwd })).site.title).toBe("After");
+  expect((await readdir(cwd)).filter((name) => name.startsWith(".docsfn."))).toEqual([]);
+});
+it.each([["/"], ["v1", "v1"]])("rejects ambiguous version slugs %j", async (...values) => {
+  const slugs = values.flat() as string[];
+  const cwd = await createTempDir();
+  await writeFile(join(cwd, "docsfn.config.mjs"), serializeConfig({ schemaVersion: 1, site: { title: "Test" }, content: { root: "." }, versions: { mode: "path-prefix", versions: slugs.map((slug) => ({ slug, label: slug })) } }));
+  await expect(loadDocsConfig({ cwd })).rejects.toMatchObject({ code: "DOCS_CONFIG_INVALID" });
+});
+
+it("reloads local CommonJS and JSON dependencies without retaining files", async () => {
+  const cwd = await createTempDir();
+  await writeFile(join(cwd, "docsfn.config.js"), 'const title = require("./theme.cjs"); module.exports = { schemaVersion: 1, site: { title }, content: { root: "." } };');
+  await writeFile(join(cwd, "theme.cjs"), 'module.exports = require("./title.json").title;');
+  await writeFile(join(cwd, "title.json"), '{"title":"Before"}');
+  expect((await loadDocsConfig({ cwd })).site.title).toBe("Before");
+  await writeFile(join(cwd, "title.json"), '{"title":"After"}');
+  expect((await loadDocsConfig({ cwd })).site.title).toBe("After");
+  expect((await readdir(cwd)).filter((name) => name.startsWith(".docsfn."))).toEqual([]);
+});

@@ -1,3 +1,4 @@
+import { compileReactContent, resolveMarkdownRelativeLinks } from "@docsfn/core";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
@@ -150,7 +151,7 @@ export default async function DocsPage(props: {
     },
   });
 
-  const sidebar = source.manifest.sidebars[surface.sidebarId ?? "default"];
+  const sidebar = surface.sidebarId ? source.manifest.sidebars[surface.sidebarId] : undefined;
 
   return (
     <div className="docs-example-grid">
@@ -219,9 +220,10 @@ export default async function DocsPage(props: {
             ) : null}
 
             <DocsContent
-              content={routeEntry.page.body}
-              sourcePath={routeEntry.page.id}
-              compatPreset={source.compatPreset}
+              compiled={resolveMarkdownRelativeLinks({
+                compiled: compileReactContent({ source: routeEntry.page.body, sourcePath: routeEntry.page.id, compatPreset: source.compatPreset }),
+                route: routeEntry.route, sourcePath: routeEntry.page.id,
+              })}
             />
           </article>
         ) : (

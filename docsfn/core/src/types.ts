@@ -107,6 +107,8 @@ export interface SidebarItem {
 }
 
 export interface Sidebar {
+  title?: string;
+  root?: boolean;
   id: string;
   items: SidebarItem[];
 }

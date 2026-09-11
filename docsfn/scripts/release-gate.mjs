@@ -313,12 +313,12 @@ async function verifyPackageMetadataAndArtifacts() {
   const reactRangeTokens = parsePeerRangeTokens(reactPeers.react ?? "");
   const reactDomRangeTokens = parsePeerRangeTokens(reactPeers["react-dom"] ?? "");
   assert(
-    reactRangeTokens.includes("^18.0.0") && reactRangeTokens.includes("^19.0.0"),
-    "@docsfn/react peerDependencies.react must include ^18.0.0 and ^19.0.0"
+    reactRangeTokens.includes("^18.3.0") && reactRangeTokens.includes("^19.0.0"),
+    "@docsfn/react peerDependencies.react must include ^18.3.0 and ^19.0.0"
   );
   assert(
-    reactDomRangeTokens.includes("^18.0.0") && reactDomRangeTokens.includes("^19.0.0"),
-    "@docsfn/react peerDependencies.react-dom must include ^18.0.0 and ^19.0.0"
+    reactDomRangeTokens.includes("^18.3.0") && reactDomRangeTokens.includes("^19.0.0"),
+    "@docsfn/react peerDependencies.react-dom must include ^18.3.0 and ^19.0.0"
   );
 
   const nextPeers = packageJsons["@docsfn/next"].json.peerDependencies ?? {};
@@ -330,8 +330,8 @@ async function verifyPackageMetadataAndArtifacts() {
   const sveltePeers = packageJsons["@docsfn/svelte"].json.peerDependencies ?? {};
   const svelteRangeTokens = parsePeerRangeTokens(sveltePeers.svelte ?? "");
   assert(
-    svelteRangeTokens.includes("^4.0.0") && svelteRangeTokens.includes("^5.0.0"),
-    "@docsfn/svelte peerDependencies.svelte must include ^4.0.0 and ^5.0.0"
+    sveltePeers.svelte === ">=5.20.0 <6",
+    "@docsfn/svelte peerDependencies.svelte must be >=5.20.0 <6"
   );
 
   const svelteKitPeers = packageJsons["@docsfn/sveltekit"].json.peerDependencies ?? {};

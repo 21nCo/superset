@@ -15,6 +15,8 @@ export interface VersionSwitcherProps {
   currentVersion?: string;
   onVersionChange?: (versionSlug: string) => void;
   className?: string;
+  basePath?: string;
+  versionMode?: "path-prefix" | "path-segment";
 }
 
 function escapeRegExp(value: string): string {
@@ -27,6 +29,8 @@ export function VersionSwitcher({
   currentVersion,
   onVersionChange,
   className,
+  basePath = "/docs",
+  versionMode = "path-prefix",
 }: VersionSwitcherProps) {
   const resolvedVersions = versions ?? surface?.versions ?? [];
   const resolvedCurrentVersion =
@@ -59,11 +63,15 @@ export function VersionSwitcher({
     }
 
     const nextPath = window.location.pathname.replace(
-      new RegExp(`^/(${pattern})/`, "i"),
-      `/${versionSlug}/`
+      versionMode === "path-segment"
+        ? new RegExp(`/(${pattern})$`)
+        : new RegExp(`^${escapeRegExp(basePath.replace(/\/+$/, ""))}/(${pattern})(?=/|$)`),
+      versionMode === "path-segment"
+        ? `/${versionSlug}`
+        : `${basePath.replace(/\/+$/, "")}/${versionSlug}`
     );
     if (nextPath !== window.location.pathname) {
-      window.location.href = nextPath;
+      window.location.href = `${nextPath}${window.location.search}${window.location.hash}`;
     }
   };
 

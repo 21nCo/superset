@@ -1,5 +1,5 @@
 import { error } from "@sveltejs/kit";
-import { getTopNavigation, type SidebarItem } from "@docsfn/core";
+import { compileSvelteContent, resolveMarkdownRelativeLinks, getTopNavigation, type SidebarItem } from "@docsfn/core";
 import {
   resolveDocsPageSurface,
   resolveDocsRouteDataOrThrow,
@@ -106,7 +106,7 @@ export const load: PageServerLoad = async ({ params, parent }) => {
         },
       });
 
-  const sidebar = source.manifest.sidebars[surface.sidebarId ?? "default"];
+  const sidebar = surface.sidebarId ? source.manifest.sidebars[surface.sidebarId] : undefined;
   const sidebarLinks = sidebar ? flattenSidebarLinks(sidebar.items) : [];
   const searchDocumentCount = Array.isArray(source.searchArtifact.documents)
     ? source.searchArtifact.documents.length
@@ -117,6 +117,10 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 
   return {
     routeEntry,
+    compiled: routeEntry.kind === "page" ? resolveMarkdownRelativeLinks({
+      compiled: compileSvelteContent({ source: routeEntry.page.body, sourcePath: routeEntry.page.id, compatPreset: source.compatPreset }),
+      route: routeEntry.route, sourcePath: routeEntry.page.id,
+    }) : undefined,
     surface,
     sidebarLinks,
     searchDocumentCount,

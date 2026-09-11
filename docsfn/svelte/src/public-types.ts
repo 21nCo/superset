@@ -1,6 +1,15 @@
 export const SVELTE_PUBLIC_TYPES = `import type { ComponentType } from "svelte";
 import type { DocHeading, DocsTopNavItem, Sidebar, Version } from "@docsfn/core/browser";
 
+export interface VersionSwitcherProps {
+  basePath?: string;
+  versionMode?: "path-prefix" | "path-segment";
+  surface?: DocsPageSurface;
+  versions?: Version[];
+  currentVersion?: string;
+  onVersionChange?: (versionSlug: string) => void;
+}
+
 export interface DocsPageLink {
   title: string;
   path: string;

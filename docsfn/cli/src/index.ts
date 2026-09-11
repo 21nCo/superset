@@ -15,6 +15,7 @@ import {
   formatDiagnosticsForCli,
   hasErrorDiagnostics,
   loadDocsConfig,
+  getDocsConfigDependencies,
   redactDiagnostics,
   type BuildLlmsFullTxtOptions,
   type DocsCompatPreset,
@@ -260,7 +261,9 @@ function compileManifestSources(
 
   for (const entry of entries) {
     try {
+      // buildManifest has already applied the provider source trust policy, including path allowlists.
       const compiled = compileMarkdown({
+        allowRawHtml: true,
         source: entry.source,
         sourcePath: entry.sourcePath,
         compatPreset: preset,
@@ -362,8 +365,8 @@ async function runPipeline(input: PipelineInput): Promise<PipelineResult> {
   return {
     cwd: input.cwd,
     config,
-    manifest,
-    searchArtifact,
+    manifest: hasErrorDiagnostics(finalizedDiagnostics) ? undefined : manifest,
+    searchArtifact: hasErrorDiagnostics(finalizedDiagnostics) ? undefined : searchArtifact,
     diagnostics: finalizedDiagnostics,
     compatReport: createCompatReport({
       preset,
@@ -400,7 +403,7 @@ async function writeArtifacts(outDir: string, result: PipelineResult): Promise<v
   if (searchEnabled && result.searchArtifact) {
     await fs.writeFile(
       path.join(outDir, "search.json"),
-      JSON.stringify(result.searchArtifact, null, 2)
+      JSON.stringify(result.searchArtifact)
     );
   } else {
     await fs.rm(path.join(outDir, "search.json"), { force: true });
@@ -500,7 +503,7 @@ function resolveConfigWatchPaths(cwd: string, configPath?: string): string[] {
   if (configPath) {
     paths.push(path.resolve(cwd, configPath));
   }
-  return paths;
+  return [...new Set([...paths, ...paths.flatMap(getDocsConfigDependencies)])];
 }
 
 function isConfigWatchPath(changedPath: string, cwd: string, configPath?: string): boolean {

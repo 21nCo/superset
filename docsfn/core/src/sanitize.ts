@@ -13,7 +13,7 @@ export const BLOCKED_HTML_TAGS = [
 ] as const;
 
 export const BLOCKED_HTML_PATTERNS = [
-  { category: "event-handler", regex: /\son[a-z]+\s*=/i },
+  { category: "event-handler", regex: /(?:\s|\/)on[a-z]+\s*=/i },
   { category: "javascript-url", regex: /javascript\s*:/i },
 ] as const;
 
@@ -124,9 +124,13 @@ export function findUnsafeHtml(source: string): UnsafeHtmlMatch[] {
     }
   }
 
-  const decodedForUrls = decodeHTML(collectHrefAndHtml(source));
+  const rawTags = stripCodeExamples(source).match(/<[a-z][^>]*>/gi) ?? [];
+  const decodedForUrls = decodeHTML(`${collectHrefAndHtml(source)}\n${rawTags.join("\n")}`);
   for (const pattern of BLOCKED_HTML_PATTERNS) {
-    const found = decodedForUrls.match(pattern.regex);
+    const candidate = pattern.category === "javascript-url"
+      ? decodedForUrls.replace(/[\t\n\r]/g, "")
+      : decodedForUrls;
+    const found = candidate.match(pattern.regex);
     if (found) {
       matches.push({ category: pattern.category, match: found[0] });
     }

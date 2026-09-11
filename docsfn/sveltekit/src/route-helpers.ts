@@ -7,6 +7,7 @@ import {
   getPaginationFromSidebarWithTitles,
   getTopNavigation,
   resolveSidebarForRoute,
+  selectApiReferenceRoute,
   type ApiReference,
   type BlogPost,
   type BuildDatedCollectionJsonFeedOptions,
@@ -348,7 +349,7 @@ function resolveRouteEntry(routePath: string, manifest: DocsManifest): DocsRoute
       kind: "api",
       id,
       route: routePath,
-      api,
+      api: selectApiReferenceRoute(api, routePath),
     };
   }
 
@@ -408,7 +409,7 @@ function collectDocsRoutes(input: {
   includeApiRoutes: boolean;
 }): string[] {
   const { manifest, basePath, includeApiRoutes } = input;
-  const baseWithSlash = `${basePath}/`;
+  const baseWithSlash = basePath === "/" ? "/" : `${basePath}/`;
 
   return Object.entries(manifest.routes)
     .filter(([routePath]) => routePath === basePath || routePath.startsWith(baseWithSlash))
@@ -894,9 +895,8 @@ export function resolveDocsPageSurface(input: {
     resolveSidebarForRoute({
       sidebars: input.manifest.sidebars,
       route: input.route,
-    }) ??
-    "default";
-  const sidebar = input.manifest.sidebars[sidebarId];
+    }) ?? undefined;
+  const sidebar = sidebarId ? input.manifest.sidebars[sidebarId] : undefined;
 
   const breadcrumbs = sidebar
     ? generateBreadcrumbs(input.route, input.manifest, {
@@ -1000,7 +1000,7 @@ export function createVersionedPageLoad(
         manifest,
         route: routeEntry.route,
         page: routeEntry.page,
-        options,
+        options: { ...options, versionMode: options.mode ?? options.versionMode },
       });
 
       return {

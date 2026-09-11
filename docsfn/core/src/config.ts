@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { access, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -23,7 +23,12 @@ export const DEFAULT_CONFIG_FILENAMES = [
 ] as const;
 
 const docsVersionConfigSchema = z.object({
-  slug: z.string().min(1, "versions.versions[].slug is required"),
+  slug: z
+    .string()
+    .regex(
+      /^[A-Za-z0-9][A-Za-z0-9._-]*$/,
+      "version slug must be a single safe path segment",
+    ),
   label: z.string().min(1, "versions.versions[].label is required"),
   default: z.boolean().optional(),
 });
@@ -36,7 +41,19 @@ const docsVersionsSchema = z
       .min(1, "versions.versions must contain at least one version"),
   })
   .superRefine((value, context) => {
-    const defaultCount = value.versions.filter((version) => version.default).length;
+    if (
+      new Set(value.versions.map((version) => version.slug)).size !==
+      value.versions.length
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["versions"],
+        message: "version slugs must be unique",
+      });
+    }
+    const defaultCount = value.versions.filter(
+      (version) => version.default,
+    ).length;
     if (defaultCount > 1) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -296,12 +313,7 @@ async function fileExists(targetPath: string): Promise<boolean> {
 
 async function loadConfigModule(configPath: string): Promise<unknown> {
   try {
-    if (extname(configPath) === ".ts") {
-      return await loadTypeScriptConfig(configPath);
-    }
-
-    const moduleValue = await import(await resolveConfigModuleUrl(configPath));
-    return resolveConfigExport(moduleValue);
+    return await loadFreshConfigGraph(configPath);
   } catch (error) {
     throw createDocsError({
       code: "DOCS_CONFIG_INVALID",
@@ -321,45 +333,183 @@ async function loadConfigModule(configPath: string): Promise<unknown> {
   }
 }
 
-async function loadTypeScriptConfig(configPath: string): Promise<unknown> {
-  try {
-    const moduleValue = await import(await resolveConfigModuleUrl(configPath));
-    return resolveConfigExport(moduleValue);
-  } catch {
-    const typescriptModuleName = process.env.DOCSFN_TYPESCRIPT_MODULE ?? "typescript";
-    const typescript: typeof import("typescript") = await import(
-      typescriptModuleName
-    );
-    const source = await readFile(configPath, "utf8");
-    const transpiled = typescript.transpileModule(source, {
-      compilerOptions: {
-        module: typescript.ModuleKind.ESNext,
-        target: typescript.ScriptTarget.ES2022,
-      },
-      fileName: configPath,
-    });
-    const compiledPath = join(
-      dirname(configPath),
-      `.docsfn.${randomBytes(16).toString("hex")}.mjs`
-    );
-    await writeFile(compiledPath, transpiled.outputText, {
-      encoding: "utf8",
-      mode: 0o600,
-    });
-    try {
-      const moduleValue = await import(await resolveConfigModuleUrl(compiledPath));
-      return resolveConfigExport(moduleValue);
-    } finally {
-      await unlink(compiledPath).catch(() => undefined);
-    }
-  }
+const configDependencyPaths = new Map<string, string[]>();
+
+export function getDocsConfigDependencies(configPath: string): string[] {
+  return configDependencyPaths.get(resolve(configPath)) ?? [];
 }
 
-async function resolveConfigModuleUrl(configPath: string): Promise<string> {
-  const configUrl = pathToFileURL(configPath);
-  const fileStats = await stat(configPath);
-  configUrl.searchParams.set("docsfnUpdatedAt", String(fileStats.mtimeMs));
-  return configUrl.href;
+async function loadFreshConfigGraph(configPath: string): Promise<unknown> {
+  const typescriptModuleName =
+    process.env.DOCSFN_TYPESCRIPT_MODULE ?? "typescript";
+  const ts: typeof import("typescript") = await import(typescriptModuleName);
+  const modules = new Map<
+    string,
+    {
+      source: string;
+      commonjs: boolean;
+      json: boolean;
+      imports: Array<{
+        start: number;
+        end: number;
+        target: string;
+        require: boolean;
+      }>;
+    }
+  >();
+  let totalBytes = 0;
+  async function visit(file: string): Promise<void> {
+    if (modules.has(file)) return;
+    if (modules.size >= 256)
+      throw new Error("configuration import graph exceeds 256 modules");
+    if ((await stat(file)).size > 4 * 1024 * 1024 - totalBytes)
+      throw new Error("configuration import graph exceeds 4 MiB");
+    const raw = await readFile(file, "utf8");
+    totalBytes += Buffer.byteLength(raw);
+    if (totalBytes > 4 * 1024 * 1024)
+      throw new Error("configuration import graph exceeds 4 MiB");
+    const isJson = extname(file) === ".json";
+    const source = isJson
+      ? raw
+      : ts.transpileModule(raw, {
+          fileName: file,
+          compilerOptions: {
+            module: ts.ModuleKind.ESNext,
+            target: ts.ScriptTarget.ES2022,
+          },
+        }).outputText;
+    const ast = ts.createSourceFile(
+      file,
+      source,
+      ts.ScriptTarget.ES2022,
+      true,
+      ts.ScriptKind.JS,
+    );
+    const commonjs =
+      extname(file) === ".cjs" ||
+      (!ts.isExternalModule(ast) && /\b(?:module\.exports|exports\.)/.test(source));
+    const record = {
+      source,
+      commonjs,
+      json: isJson,
+      imports: [] as Array<{
+        start: number;
+        end: number;
+        target: string;
+        require: boolean;
+      }>,
+    };
+    modules.set(file, record);
+    if (isJson) {
+      JSON.parse(source);
+      return;
+    }
+    const literals: Array<{
+      literal: import("typescript").StringLiteralLike;
+      require: boolean;
+    }> = [];
+    function collect(node: import("typescript").Node): void {
+      if (
+        (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+        node.moduleSpecifier &&
+        ts.isStringLiteralLike(node.moduleSpecifier)
+      )
+        literals.push({ literal: node.moduleSpecifier, require: false });
+      if (
+        ts.isCallExpression(node) &&
+        node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+        node.arguments[0] &&
+        ts.isStringLiteralLike(node.arguments[0])
+      )
+        literals.push({ literal: node.arguments[0], require: false });
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "require" &&
+        node.arguments[0] &&
+        ts.isStringLiteralLike(node.arguments[0])
+      )
+        literals.push({ literal: node.arguments[0], require: true });
+      ts.forEachChild(node, collect);
+    }
+    collect(ast);
+    for (const { literal, require: isRequire } of literals) {
+      if (!literal.text.startsWith(".")) continue;
+      let target = resolve(dirname(file), literal.text);
+      if (isRequire && !extname(target)) {
+        for (const extension of [".js", ".cjs", ".json"]) {
+          if (await fileExists(target + extension)) {
+            target += extension;
+            break;
+          }
+        }
+      }
+      if (![".js", ".mjs", ".ts", ".cjs", ".json"].includes(extname(target)))
+        continue;
+      // Record before reading so a missing dependency can be watched and repaired.
+      record.imports.push({
+        start: literal.getStart(ast),
+        end: literal.end,
+        target,
+        require: isRequire,
+      });
+      await visit(target);
+    }
+  }
+  configPath = resolve(configPath);
+  try {
+    await visit(configPath);
+  } finally {
+    configDependencyPaths.set(configPath, [
+      ...new Set([
+        ...modules.keys(),
+        ...[...modules.values()].flatMap((module) =>
+          module.imports.map((entry) => entry.target),
+        ),
+      ]),
+    ]);
+  }
+  const fingerprint = createHash("sha256");
+  for (const [file, module] of [...modules].sort(([a], [b]) =>
+    a.localeCompare(b),
+  ))
+    fingerprint.update(file).update(module.source);
+  const version = fingerprint.digest("hex").slice(0, 24);
+  const outputPaths = new Map(
+    [...modules.keys()].map((file) => [
+      file,
+      join(
+        dirname(file),
+        `.docsfn.${version}.${createHash("sha256").update(file).digest("hex").slice(0, 16)}.${modules.get(file)!.json ? "json" : modules.get(file)!.commonjs ? "cjs" : "mjs"}`,
+      ),
+    ]),
+  );
+  const written: string[] = [];
+  try {
+    for (const [file, module] of modules) {
+      let source = module.source;
+      for (const entry of [...module.imports].sort(
+        (a, b) => b.start - a.start,
+      )) {
+        source =
+          source.slice(0, entry.start) +
+          JSON.stringify(
+            entry.require
+              ? outputPaths.get(entry.target)!
+              : pathToFileURL(outputPaths.get(entry.target)!).href,
+          ) +
+          source.slice(entry.end);
+      }
+      const output = outputPaths.get(file)!;
+      await writeFile(output, source, { encoding: "utf8", mode: 0o600 });
+      written.push(output);
+    }
+    return resolveConfigExport(
+      await import(pathToFileURL(outputPaths.get(configPath)!).href),
+    );
+  } finally {
+    for (const file of written) await unlink(file).catch(() => undefined);
+  }
 }
 
 function resolveConfigExport(moduleValue: unknown): unknown {

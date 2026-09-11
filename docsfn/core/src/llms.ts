@@ -57,13 +57,20 @@ function trimTrailingNewlines(value: string): string {
 }
 
 function globToRegExp(pattern: string): RegExp {
-  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, (match) => `\\${match}`);
-  const expanded = escaped
-    .replace(/\*\*\//g, "(?:.+/)?")
-    .replace(/\*\*/g, ".*")
-    .replace(/\*/g, "[^/]*")
-    .replace(/\?/g, "[^/]");
-  return new RegExp(`^${expanded}$`);
+  let expression = "";
+  for (let index = 0; index < pattern.length; index += 1) {
+    const character = pattern[index];
+    if (character === "*" && pattern[index + 1] === "*") {
+      index += 1;
+      if (pattern[index + 1] === "/") {
+        expression += "(?:.*/)?";
+        index += 1;
+      } else expression += ".*";
+    } else if (character === "*") expression += "[^/]*";
+    else if (character === "?") expression += "[^/]";
+    else expression += /[\\^$+?.()|[\]{}]/.test(character) ? `\\${character}` : character;
+  }
+  return new RegExp(`^${expression}$`);
 }
 
 function matchesAnyGlob(value: string, patterns: string[] | undefined): boolean {
@@ -92,10 +99,10 @@ function selectPages(manifest: DocsManifest, options: BuildLlmsTxtOptions): DocP
       if (isProtectedContent(options, page.frontmatter, page.path)) {
         return false;
       }
-      if (include && include.length > 0 && !matchesAnyGlob(page.id, include)) {
+      if (include && include.length > 0 && !matchesAnyGlob(page.id.replace(":", "/"), include)) {
         return false;
       }
-      if (exclude && matchesAnyGlob(page.id, exclude)) {
+      if (exclude && matchesAnyGlob(page.id.replace(":", "/"), exclude)) {
         return false;
       }
       return true;

@@ -282,7 +282,7 @@ export function ApiReferenceRenderer({ api, className }: ApiReferenceRendererPro
         <div className="docsfn-api-endpoints-scroll">
           {model.operations.map((operation) => {
             const operationKey = operation.routePath;
-            const expanded = Boolean(expandedOperations[operationKey]);
+            const expanded = expandedOperations[operationKey] ?? api.path === operationKey;
 
             return (
               <div key={operationKey} className={`docsfn-api-method method-${operation.method.toLowerCase()}`}>

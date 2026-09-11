@@ -373,7 +373,7 @@ export async function buildManifest(
       id: api.id,
       slug: api.slug,
       path: normalizedReference.routes.overview,
-      title: api.title,
+      title: normalizedReference.title,
       spec: {
         ...normalizedReference,
         spec: parsed.parsed,
@@ -388,8 +388,8 @@ export async function buildManifest(
     config: canonicalConfig,
   });
 
-  const embeddedPageRoutePrefix = `${basePath}/embedded/page`;
-  const embeddedSurfaceRoutePrefix = `${basePath}/embedded/surface`;
+  const embeddedPageRoutePrefix = `${basePath}/embedded/page`.replace(/\/{2,}/g, "/");
+  const embeddedSurfaceRoutePrefix = `${basePath}/embedded/surface`.replace(/\/{2,}/g, "/");
   const embeddedPages: NonNullable<DocsManifest["embedded"]>["pages"] = Object.fromEntries(
     normalized.pages
       .filter((page) => page.collection === "docs")

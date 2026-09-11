@@ -16,7 +16,7 @@
     "@docsfn/sveltekit": "file:../../sveltekit",
     "@sveltejs/adapter-auto": "^3.0.0",
     "@sveltejs/kit": "^2.0.0",
-    "svelte": "^4.0.0 || ^5.0.0"
+    "svelte": ">=5.20.0 <6"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^3.1.2",

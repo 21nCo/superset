@@ -190,3 +190,12 @@ describe("buildLlmsTxtArtifacts", () => {
     expect(artifacts.llmsFullTxt).not.toContain("secret body");
   });
 });
+
+it("matches recursive source globs with canonical provider IDs", () => {
+  const manifest = createManifest();
+  const page = Object.values(manifest.pages)[0];
+  page.id = "docs:deep/nested/start.md";
+  const txt = buildLlmsFullTxt(manifest, { includePages: ["docs/**/*.md"] });
+  expect(txt).toContain(page.body);
+  expect(buildLlmsFullTxt(manifest, { includePages: ["docs/**/*.md"], excludePages: ["docs/deep/**"] })).not.toContain(page.body);
+});

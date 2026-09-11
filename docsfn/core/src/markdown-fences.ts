@@ -105,27 +105,54 @@ export function scanFenceLines(
   onLine: (line: string, inFence: boolean, isFenceLine: boolean) => void
 ): void {
   let fence: FenceState | null = null;
+  let containers: Array<number | "quote"> = [];
   for (const line of lines) {
-    const { quoteDepth } = splitMarkdownContainerPrefix(line);
-    if (fence && quoteDepth < fence.quoteDepth) {
-      fence = null;
+    let content = line;
+    if (fence) {
+      for (const container of containers) {
+        const match =
+          container === "quote"
+            ? content.match(/^ {0,3}> ?/)
+            : content.match(new RegExp(`^ {${container}}`));
+        if (!match) {
+          if (content.trim()) fence = null;
+          break;
+        }
+        content = content.slice(match[0].length);
+      }
+      if (fence) {
+        // A list marker inside a code block is literal, never a closing fence.
+        const match = content.match(/^ {0,3}(`{3,}|~{3,})[ \t]*$/);
+        const closing = Boolean(
+          match &&
+            match[1][0] === fence.marker &&
+            match[1].length >= fence.length
+        );
+        onLine(line, true, closing);
+        if (closing) fence = null;
+        continue;
+      }
     }
-    const fenceMatch = matchFenceLine(line, fence?.containerIndent ?? 0);
-    if (!fence && fenceMatch) {
+    containers = [];
+    content = line;
+    while (true) {
+      const quote = content.match(/^ {0,3}> ?/);
+      const list = content.match(LIST_ITEM_MARKER_REGEX);
+      if (quote) {
+        containers.push("quote");
+        content = content.slice(quote[0].length);
+      } else if (list) {
+        containers.push(list[0].length);
+        content = content.slice(list[0].length);
+      } else break;
+    }
+    const fenceMatch = matchFenceLine(line);
+    if (fenceMatch) {
       fence = {
-        marker: fenceMatch.marker,
-        length: fenceMatch.length,
-        quoteDepth: fenceMatch.quoteDepth,
+        ...fenceMatch,
         containerIndent: splitMarkdownContainerPrefix(line).containerIndent,
       };
       onLine(line, true, true);
-      continue;
-    }
-    if (fence && fenceMatch && isClosingFence(fence, fenceMatch)) {
-      onLine(line, true, true);
-      fence = null;
-      continue;
-    }
-    onLine(line, fence !== null, false);
+    } else onLine(line, false, false);
   }
 }

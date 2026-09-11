@@ -80,12 +80,15 @@ export const load: PageServerLoad = async ({ params, parent, url }) => {
         homeHref: "/docs",
         canonicalUrl: source.canonicalUrl,
         versionMode: "path-prefix",
+        editLink: typeof source.config.site.editLink?.pattern === "string"
+          ? source.config.site.editLink.pattern.replace("{path}", `content/docs/${routeEntry.page.id.replace(/^docs:/, "")}`)
+          : undefined,
       },
     });
   }
 
-  const sidebarId = surface.sidebarId ?? "default";
-  const sidebar: Sidebar | undefined = source.manifest.sidebars[sidebarId];
+  const sidebarId = surface.sidebarId;
+  const sidebar: Sidebar | undefined = sidebarId ? source.manifest.sidebars[sidebarId] : undefined;
 
   const searchDocumentCount = Array.isArray(source.searchArtifact.documents)
     ? source.searchArtifact.documents.length

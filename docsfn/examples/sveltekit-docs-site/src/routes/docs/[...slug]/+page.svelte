@@ -90,9 +90,7 @@
         {/if}
 
         <DocsContent
-          content={data.routeEntry.page.body}
-          sourcePath={data.routeEntry.page.id}
-          compatPreset={data.compatPreset}
+          compiled={data.compiled}
         />
       </article>
     {:else}

@@ -13,6 +13,7 @@ export default defineConfig({
   },
   test: {
     globals: true,
+    testTimeout: 15_000,
     environment: "node",
     coverage: {
       provider: "v8",

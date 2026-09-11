@@ -291,6 +291,42 @@ function normalizeMediaContent(value: unknown): CanonicalOpenApiRequestBodyMedia
     });
 }
 
+function resolveParameterReference(
+  value: unknown,
+  document: Record<string, unknown>,
+  input: NormalizeOpenApiReferenceInput
+): unknown {
+  let resolved = value;
+  const visited = new Set<string>();
+  while (typeof toObject(resolved).$ref === "string") {
+    const reference = toObject(resolved).$ref as string;
+    if (!reference.startsWith("#/") || visited.has(reference)) {
+      throw createOpenApiParseError({
+        message: `unsupported or cyclic parameter reference ${reference}`,
+        sourceId: input.sourceId,
+        sourcePath: input.sourcePath,
+      });
+    }
+    visited.add(reference);
+    resolved = document;
+    for (const segment of reference.slice(2).split("/")) {
+      const key = segment.replace(/~1/g, "/").replace(/~0/g, "~");
+      const object = toObject(resolved);
+      resolved = Object.prototype.hasOwnProperty.call(object, key)
+        ? object[key]
+        : undefined;
+    }
+    if (!resolved || typeof resolved !== "object" || Array.isArray(resolved)) {
+      throw createOpenApiParseError({
+        message: `unresolved parameter reference ${reference}`,
+        sourceId: input.sourceId,
+        sourcePath: input.sourcePath,
+      });
+    }
+  }
+  return resolved;
+}
+
 function normalizeParameter(value: unknown): CanonicalOpenApiParameter {
   const parameter = toObject(value);
   const schema = toObject(parameter.schema);
@@ -360,9 +396,9 @@ function operationSort(left: CanonicalOpenApiOperation, right: CanonicalOpenApiO
 function buildApiRootPath(basePath: string, sourcePath: string): string {
   const logicalPath = deriveLogicalPathFromSourcePath(stripSourceExtension(sourcePath));
   if (!logicalPath) {
-    return `${basePath}/api`;
+    return `${basePath}/api`.replace(/\/{2,}/g, "/");
   }
-  return `${basePath}/api/${logicalPath}`;
+  return `${basePath}/api/${logicalPath}`.replace(/\/{2,}/g, "/");
 }
 
 function assertUniqueGeneratedRoutes(
@@ -543,7 +579,7 @@ export function normalizeOpenApiReference(
 
     const pathRecord = pathItem as Record<string, unknown>;
     const pathParameters = Array.isArray(pathRecord.parameters)
-      ? pathRecord.parameters.map(normalizeParameter)
+      ? pathRecord.parameters.map((value) => normalizeParameter(resolveParameterReference(value, parsed, input)))
       : [];
 
     for (const method of Object.keys(pathRecord).sort(compareStrings)) {
@@ -571,16 +607,15 @@ export function normalizeOpenApiReference(
           ? operation.operationId
           : undefined;
 
-      if (explicitOperationId) {
-        if (operationIds.has(explicitOperationId)) {
-          throw createOpenApiParseError({
-            message: `OpenAPI source ${input.sourcePath} has duplicate operationId ${explicitOperationId}`,
-            sourceId: input.sourceId,
-            sourcePath: input.sourcePath,
-          });
-        }
-        operationIds.add(explicitOperationId);
+      const operationId = explicitOperationId ?? `${methodLower}:${pathKey}`;
+      if (operationIds.has(operationId)) {
+        throw createOpenApiParseError({
+          message: `OpenAPI source ${input.sourcePath} has duplicate operationId ${operationId}`,
+          sourceId: input.sourceId,
+          sourcePath: input.sourcePath,
+        });
       }
+      operationIds.add(operationId);
 
       const pathSlug = normalizeRouteSlug(pathKey);
       const operationSlug = explicitOperationId
@@ -589,7 +624,7 @@ export function normalizeOpenApiReference(
       const routePath = `${apiRootPath}/operations/${methodLower}-${operationSlug}`;
 
       const localParameters = Array.isArray(operation.parameters)
-        ? operation.parameters.map(normalizeParameter)
+        ? operation.parameters.map((value) => normalizeParameter(resolveParameterReference(value, parsed, input)))
         : [];
       const mergedParameterMap = new Map<string, CanonicalOpenApiParameter>();
       for (const parameter of [...pathParameters, ...localParameters]) {
@@ -604,7 +639,6 @@ export function normalizeOpenApiReference(
         .filter((tag) => tag.length > 0)
         .sort(compareStrings);
 
-      const operationId = explicitOperationId ?? `${methodLower}:${pathKey}`;
       operations.push({
         id: operationId,
         operationId: explicitOperationId,

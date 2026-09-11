@@ -188,6 +188,10 @@ function getCompiledArtifactOrThrow(input: {
 async function createDocsSiteServerState(): Promise<DocsSiteServerState> {
   const siteRoot = path.resolve(process.cwd());
   const config = await loadDocsConfig({ cwd: siteRoot });
+  const changelog = config.collections?.changelog;
+  if (changelog && ((changelog.routeBase ?? "/changelog") !== "/changelog" || (changelog.feedPath ?? "/changelog/rss.xml") !== "/changelog/rss.xml")) {
+    throw new Error("This site's changelog routes are mounted at /changelog and /changelog/rss.xml. Update the SvelteKit route files before changing those collection paths.");
+  }
   const provider = new FsContentProvider({
     root: siteRoot,
     docsDir: config.content.docsDir,

@@ -7,6 +7,7 @@ import {
   getPaginationFromSidebarWithTitles,
   getTopNavigation,
   resolveSidebarForRoute,
+  selectApiReferenceRoute,
   type ApiReference,
   type BlogPost,
   type BuildDatedCollectionJsonFeedOptions,
@@ -108,6 +109,8 @@ export interface DatedCollectionJsonFeedResponseInput
 }
 
 export interface CollectionPostOptions {
+  /** Use segment arrays with a Next [...slug] route. */
+  catchAll?: boolean;
   includeDrafts?: boolean;
 }
 
@@ -183,8 +186,8 @@ function normalizeCollectionId(collectionId: string): string {
     .toLowerCase();
 }
 
-function normalizePostSlug(slug: string): string {
-  return trimTrailingSlashes(trimLeadingSlashes(slug));
+function normalizePostSlug(slug: SlugParam): string {
+  return normalizeSlugSegments(slug).join("/");
 }
 
 function normalizeEmbedParamName(param: string | undefined): string {
@@ -320,7 +323,7 @@ function getDatedCollectionSurface(
 
 function resolveCollectionPostRoute(
   collectionId: string,
-  slug: string,
+  slug: SlugParam,
   manifest: DocsManifest
 ): string {
   const normalizedCollectionId = normalizeCollectionId(collectionId) || collectionId;
@@ -352,7 +355,7 @@ function resolveRouteEntry(routePath: string, manifest: DocsManifest): DocsRoute
       kind: "api",
       id,
       route: routePath,
-      api,
+      api: selectApiReferenceRoute(api, routePath),
     };
   }
 
@@ -412,7 +415,7 @@ function collectDocsRoutes(input: {
   includeApiRoutes: boolean;
 }): string[] {
   const { manifest, basePath, includeApiRoutes } = input;
-  const baseWithSlash = `${basePath}/`;
+  const baseWithSlash = basePath === "/" ? "/" : `${basePath}/`;
 
   return Object.entries(manifest.routes)
     .filter(([routePath]) => routePath === basePath || routePath.startsWith(baseWithSlash))
@@ -677,7 +680,7 @@ export function getCollectionPosts(
 
 export function getCollectionPostData(
   collectionId: string,
-  slug: string,
+  slug: SlugParam,
   manifest: DocsManifest,
   options: CollectionPostOptions = {}
 ): BlogPost | null {
@@ -691,7 +694,7 @@ export function getCollectionPostData(
 
 export function getCollectionPostDataOrThrow(
   collectionId: string,
-  slug: string,
+  slug: SlugParam,
   manifest: DocsManifest,
   options: CollectionPostOptions = {}
 ): BlogPost {
@@ -707,7 +710,7 @@ export function getCollectionPostDataOrThrow(
 }
 
 export function getPostData(
-  slug: string,
+  slug: SlugParam,
   manifest: DocsManifest,
   options: CollectionPostOptions = {}
 ): BlogPost | null {
@@ -715,7 +718,7 @@ export function getPostData(
 }
 
 export function getPostDataOrThrow(
-  slug: string,
+  slug: SlugParam,
   manifest: DocsManifest,
   options: CollectionPostOptions = {}
 ): BlogPost {
@@ -776,7 +779,7 @@ export function generateCollectionParams(
   return getCollectionPosts(collectionId, manifest, options)
     .sort((left, right) => compareStrings(left.slug, right.slug))
     .map((post) => ({
-      slug: post.slug,
+      slug: options.catchAll ? post.slug.split("/") : post.slug,
     }));
 }
 
@@ -813,9 +816,8 @@ export function resolveDocsPageSurface(input: {
     resolveSidebarForRoute({
       sidebars: input.manifest.sidebars,
       route: input.route,
-    }) ??
-    "default";
-  const sidebar = input.manifest.sidebars[sidebarId];
+    }) ?? undefined;
+  const sidebar = sidebarId ? input.manifest.sidebars[sidebarId] : undefined;
 
   const breadcrumbs = sidebar
     ? generateBreadcrumbs(input.route, input.manifest, {

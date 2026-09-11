@@ -10,12 +10,16 @@
   import type { DocsPageSurface } from "./DocsLayout.svelte";
 
   export interface VersionSwitcherProps {
+    basePath?: string;
+    versionMode?: "path-prefix" | "path-segment";
     surface?: DocsPageSurface;
     versions?: Version[];
     currentVersion?: string;
     onVersionChange?: (versionSlug: string) => void;
   }
 
+  export let basePath = "/docs";
+  export let versionMode: "path-prefix" | "path-segment" = "path-prefix";
   export let surface: DocsPageSurface | undefined = undefined;
   export let versions: Version[] | undefined = undefined;
   export let currentVersion: string | undefined = undefined;
@@ -55,11 +59,15 @@
     }
 
     const nextPath = window.location.pathname.replace(
-      new RegExp(`^/(${pattern})/`, "i"),
-      `/${versionSlug}/`
+      versionMode === "path-segment"
+        ? new RegExp(`/(${pattern})$`)
+        : new RegExp(`^${escapeRegExp(basePath.replace(/\/+$/, ""))}/(${pattern})(?=/|$)`),
+      versionMode === "path-segment"
+        ? `/${versionSlug}`
+        : `${basePath.replace(/\/+$/, "")}/${versionSlug}`
     );
     if (nextPath !== window.location.pathname) {
-      window.location.href = nextPath;
+      window.location.href = `${nextPath}${window.location.search}${window.location.hash}`;
     }
   }
 </script>

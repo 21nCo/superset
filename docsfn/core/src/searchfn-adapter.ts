@@ -75,7 +75,7 @@ class SearchFnRuntimeBackend implements DocsSearchRuntimeBackend {
   ): Promise<DocsSearchRuntimeResultItem[]> {
     const engineResults = this.engine.searchDetailed(input.query, {
       fields: this.artifact.fields,
-      limit: this.artifact.documents.length || Math.max(input.limit, 20),
+      limit: input.scope === "all" ? input.limit : this.artifact.documents.length || input.limit,
     });
 
     return engineResults

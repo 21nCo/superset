@@ -5,9 +5,9 @@ This folder is the canonical fixture corpus for docsfn migration, release-gate c
 ## Package contract baseline
 
 - Core package publish name: `@docsfn/core`
-- React peers: `react` and `react-dom` support `^18.0.0 || ^19.0.0`
+- React peers: `react` and `react-dom` support `^18.3.0 || ^19.0.0`
 - Next peer: `next` support is explicitly `^15.0.0`
-- Svelte peer: `svelte` support is `^4.0.0 || ^5.0.0`
+- Svelte peer: `svelte` support is `>=5.20.0 <6`
 - SvelteKit peer: `@sveltejs/kit` support is explicitly `^2.0.0`
 
 ## Fixture inventory

@@ -5,12 +5,12 @@ import { DocsContent } from "@docsfn/react/DocsContent";
 import { loadDocsSiteSource } from "@/source.config";
 
 type BlogPageParams = {
-  slug: string;
+  slug: string[];
 };
 
 export async function generateStaticParams() {
   const source = await loadDocsSiteSource();
-  return generateDocsBlogParams(source.manifest);
+  return generateDocsBlogParams(source.manifest, { catchAll: true });
 }
 
 export async function generateMetadata(props: {

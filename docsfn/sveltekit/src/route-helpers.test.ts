@@ -316,3 +316,27 @@ describe("sveltekit route helper parity", () => {
     expect(data.surface.route).toBe("/docs");
   });
 });
+
+it("retains root-base docs routes in both static parameter adapters", async () => {
+  const manifest = structuredClone(await loadCanonicalManifest());
+  manifest.routes = Object.fromEntries(Object.entries(manifest.routes).map(([route, id]) => [route.replace(/^\/docs(?=\/|$)/, "") || "/", id]));
+  for (const generate of [generateStaticParams, generateNextStaticParams]) {
+    const params = generate(manifest, { basePath: "/" });
+    expect(params.length).toBeGreaterThan(0);
+  }
+});
+it("does not assign hidden docs to the default sidebar", async () => {
+  const manifest = structuredClone(await loadCanonicalManifest());
+  manifest.sidebars = { default: { id: "default", items: [] } };
+  const page = Object.values(manifest.pages)[0];
+  for (const resolve of [resolveDocsPageSurface, resolveNextDocsPageSurface]) {
+    expect(resolve({ manifest, route: page.path, page }).sidebarId).toBeUndefined();
+  }
+});
+it("supports catch-all Next collection parameters and lookup", async () => {
+  const manifest = structuredClone(await loadCanonicalManifest());
+  const post = Object.values(manifest.posts)[0];
+  post.slug = "releases/v1";
+  expect(generateNextCollectionParams("blog", manifest, { catchAll: true })).toContainEqual({ slug: ["releases", "v1"] });
+  expect(getNextCollectionPostData("blog", ["releases", "v1"], manifest)?.id).toBe(post.id);
+});

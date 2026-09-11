@@ -39,7 +39,7 @@ export interface DocsSearchProps {
 
 function normalizeScopes(input?: SearchScopeFilter[]): SearchScopeFilter[] {
   if (!input || input.length === 0) {
-    return ["all", "docs", "api", "blog"];
+    return ["all"];
   }
   return Array.from(new Set(input));
 }
@@ -77,13 +77,25 @@ export function DocsSearch({
   const inputRef = useRef<HTMLInputElement>(null);
   const runtimeRef = useRef<DocsSearchRuntime | null>(null);
   const queryRequestRef = useRef(0);
-  const supportedScopes = useMemo(() => normalizeScopes(scopeInput), [scopeInput]);
+  const [loadedScopes, setLoadedScopes] = useState<SearchScopeFilter[]>([]);
+  const artifact = searchArtifact ?? searchIndex;
+  const supportedScopes = useMemo(() => normalizeScopes(scopeInput ?? ["all", ...(artifact?.scopes ?? loadedScopes)]), [scopeInput, artifact, loadedScopes]);
+  useEffect(() => {
+    if (!supportedScopes.includes(scope)) setScope("all");
+  }, [supportedScopes, scope]);
 
   useEffect(() => {
+    let active = true;
+    setLoadedScopes([]);
     runtimeRef.current = createDocsSearchRuntime({
       artifact: searchArtifact ?? searchIndex,
-      loadArtifact: loadSearchArtifact,
+      loadArtifact: loadSearchArtifact ? async () => {
+        const loaded = await loadSearchArtifact();
+        if (active) setLoadedScopes(loaded.scopes);
+        return loaded;
+      } : undefined,
     });
+    return () => { active = false; };
   }, [searchArtifact, searchIndex, loadSearchArtifact]);
 
   useEffect(() => {

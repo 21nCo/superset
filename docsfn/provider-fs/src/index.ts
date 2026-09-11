@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { basename, extname, isAbsolute, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
 import fg from "fast-glob";
 import matter from "gray-matter";
 import { readFile, realpath, stat } from "node:fs/promises";
@@ -390,7 +390,7 @@ export class FsContentProvider implements DocsContentProvider {
       const extension = extname(relativePath).toLowerCase();
       const fileName = basename(relativePath).toLowerCase();
 
-      if (fileName === metaFileName.toLowerCase()) {
+      if (collection !== "api" && collection !== "assets" && fileName === metaFileName.toLowerCase()) {
         entries.push(await this.createControlEntry(collection, relativePath, absolutePath));
         continue;
       }
@@ -534,7 +534,9 @@ export class FsContentProvider implements DocsContentProvider {
   }
 
   private deriveTitleFromPath(relativePath: string): string {
-    const fileName = basename(relativePath).replace(/\.[^/.]+$/, "");
+    const stem = basename(relativePath).replace(/\.[^/.]+$/, "");
+    const fileName = stem.toLowerCase() === "index" && dirname(relativePath) !== "."
+      ? basename(dirname(relativePath)) : stem;
     return fileName
       .split(/[-_]/g)
       .map((segment) =>

@@ -344,3 +344,12 @@ describe("OpenAPI normalization", () => {
     );
   });
 });
+
+it("resolves local parameter references and emits single-slash root routes", () => {
+  const reference = buildOpenApiReference({ sourceId: "api:x.json", sourcePath: "x.json", fallbackTitle: "X", basePath: "/", body: JSON.stringify({ openapi: "3.0.3", info: { title: "X", version: "1" }, components: { parameters: { Id: { name: "id", in: "path", required: true, schema: { type: "string" } } } }, paths: { "/items/{id}": { parameters: [{ $ref: "#/components/parameters/Id" }], get: { responses: {} } } } }) });
+  expect(reference.routes.overview).toBe("/api/x");
+  expect(reference.operations[0].parameters[0]).toMatchObject({ name: "id", in: "path", required: true, schemaType: "string" });
+});
+it("rejects explicit operation IDs that collide with generated IDs", () => {
+  expect(() => createReference({ sourceId: "api:x.json", sourcePath: "x.json", body: JSON.stringify({ openapi: "3.0.3", info: { title: "X", version: "1" }, paths: { "/a": { get: { responses: {} } }, "/b": { get: { operationId: "get:/a", responses: {} } } } }) })).toThrow(/duplicate operationId/);
+});

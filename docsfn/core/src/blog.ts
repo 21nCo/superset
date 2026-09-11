@@ -399,6 +399,12 @@ export function buildCanonicalDatedCollectionRecords(
     listRoute,
     pageSize,
   });
+  const surfaceRoutes = new Set([listRoute, feedPath, ...Object.values(tags).map((tag) => tag.path), ...archives.map((archive) => archive.path)]);
+  for (const post of posts) {
+    if (surfaceRoutes.has(post.path)) {
+      throw createDocsError({ code: "DOCS_ARTIFACT_INVALID", message: `${label} post ${post.id} conflicts with generated collection route ${post.path}`, diagnostics: [] });
+    }
+  }
   const postOrder = posts.map((post) => post.id);
 
   return {

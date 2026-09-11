@@ -251,6 +251,11 @@ function inferDateFromMarkdown(source: string): string | undefined {
 }
 
 function inferDateFromPath(relativePath: string): string | undefined {
+  const dated = normalizePath(relativePath).match(/(?:^|\/)(\d{4}-\d{2}-\d{2})(?:[-/.]|$)/)?.[1];
+  if (dated) {
+    const parsed = new Date(`${dated}T00:00:00Z`);
+    if (Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === dated) return dated;
+  }
   const match = normalizePath(relativePath).match(/(?:^|\/)(\d{4})(?:\/|$)/);
   return match ? `${match[1]}-01-01` : undefined;
 }
@@ -1015,6 +1020,41 @@ ${warnings}
 `;
 }
 
+function rewriteColocatedAssets(source: string, record: ContentRecord): string {
+  if (record.kind !== "doc") return source;
+  const docsRoot = path.resolve(
+    path.dirname(record.sourcePath),
+    path.relative(path.dirname(record.relativePath), ".")
+  );
+  const rewrite = (href: string): string => {
+    if (!href.startsWith("./") && !href.startsWith("../")) return href;
+    const [, pathname, suffix] = href.match(/^([^?#]*)(.*)$/s)!;
+    const target = path.resolve(path.dirname(record.sourcePath), pathname);
+    const relative = path.relative(docsRoot, target);
+    if (
+      relative.startsWith("..") ||
+      path.isAbsolute(relative) ||
+      MARKDOWN_EXTENSIONS.has(path.extname(target))
+    )
+      return href;
+    try {
+      if (!fsSync.statSync(target).isFile()) return href;
+    } catch {
+      return href;
+    }
+    return `/docs-assets/${normalizePath(relative)}${suffix}`;
+  };
+  return source
+    .replace(
+      /(!?\[[^\]]*\]\()([^\s)]+)(\))/g,
+      (_match, prefix, href, close) => `${prefix}${rewrite(href)}${close}`
+    )
+    .replace(
+      /(\b(?:src|href)=["'])(\.\.?\/[^"']+)(["'])/g,
+      (_match, prefix, href, close) => `${prefix}${rewrite(href)}${close}`
+    );
+}
+
 async function copyContentRecords(input: {
   records: ContentRecord[];
   warnings?: string[];
@@ -1024,7 +1064,7 @@ async function copyContentRecords(input: {
   for (const record of input.records) {
     const source = await fs.readFile(record.sourcePath, "utf8");
     const transformed = transformYouTubeIframes({
-      source,
+      source: rewriteColocatedAssets(source, record),
       relativePath: record.relativePath,
       warnings: input.warnings,
     });

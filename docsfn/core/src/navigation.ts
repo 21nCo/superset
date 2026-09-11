@@ -321,6 +321,8 @@ export function buildSidebars(input: {
       id: sidebarId,
       strictMetaReferences: false,
     });
+    sidebars[sidebarId].title = definition.title;
+    sidebars[sidebarId].root = definition.root;
   }
 
   return sidebars;

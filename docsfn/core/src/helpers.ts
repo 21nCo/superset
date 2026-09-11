@@ -3,7 +3,8 @@ import {
   resolvePaginationFromSidebar,
   resolveSidebarForRoute,
 } from "./navigation";
-import type { DocPage, DocsManifest, DocsTopNavItem, Sidebar } from "./types";
+import type { CanonicalOpenApiReference } from "./openapi";
+import type { ApiReference, DocPage, DocsManifest, DocsTopNavItem, Sidebar } from "./types";
 
 export interface BreadcrumbItem {
   label: string;
@@ -158,27 +159,6 @@ export function getPaginationFromSidebarWithTitles(
   const previousOverride = normalizePaginationOverride(currentPage?.frontmatter?.prev);
   const nextOverride = normalizePaginationOverride(currentPage?.frontmatter?.next);
 
-  if (previousOverride || nextOverride) {
-    return {
-      prev: previousOverride
-        ? {
-            path: previousOverride.path,
-            title: previousOverride.title
-              ? previousOverride.title
-              : resolveTitleForPath(previousOverride.path, pages, previousOverride.path),
-          }
-        : undefined,
-      next: nextOverride
-        ? {
-            path: nextOverride.path,
-            title: nextOverride.title
-              ? nextOverride.title
-              : resolveTitleForPath(nextOverride.path, pages, nextOverride.path),
-          }
-        : undefined,
-    };
-  }
-
   const pagination = getPaginationFromSidebar(currentPath, sidebar);
   if (pagination.prev) {
     pagination.prev.title = resolveTitleForPath(
@@ -195,6 +175,13 @@ export function getPaginationFromSidebarWithTitles(
     );
   }
 
+  for (const [direction, override] of [["prev", previousOverride], ["next", nextOverride]] as const) {
+    if (currentPage?.frontmatter?.[direction] === false) pagination[direction] = undefined;
+    else if (override) pagination[direction] = {
+      path: override.path,
+      title: override.title ?? resolveTitleForPath(override.path, pages, override.path),
+    };
+  }
   return pagination;
 }
 
@@ -202,4 +189,37 @@ export function getTopNavigation(
   manifest: Pick<DocsManifest, "topNav">
 ): DocsTopNavItem[] {
   return manifest.topNav ?? [];
+}
+
+export function selectApiReferenceRoute(
+  api: ApiReference,
+  route: string
+): ApiReference {
+  if (route === api.path || !api.spec || typeof api.spec !== "object")
+    return api;
+  const spec = api.spec as Partial<CanonicalOpenApiReference>;
+  const operations = Array.isArray(spec.operations) ? spec.operations : [];
+  const schemas = Array.isArray(spec.schemas) ? spec.schemas : [];
+  const tags = Array.isArray(spec.tags) ? spec.tags : [];
+  const operation = operations.find((item) => item.routePath === route);
+  const schema = schemas.find((item) => item.routePath === route);
+  const tag = tags.find((item) => item.routePath === route);
+  if (!operation && !schema && !tag) return api;
+  const title = `${api.title} — ${operation?.summary ?? operation?.id ?? schema?.name ?? tag?.name}`;
+  return {
+    ...api,
+    path: route,
+    title,
+    spec: {
+      ...spec,
+      info: { ...spec.info, title },
+      operations: operation
+        ? [operation]
+        : tag
+          ? operations.filter((item) => item.tags?.includes(tag.name))
+          : [],
+      schemas: schema ? [schema] : [],
+      tags: tag ? [tag] : [],
+    },
+  };
 }

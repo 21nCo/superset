@@ -112,6 +112,7 @@ async function createDocsSiteSource(): Promise<DocsSiteSource> {
   const provider = new FsContentProvider({
     root: fixtureRoot,
   });
+  config.blog = { routeBase: "/blog", feedPath: "/blog/rss.xml" };
   const manifest = await buildManifest(provider, config);
   const searchArtifact = await buildSearchIndex(manifest, {
     search: config.search,

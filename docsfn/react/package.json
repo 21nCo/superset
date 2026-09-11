@@ -21,7 +21,7 @@
     "@uifn/react": "0.0.2",
     "lucide-react": "^0.575.0",
     "markdown-to-jsx": "^7.3.2",
-    "searchfn": "*"
+    "@searchfn/client": "^0.3.0"
   },
   "devDependencies": {
     "@searchfn/client": "0.3.0",
