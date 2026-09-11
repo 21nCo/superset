@@ -213,6 +213,42 @@ describe('AuthFn placement-bound auth context', () => {
     });
     await expect(unavailable.issuer.derive(unavailable.request))
       .rejects.toBeInstanceOf(AuthFnPlacementDirectoryUnavailableError);
+
+    const malformed = await setupIssuer({
+      directory: {
+        async get() {
+          return {
+            identityKey: 'person:ada',
+            regionId: 123 as unknown as string,
+            epoch: 4,
+            state: 'active',
+            updatedAt: '2026-09-04T00:00:00.000Z'
+          };
+        },
+        async putIfAbsent() {
+          return { inserted: false };
+        },
+        async compareAndSet() {
+          return { updated: false };
+        }
+      },
+      identityKey: 'person:ada'
+    });
+    await expect(malformed.issuer.derive(malformed.request))
+      .rejects.toBeInstanceOf(AuthFnPlacementDirectoryUnavailableError);
+
+    const padded = await setupIssuer();
+    const paddedIssuer = createAuthFnPlacementContextIssuer({
+      config: padded.config,
+      regionId: '  us-east-1  ',
+      subjectSecret: SUBJECT_SECRET,
+      audiences: ['nucleum-datafn'],
+      publicAuthority: 'https://account.example.com',
+      placementDirectory: padded.directory,
+      identityKeyForUserId: (userId) => `person:${userId}`,
+      keyring
+    });
+    expect((await paddedIssuer.derive(padded.request)).homeRegion).toBe('us-east-1');
   });
 
   it('refuses a client-selected audience and omits raw user IDs unless opted in', async () => {
@@ -291,7 +327,7 @@ describe('AuthFn placement-bound auth context', () => {
     expect(issuer.verifySigned(issued.assertion).sessionBinding).toBe(issued.context.sessionBinding);
   });
 
-  it('uses the new epoch for subsequent grants after a placement change', async () => {
+  it('rejects an old-region session after a placement change', async () => {
     const { issuer, request, directory, user } = await setupIssuer();
     const first = await issuer.derive(request);
     expect(first.placementEpoch).toBe(4);
