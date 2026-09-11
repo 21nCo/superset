@@ -1,3 +1,4 @@
+import { redactTargetCredentials } from "./remote-target.js";
 import type { Implementation, ServerCapabilities } from "@modelcontextprotocol/sdk/types.js";
 import type {
   McpFnDiagnosticEvent,
@@ -95,16 +96,16 @@ export async function runMcpFnTargetSuite(
         diagnostics: async (event) => {
           if (event.phase === "transport-close" && event.outcome === "failed") {
             cleanupFailure = normalizeMcpFnReportFailure({
-              name: "CleanupError", message: event.details?.message ?? "Target cleanup failed",
+              name: "CleanupError", message: "Target cleanup failed",
               code: event.code, phase: event.phase,
             });
           }
-          timeline.push(redactOAuthValue(event) as unknown as McpFnDiagnosticEvent);
+          timeline.push(redactTargetCredentials(options.target, redactOAuthValue(event)) as unknown as McpFnDiagnosticEvent);
           if (timeline.length > maxTimelineEvents) {
             timeline.shift();
             droppedTimelineEvents += 1;
           }
-          await consumerDiagnostic?.(event);
+          await consumerDiagnostic?.(redactTargetCredentials(options.target, event));
         },
       },
     );
@@ -136,7 +137,7 @@ export async function runMcpFnTargetSuite(
     try {
       await client?.close();
     } catch (error) {
-      cleanupFailure = normalizeMcpFnReportFailure(error);
+      cleanupFailure = normalizeMcpFnReportFailure({ name: "CleanupError", message: "Target cleanup failed", code: "MCPFN_TARGET_CLEANUP_FAILED", phase: "transport-close" });
       if (!failure) failure = cleanupFailure;
     }
   }
@@ -194,7 +195,7 @@ export async function runMcpFnTargetSuite(
     droppedTimelineEvents,
     results,
   };
-  return enforceReportCap(report, maxReportBytes);
+  return enforceReportCap(redactTargetCredentials(options.target, report), maxReportBytes);
 }
 
 function enforceReportCap(

@@ -6,7 +6,19 @@ import {
   type McpFnTransportHandle,
 } from "@mcpfn/client";
 
-import { normalizeMcpFnReportFailure } from "./reports.js";
+const targetSecrets = new WeakMap<McpFnTarget, Set<string>>();
+
+/** Remove known opaque credential values as well as credential-shaped fields. */
+export function redactTargetCredentials<T>(target: McpFnTarget, value: T): T {
+  const secrets = [...(targetSecrets.get(target) ?? [])].sort((a, b) => b.length - a.length);
+  const scrub = (input: unknown): unknown => {
+    if (typeof input === "string") return secrets.reduce((text, secret) => text.split(secret).join("[REDACTED]"), input);
+    if (Array.isArray(input)) return input.map(scrub);
+    if (input && typeof input === "object") return Object.fromEntries(Object.entries(input).map(([key, entry]) => [scrub(key), scrub(entry)]));
+    return input;
+  };
+  return scrub(value) as T;
+}
 
 const MAX_CREDENTIAL_HEADERS = 32;
 const MAX_CREDENTIAL_HEADER_BYTES = 16_384;
@@ -107,7 +119,8 @@ export function authenticatedHttpTarget(
   const { credential: _credential, requestInit, ...transportOptions } = options;
   void _credential;
 
-  return customTarget({
+  const secrets = new Set<string>();
+  const authenticated = customTarget({
     kind: "authenticated-streamable-http",
     descriptor: {
       url: descriptorUrl.toString(),
@@ -123,6 +136,12 @@ export function authenticatedHttpTarget(
       let handle: McpFnTransportHandle | undefined;
       try {
         const credentialHeaders = validateRemoteCredentialHeaders(lease.credential.headers);
+        credentialHeaders.forEach((value) => {
+          secrets.add(value);
+          // Authorization schemes are public, but their opaque token is not.
+          const token = /^(?:Bearer|Basic)\s+(.+)$/i.exec(value)?.[1];
+          if (token) secrets.add(token);
+        });
         const headers = new Headers(requestInit?.headers);
         credentialHeaders.forEach((value, name) => headers.set(name, value));
         const target = streamableHttpTarget(targetUrl, {
@@ -150,12 +169,11 @@ export function authenticatedHttpTarget(
             handle!,
             lease,
           ).catch(async (error) => {
-            const failure = normalizeMcpFnReportFailure(error);
             await targetContext.diagnostic({
               phase: "transport-close", outcome: "failed", code: "MCPFN_CREDENTIAL_CLEANUP_FAILED",
               requestId: targetContext.requestId, at: new Date().toISOString(),
               target: { kind: "authenticated-streamable-http", url: descriptorUrl.toString() },
-              details: { message: failure.message },
+              details: { message: "Target credential cleanup failed" },
             });
             throw error;
           });
@@ -164,6 +182,8 @@ export function authenticatedHttpTarget(
       };
     },
   });
+  targetSecrets.set(authenticated, secrets);
+  return authenticated;
 }
 
 function normalizeRemoteTargetUrl(value: string | URL): URL {

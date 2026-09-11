@@ -239,6 +239,7 @@ async function runHostedCase(
     }));
     const authorizationError = await oauthError(authorizationResponse);
     if (authorizationError) {
+      validateOAuthRejection(authorizationResponse, fixture, true);
       return assessHostedCase(fixture, phase, authorizationResponse.status, authorizationError);
     }
     if (!isRedirect(authorizationResponse.status)) {
@@ -258,6 +259,7 @@ async function runHostedCase(
         tokenBody.set("resource", fixture.authorization.resource);
       } else if (fixture.token.refreshToken) {
         tokenBody.set("refresh_token", fixture.token.refreshToken);
+        tokenBody.set("resource", fixture.authorization.resource);
       }
       const tokenResponse = await target.request(new Request(
         new URL("token", ensureTrailingSlash(target.issuer)),
@@ -269,7 +271,10 @@ async function runHostedCase(
         },
       ));
       const tokenError = await oauthError(tokenResponse);
-      if (tokenError) return assessHostedCase(fixture, phase, tokenResponse.status, tokenError);
+      if (tokenError) {
+        validateOAuthRejection(tokenResponse, fixture);
+        return assessHostedCase(fixture, phase, tokenResponse.status, tokenError);
+      }
       if (!tokenResponse.ok) throw new Error(`Token request returned HTTP ${tokenResponse.status}`);
       const tokenSet = await validatedTokenSet(tokenResponse);
       if (fixture.token.refreshAfterExchange) {
@@ -293,6 +298,7 @@ async function runHostedCase(
         ));
         const refreshError = await oauthError(refreshResponse);
         if (refreshError) {
+          validateOAuthRejection(refreshResponse, fixture);
           return assessHostedCase(fixture, phase, refreshResponse.status, refreshError);
         }
         if (!refreshResponse.ok) {
@@ -352,6 +358,24 @@ async function oauthError(response: Response): Promise<string | undefined> {
   return typeof body?.error === "string" ? body.error : undefined;
 }
 
+function validateOAuthRejection(response: Response, fixture: McpFnHostedAuthorizationCase, authorization = false): void {
+  if (authorization && isRedirect(response.status)) {
+    const callback = new URL(response.headers.get("location") ?? "");
+    // Redirects must target the registered URI, never a rejected requested URI.
+    const registered = fixture.registration.metadata.redirect_uris as string[];
+    if (!registered?.includes(fixture.authorization.redirectUri)) throw new Error("Rejected redirect URI must not receive a callback");
+    const errors = callback.searchParams.getAll("error");
+    if (errors.length !== 1 || !errors[0] || callback.searchParams.has("code")) throw new Error("Invalid OAuth error callback");
+    callback.searchParams.delete("error");
+    callback.searchParams.delete("error_description");
+    callback.searchParams.delete("error_uri");
+    callback.searchParams.set("code", "error-envelope-validation");
+    validatedRedirectCode(new Response(null, { status: response.status, headers: { location: callback.toString() } }), fixture);
+  } else if (![400, 401, 403].includes(response.status)) {
+    throw new Error("OAuth error response has invalid HTTP status");
+  }
+}
+
 function validatedRedirectCode(response: Response, fixture: McpFnHostedAuthorizationCase): string {
   const location = response.headers.get("location");
   if (!location) throw new Error("Authorization callback is missing");
@@ -364,8 +388,10 @@ function validatedRedirectCode(response: Response, fixture: McpFnHostedAuthoriza
   }
   callback.searchParams.delete("code");
   callback.searchParams.delete("state");
-  if (callback.origin !== expected.origin || callback.pathname !== expected.pathname || callback.hash !== expected.hash ||
-      [...expected.searchParams.keys()].some((key) =>
+  if (callback.protocol !== expected.protocol || callback.host !== expected.host ||
+      callback.username !== expected.username || callback.password !== expected.password ||
+      callback.pathname !== expected.pathname || callback.hash !== expected.hash ||
+      [...new Set([...expected.searchParams.keys(), ...callback.searchParams.keys()])].some((key) =>
         JSON.stringify(callback.searchParams.getAll(key)) !== JSON.stringify(expected.searchParams.getAll(key)))) {
     throw new Error("Authorization callback destination is invalid");
   }

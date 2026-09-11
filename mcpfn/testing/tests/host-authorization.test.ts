@@ -91,10 +91,26 @@ describe("hosted role-3 regression harness", () => {
         }
         expect(request.redirect).toBe("manual");
         if (fault === "token-redirect") return Response.redirect("https://evil.example/token", 307);
-        return Response.json({});
+        return Response.json(fault === "empty-token" ? {} : { access_token: "valid-token", token_type: "Bearer", refresh_token: "valid-refresh" });
       },
     }, [fixture]);
     expect(results[0]?.status).toBe("failed");
   });
 
+});
+
+it.each(["status", "state", "destination"])("rejects malformed OAuth rejection %s", async (fault) => {
+  const issuer = "https://login.example.com";
+  const fixture = createHostedAuthorizationFixtures({ issuer, resource: "https://mcp.example.com/mcp" })[0]!;
+  fixture.expected = { outcome: "rejected", errorCode: "invalid_request" };
+  const results = await runHostedAuthorizationRegression({ issuer, prepareRegistration: async () => {},
+    request: async () => {
+      if (fault === "status") return Response.json({ error: "invalid_request" });
+      const callback = new URL(fault === "destination" ? "https://evil.example/cb" : fixture.authorization.redirectUri);
+      callback.searchParams.set("error", "invalid_request");
+      callback.searchParams.set("state", fault === "state" ? "wrong" : fixture.authorization.state);
+      return Response.redirect(callback, 302);
+    },
+  }, [fixture]);
+  expect(results[0]?.status).toBe("failed");
 });

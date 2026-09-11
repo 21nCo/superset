@@ -518,7 +518,13 @@ export class McpFnClient {
       pendingController?.abort();
       if (this.connectPromise === pendingConnect) this.connectPromise = undefined;
       if (this.connectController === pendingController) this.connectController = undefined;
-      await this.cleanupAttempt();
+      try {
+        await this.cleanupAttempt(true);
+      } catch {
+        this._state = permanent ? "closed" : "idle";
+        await this.emit("transport-close", "failed", requestId);
+        throw new Error("MCP target cleanup failed");
+      }
       // Retain an observed continuation without leaving the aborted attempt as
       // the active connection. A custom target that ignores abort may settle
       // later, but its isolated handle is closed by openTargetAttempt().
@@ -531,13 +537,13 @@ export class McpFnClient {
     return this.closePromise;
   }
 
-  private async cleanupAttempt(): Promise<void> {
+  private async cleanupAttempt(strict = false): Promise<void> {
     const protocol = this._protocol;
     const handle = this.handle;
     this._protocol = undefined;
     this.handle = undefined;
-    await protocol?.close().catch(() => undefined);
-    await closeTransportHandle(handle);
+    const results = await Promise.allSettled([protocol?.close(), closeTransportHandle(handle, strict)]);
+    if (strict && results.some((result) => result.status === "rejected")) throw new Error("MCP target cleanup failed");
   }
 
   private async cleanupOwnedAttempt(
@@ -848,13 +854,12 @@ function delay(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-async function closeTransportHandle(handle: McpFnTransportHandle | undefined): Promise<void> {
+async function closeTransportHandle(handle: McpFnTransportHandle | undefined, strict = false): Promise<void> {
   if (!handle) return;
-  if (handle.close) {
-    await handle.close().catch(() => undefined);
-  } else {
-    await handle.transport.close().catch(() => undefined);
-  }
+  try {
+    if (handle.close) await handle.close();
+    else await handle.transport.close();
+  } catch (error) { if (strict) throw error; }
 }
 
 function connectAbortedError(cause?: unknown): McpFnClientError {

@@ -100,6 +100,7 @@ async function startHostedRole3(authCase: McpFnHostedAuthorizationCase): Promise
   let dispatch: (request: Request) => Promise<Response> = async () =>
     new Response("hosted fixture is starting", { status: 503 });
   const started = await startHandler((request) => dispatch(request));
+  try {
   const origin = started.origin;
   const hosted = createMcpAuthorizationCompatibilityHandler({
     issuer: origin,
@@ -134,10 +135,10 @@ async function startHostedRole3(authCase: McpFnHostedAuthorizationCase): Promise
         if (!record) {
           throw new McpFnHostedAuthorizationError("invalid_grant", "Authorization code is invalid");
         }
-        pending.delete(input.code);
         if (derivePkceS256Challenge(input.codeVerifier) !== record.challenge) {
           throw new McpFnHostedAuthorizationError("invalid_grant", "PKCE verification failed");
         }
+        pending.delete(input.code);
         const token = `atk_${randomUUID()}`;
         access.set(token, {
           token,
@@ -175,10 +176,13 @@ async function startHostedRole3(authCase: McpFnHostedAuthorizationCase): Promise
     origin,
     resource: `${origin}/mcp`,
     close: async () => {
-      await mcp.close();
-      await started.close();
+      try { await mcp.close(); } finally { await started.close(); }
     },
   };
+  } catch (error) {
+    try { await mcp.close(); } finally { await started.close(); }
+    throw error;
+  }
 }
 
 describe("hosted-server role-3 transport-neutral harness", () => {

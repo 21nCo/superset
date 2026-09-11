@@ -105,3 +105,7 @@ function fixtureReport(
     results,
   };
 }
+
+it.each(["authorization-request", "token-exchange", "token-refresh"])("keeps HTTP 401 in %s on the authorization-server layer", (phase) => {
+  expect(normalizeMcpFnReportFailure({ message: "denied", phase, status: 401 }).layer).toBe("authorization-server");
+});

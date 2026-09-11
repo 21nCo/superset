@@ -7,6 +7,7 @@ import { McpFnRegistry, createMcpFnServer, structuredResult } from "@mcpfn/core"
 import {
   authenticatedHttpTarget,
   McpFnTestClient,
+  createMcpFnTargetSuiteJUnit,
   runMcpFnTargetSuite,
   type McpFnRemoteCredentialProvider,
 } from "../src/index.js";
@@ -32,13 +33,27 @@ describe("authenticated remote MCP targets", () => {
     const report = await runMcpFnTargetSuite({
       target: authenticatedHttpTarget(fixture.url, { credential: {
         acquire: () => ({ headers: { authorization: "Bearer cleanup-secret" } }),
-        revoke: () => { throw new Error("credential cleanup failed"); },
+        revoke: () => { throw new Error("revoke failed: cleanup-secret"); },
       } }), expectedToolNames: ["missing-tool"],
     });
     expect(report.ok).toBe(false);
     expect(report.failure?.message).toContain("Tool inventory mismatch");
-    expect(report.incompleteReason).toContain("credential cleanup failed");
+    expect(report.incompleteReason).toContain("Target cleanup failed");
+    expect(JSON.stringify(report)).not.toContain("cleanup-secret");
   });
+  it("scrubs reflected opaque credentials from JSON and JUnit", async () => {
+    const secret = "opaque-7Qx9";
+    const fixture = await startAuthenticatedServer(secret, true);
+    closeCallbacks.push(fixture.close);
+    const report = await runMcpFnTargetSuite({
+      target: authenticatedHttpTarget(fixture.url, { credential: { headers: { authorization: `Bearer ${secret}` } } }),
+      scenarios: [{ name: "reflection", tool: "identity", expect: { structuredContent: { echo: "different" } } }],
+    });
+    expect(report.ok).toBe(false);
+    expect(JSON.stringify(report)).not.toContain(secret);
+    expect(createMcpFnTargetSuiteJUnit(report)).not.toContain(secret);
+  });
+
   it("uses URL plus a real auth-provider adapter without server or registry types in the consumer", async () => {
     const fixture = await startAuthenticatedServer("remote-secret");
     closeCallbacks.push(fixture.close);
@@ -170,7 +185,7 @@ function lifecycleProvider(
   };
 }
 
-async function startAuthenticatedServer(expectedToken: string): Promise<{
+async function startAuthenticatedServer(expectedToken: string, echo = false): Promise<{
   url: string;
   close(): Promise<void>;
 }> {
@@ -180,7 +195,7 @@ async function startAuthenticatedServer(expectedToken: string): Promise<{
       name: "identity",
       description: "Return the authenticated state.",
       inputSchema: { type: "object", additionalProperties: false },
-      handler: async () => structuredResult({ authenticated: true }),
+      handler: async () => structuredResult(echo ? { echo: expectedToken } : { authenticated: true }),
     }),
   });
   const mcpHandler = await mcp.createWebStandardHandler({ enableJsonResponse: true });
