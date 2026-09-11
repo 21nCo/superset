@@ -234,7 +234,7 @@ describe("isAncestorInactive as a system field (server)", () => {
       expect(second.converged).toBe(true);
     });
 
-    it("reports converged=false when maxSweeps stops a reverse-id hierarchy early", async () => {
+    it("repairs reverse-id hierarchies in one sweep and verifies them on the next", async () => {
       await insert("goals", "goal:z", { label: "Root", parentPath: "" });
       await insert("goals", "goal:y", { label: "L1", parentId: "goal:z", parentPath: "goal:z" });
       await insert("goals", "goal:x", { label: "L2", parentId: "goal:y", parentPath: "goal:z-goal:y" });
@@ -250,11 +250,11 @@ describe("isAncestorInactive as a system field (server)", () => {
       expect(capped.converged).toBe(false);
       expect(capped.sweeps).toBe(1);
       expect((await get("goals", "goal:y")).isAncestorInactive).toBe(true);
-      expect((await get("goals", "goal:w")).isAncestorInactive).toBe(false);
+      expect((await get("goals", "goal:w")).isAncestorInactive).toBe(true);
 
       const full = await recomputeAncestorInactiveAll(db, schema, { namespace: NS });
       expect(full.converged).toBe(true);
-      expect(full.sweeps).toBeGreaterThan(1);
+      expect(full.sweeps).toBe(1);
       expect((await get("goals", "goal:x")).isAncestorInactive).toBe(true);
       expect((await get("goals", "goal:w")).isAncestorInactive).toBe(true);
     });
@@ -320,6 +320,34 @@ describe("isAncestorInactive as a system field (server)", () => {
       const settled = await recomputeAncestorInactive(db, schema, { namespace: NS });
       expect(settled.updated).toBe(1);
       expect((await get("tasks", "task:2")).isAncestorInactive).toBe(false);
+    });
+
+    it("rejects a stale cycle instead of falsely reporting convergence", async () => {
+      await db.update({ model: "goals", where: [{ field: "id", operator: "eq", value: "goal:1" }],
+        data: { parentId: "goal:3", isAncestorInactive: true }, namespace: NS });
+      await expect(recomputeAncestorInactiveAll(db, schema, { namespace: NS })).rejects.toThrow("cycle detected");
+    });
+
+    it("rejects missing parents and traversal bounds explicitly", async () => {
+      await expect(recomputeAncestorInactiveAll(db, schema, { namespace: NS, maxGraphNodes: 1 })).rejects.toThrow("maxGraphNodes exceeded");
+      await db.update({ model: "goals", where: [{ field: "id", operator: "eq", value: "goal:1" }],
+        data: { parentId: "goal:missing" }, namespace: NS });
+      await expect(recomputeAncestorInactiveAll(db, schema, { namespace: NS })).rejects.toThrow("missing parent");
+    });
+
+    it("does not declare convergence when every mismatch loses its write race", async () => {
+      await corrupt();
+      const racing = { ...db, updateMany: async () => 0 };
+      const result = await recomputeAncestorInactiveAll(racing, schema, { namespace: NS, maxSweeps: 1 });
+      expect(result.updated).toBe(0);
+      expect(result.skipped).toBeGreaterThan(0);
+      expect(result.converged).toBe(false);
+    });
+
+    it("rejects unbounded or fractional limits before scanning", async () => {
+      for (const batchSize of [NaN, Infinity, 0, 1.5]) {
+        await expect(recomputeAncestorInactive(db, schema, { namespace: NS, batchSize })).rejects.toThrow("positive safe integers");
+      }
     });
 
     it("normalizes legacy non-boolean stored values", async () => {

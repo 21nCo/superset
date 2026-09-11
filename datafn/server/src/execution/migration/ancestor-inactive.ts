@@ -5,7 +5,7 @@ import {
   type DatafnSchema,
 } from "@datafn/core";
 import type { DatafnLogger } from "../../logger.js";
-import { resolveAncestorInactive } from "../mutation/relations.js";
+import { resolveAuthoritativeAncestorInactive } from "./ancestor-state.js";
 
 const DEFAULT_BATCH_SIZE = 500;
 
@@ -18,6 +18,8 @@ export interface AncestorInactiveCursor {
 export interface RecomputeAncestorInactiveOptions {
   namespace: string;
   batchSize?: number;
+  /** Maximum ancestor nodes visited per row; exceeding the bound fails explicitly. */
+  maxGraphNodes?: number;
   cursor?: AncestorInactiveCursor | null;
   dryRun?: boolean;
   logger?: DatafnLogger;
@@ -26,6 +28,8 @@ export interface RecomputeAncestorInactiveOptions {
 export interface RecomputeAncestorInactiveResult {
   scanned: number;
   updated: number;
+  /** Mismatches not written because their compare-and-set lost a race. */
+  skipped: number;
   /** Null once every dependent resource in the namespace has been visited. */
   nextCursor: AncestorInactiveCursor | null;
 }
@@ -42,10 +46,10 @@ export function ancestorInactiveResources(schema: DatafnSchema): string[] {
  * Recomputes `isAncestorInactive` for one batch of records in `namespace`,
  * resolving each record against the current state of its parents. Rows are
  * visited in ascending id order per resource so the sweep is deterministic and
- * resumable via `nextCursor`. Because a record is resolved from its parents'
- * stored values, deep hierarchies with stale intermediate rows may need more
- * than one full sweep to converge; use {@link recomputeAncestorInactiveAll}
- * for a converging run.
+ * resumable via `nextCursor`. Ancestor flags are derived from primary state,
+ * with bounded traversal and explicit cycle/malformed-link errors. Quiesce
+ * ancestor/link mutations during repair; compare-and-set guards only the
+ * derived value on each row, not an atomic snapshot of the entire graph.
  */
 export async function recomputeAncestorInactive(
   adapter: Adapter,
@@ -53,9 +57,13 @@ export async function recomputeAncestorInactive(
   options: RecomputeAncestorInactiveOptions,
 ): Promise<RecomputeAncestorInactiveResult> {
   const { namespace, dryRun = false, logger } = options;
-  const batchSize = Math.max(1, options.batchSize ?? DEFAULT_BATCH_SIZE);
+  const batchSize = options.batchSize ?? DEFAULT_BATCH_SIZE;
+  const maxGraphNodes = options.maxGraphNodes ?? 10000;
+  for (const value of [batchSize, maxGraphNodes]) {
+    if (!Number.isSafeInteger(value) || value < 1) throw new Error("Ancestor repair: limits must be positive safe integers");
+  }
   const resources = ancestorInactiveResources(schema);
-  if (resources.length === 0) return { scanned: 0, updated: 0, nextCursor: null };
+  if (resources.length === 0) return { scanned: 0, updated: 0, skipped: 0, nextCursor: null };
 
   let cursor: AncestorInactiveCursor = options.cursor ?? { resource: resources[0]!, afterId: null };
   let resourceIndex = resources.indexOf(cursor.resource);
@@ -65,6 +73,7 @@ export async function recomputeAncestorInactive(
 
   let scanned = 0;
   let updated = 0;
+  let skipped = 0;
   let remaining = batchSize;
 
   while (remaining > 0) {
@@ -82,9 +91,9 @@ export async function recomputeAncestorInactive(
 
     for (const row of rows) {
       const id = row.id;
-      if (typeof id !== "string") continue;
+      if (typeof id !== "string" || id.length === 0) throw new Error("Ancestor repair: malformed record identifier");
       scanned += 1;
-      const next = await resolveAncestorInactive(adapter, schema, resource, row, namespace);
+      const next = await resolveAuthoritativeAncestorInactive(adapter, schema, resource, row, namespace, maxGraphNodes);
       const previous = row[ANCESTOR_INACTIVE_FIELD];
       if (previous !== next) {
         if (dryRun) {
@@ -104,6 +113,7 @@ export async function recomputeAncestorInactive(
             namespace,
           });
           updated += affected > 0 ? 1 : 0;
+          skipped += affected > 0 ? 0 : 1;
         }
       }
       cursor = { resource, afterId: id };
@@ -113,28 +123,30 @@ export async function recomputeAncestorInactive(
     if (rows.length < requested) {
       resourceIndex += 1;
       if (resourceIndex >= resources.length) {
-        logger?.info("datafn.ancestorInactive.recompute.complete", { namespace, scanned, updated, dryRun });
-        return { scanned, updated, nextCursor: null };
+        logger?.info("datafn.ancestorInactive.recompute.complete", { namespace, scanned, updated, skipped, dryRun });
+        return { scanned, updated, skipped, nextCursor: null };
       }
       cursor = { resource: resources[resourceIndex]!, afterId: null };
     }
   }
 
-  return { scanned, updated, nextCursor: cursor };
+  return { scanned, updated, skipped, nextCursor: cursor };
 }
 
 export interface RecomputeAncestorInactiveAllResult {
   scanned: number;
   updated: number;
+  /** Mismatches not written because their compare-and-set lost a race. */
+  skipped: number;
   sweeps: number;
-  /** False when `maxSweeps` was reached while the last sweep still changed rows. */
+  /** False when `maxSweeps` was reached while the last sweep changed or skipped rows. */
   converged: boolean;
 }
 
 /**
  * Runs full namespace sweeps of {@link recomputeAncestorInactive} until a
- * sweep produces no updates, so inherited inactivity converges through
- * arbitrarily deep hierarchies. Bounded by `maxSweeps`; check `converged`
+ * sweep produces no updates or skipped writes, verifying the prior sweep.
+ * Bounded by `maxSweeps`; check `converged`
  * and rerun if it is false. Dry runs perform a single sweep.
  */
 export async function recomputeAncestorInactiveAll(
@@ -142,23 +154,28 @@ export async function recomputeAncestorInactiveAll(
   schema: DatafnSchema,
   options: Omit<RecomputeAncestorInactiveOptions, "cursor"> & { maxSweeps?: number },
 ): Promise<RecomputeAncestorInactiveAllResult> {
-  const maxSweeps = Math.max(1, options.maxSweeps ?? 32);
+  const maxSweeps = options.maxSweeps ?? 32;
+  if (!Number.isSafeInteger(maxSweeps) || maxSweeps < 1) throw new Error("Ancestor repair: maxSweeps must be a positive safe integer");
   let scanned = 0;
   let updated = 0;
+  let skipped = 0;
   let sweeps = 0;
   let converged = false;
   while (sweeps < maxSweeps) {
     sweeps += 1;
     let sweepUpdated = 0;
+    let sweepSkipped = 0;
     let cursor: AncestorInactiveCursor | null = null;
     do {
       const result = await recomputeAncestorInactive(adapter, schema, { ...options, cursor });
       scanned += result.scanned;
       sweepUpdated += result.updated;
+      sweepSkipped += result.skipped;
       cursor = result.nextCursor;
     } while (cursor !== null);
     updated += sweepUpdated;
-    if (sweepUpdated === 0) {
+    skipped += sweepSkipped;
+    if (sweepUpdated === 0 && sweepSkipped === 0) {
       converged = true;
       break;
     }
@@ -169,8 +186,9 @@ export async function recomputeAncestorInactiveAll(
       namespace: options.namespace,
       sweeps,
       updated,
+      skipped,
       dryRun: options.dryRun === true,
     });
   }
-  return { scanned, updated, sweeps, converged };
+  return { scanned, updated, skipped, sweeps, converged };
 }
