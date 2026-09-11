@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from "vitest";
 import { createDatafnServer } from "../src/server.js";
-import type { DatafnSchema } from "@datafn/core";
+import { extractStructuralResourceSelectors, type DatafnSchema } from "@datafn/core";
 import { memoryAdapter } from "@superfunctions/db/adapters";
 
 const testSchema: DatafnSchema = {
@@ -247,5 +247,49 @@ describe("REST Wrappers", () => {
     const getJson = await getRes.json();
     expect(getJson.ok).toBe(true);
     expect(getJson.result.data).toEqual([{ id: "task:scoped", title: "Scoped task" }]);
+  });
+});
+
+describe("REST authorization selectors", () => {
+  it.each(["callback", "plugin"])("%s authorizes URL selectors for GET, DELETE and conflicting POST bodies", async (kind) => {
+    const seen: unknown[] = [];
+    const authorize = (_ctx: unknown, action: string, payload: unknown) => {
+      seen.push(payload);
+      const result = extractStructuralResourceSelectors(action, payload);
+      return result.ok && result.result.selectors.every((resource) => resource === "allowed");
+    };
+    const server = await createDatafnServer({
+      schema: testSchema, database: memoryAdapter(), rest: true,
+      ...(kind === "callback" ? { authorize } : { plugins: [{
+        name: "selector-policy", runsOn: ["server"] as ["server"],
+        authorize: ({ context, action, payload }: any) => authorize(context, action, payload),
+      }] }),
+    });
+    for (const method of ["GET", "DELETE", "POST"]) {
+      const response = await server.router.handle(new Request(
+        `http://localhost/datafn/resources/task${method === "DELETE" ? "/task:1" : ""}`, {
+          method, ...(method === "POST" ? { headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ resource: "allowed", operation: "insert", record: { title: "denied" } }) } : {}),
+        }));
+      expect(response.status).toBe(403);
+    }
+    expect(seen).toEqual([{ resource: "task" }, { resource: "task" }, { resource: "task" }]);
+  });
+
+  it("completes response hooks for malformed encoded resource paths", async () => {
+    let called = 0;
+    const server = await createDatafnServer({
+      schema: testSchema, database: memoryAdapter(), rest: true,
+      routeHooks: { afterResponse: ({ response }) => { called++; return response; },
+        headers: { "x-route-hook": "yes" } },
+    });
+    // Exercise the DataFn handler boundary directly: the generic HTTP router
+    // separately decodes params before dispatch.
+    const route = server.router.getRoutes().find((route) => route.method === "GET" && route.path === "/datafn/resources/:resource");
+    expect(route).toBeDefined();
+    const response = await route!.handler(new Request("http://localhost/datafn/resources/%E0%A4%A"), {} as any);
+    expect(response.status).toBe(400);
+    expect(response.headers.get("x-route-hook")).toBe("yes");
+    expect(called).toBe(1);
   });
 });

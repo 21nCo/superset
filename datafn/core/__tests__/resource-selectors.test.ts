@@ -410,3 +410,13 @@ describe("protocol boundary regressions", () => {
     expectSelectors("query", Object.assign(Object.create(null), { resource: "tasks" }), ["tasks"]);
   });
 });
+
+// Every object action must reject reserved envelope keys, not domain data keys.
+describe("reserved top-level protocol keys", () => {
+  for (const action of DATAFN_REQUEST_ACTIONS) {
+    it.each(["constructor", "prototype", "__proto__"])(`${action} rejects %s`, (key) => {
+      const payload = JSON.parse(`{"${key}":{},"resource":"tasks","resources":[],"steps":[],"mutations":[]}`);
+      expectError(action, payload, "DFQL_INVALID", "$");
+    });
+  }
+});

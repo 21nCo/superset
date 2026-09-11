@@ -564,6 +564,11 @@ export function parseDatafnRequest(
   if (payload !== null && typeof payload === "object" && !Array.isArray(payload) && !isPlainObject(payload)) {
     return invalid("Invalid DFQL: expected plain protocol object", "$");
   }
+  if (isPlainObject(payload)) {
+    for (const key of Object.keys(payload)) {
+      if (DISALLOWED_KEYS.has(key)) return invalid(`Disallowed key: ${key}`, "$");
+    }
+  }
   const protocolVersion = readProtocolVersion(
     Array.isArray(payload) ? undefined : payload,
   );

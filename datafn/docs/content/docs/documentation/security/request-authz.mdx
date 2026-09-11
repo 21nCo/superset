@@ -13,9 +13,11 @@ applies_to: server
 authorize: async (
   ctx: TContext,            // your HTTP framework's context
   action: DatafnAction,     // "status" | "query" | "mutation" | "transact" | "seed" | "clone" | "pull" | "push" | "reconcile" | "search"
-  payload: unknown,         // the parsed JSON body (null for GETs)
+  payload: unknown,         // protocol payload; REST uses { resource } from the URL
 ) => boolean | Promise<boolean>
 ```
+
+For REST routes, both authorization hooks receive `{ resource }` derived from the matched URL. The original body remains available as `ctx.parsedBody` for execution and any application-specific policy checks.
 
 Return `true` to allow, `false` to deny. Throwing has the same effect as `false`.
 
@@ -67,7 +69,7 @@ authorize: async (ctx, action, payload) => {
 
   // Broad operations need an explicit action policy, even with no selectors.
   if (["seed", "search", "clone", "pull"].includes(action)) {
-    return ctx.session.role === "admin";
+    return ctx.session.isAdmin;
   }
   const extracted = extractStructuralResourceSelectors(action, payload);
   if (!extracted.ok) return false;

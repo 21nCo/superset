@@ -1299,7 +1299,10 @@ export async function createDatafnServer<TContext = any>(
           try {
             resource = decodeURIComponent(new URL(req.url).pathname.split("/")[3] ?? "");
           } catch {
-            return errorResponse({ code: "DFQL_INVALID", message: "Invalid path segment", details: { path: "resource" } });
+            return completeDatafnResponse({
+              action, request: req, context: enrichedCtx, payload,
+              response: errorResponse({ code: "DFQL_INVALID", message: "Invalid path segment", details: { path: "resource" } }, 400),
+            });
           }
           structuralPayload = { resource };
         }
@@ -1358,7 +1361,7 @@ export async function createDatafnServer<TContext = any>(
           action,
           request: req,
           context: enrichedCtx,
-          payload,
+          payload: structuralPayload,
         });
         if (!pluginAuthorization.ok) {
           await emitDataFnEvent({
@@ -1380,7 +1383,7 @@ export async function createDatafnServer<TContext = any>(
 
         // Check authorization if configured - only called AFTER successful JSON parse
         if (config.authorize) {
-          const authorized = await config.authorize(enrichedCtx, action, payload);
+          const authorized = await config.authorize(enrichedCtx, action, structuralPayload);
           if (!authorized) {
             await emitDataFnEvent({
               domain: "datafn",
