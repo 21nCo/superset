@@ -79,6 +79,7 @@ class PlacementContextIssuer:
         self,
         *,
         config: AuthFnConfig,
+        region_id: str,
         subject_secret: bytes | str,
         audiences: Sequence[str],
         public_authority: str,
@@ -92,6 +93,9 @@ class PlacementContextIssuer:
         clock: Callable[[], float] = time.time,
         on_event: Optional[Callable[[Dict[str, Any]], Any]] = None,
     ) -> None:
+        if not isinstance(region_id, str) or not region_id.strip():
+            raise ConfigError("Placement-context issuance requires the region owning config.database")
+        self._region_id = region_id
         mac_key = _secret_bytes(subject_secret)
         if len(mac_key) < 32:
             raise ConfigError("Placement-context subject_secret must be at least 32 bytes")
@@ -149,6 +153,11 @@ class PlacementContextIssuer:
             if inspect.isawaitable(identity_key):
                 identity_key = await identity_key
             placement = await _load_active_placement(self._directory, str(identity_key))
+            if placement.region_id != self._region_id:
+                raise PlacementMovingError(
+                    "Session validation region does not own the current placement",
+                    {"executionStarted": False},
+                )
             issued_at = self._clock()
             expires_at = issued_at + self._ttl_seconds
             session_expiry = principal.get("session_expires_at")
@@ -536,6 +545,9 @@ async def _load_active_placement(
         raise PlacementMovingError("Identity placement is moving", {"executionStarted": False})
     if placement.state != "active":
         raise RegionNotFoundError("Identity placement is not active")
+    if (placement.identity_key != identity_key or not placement.region_id.strip()
+            or type(placement.epoch) is not int or placement.epoch < 1):
+        raise PlacementDirectoryUnavailableError("Invalid authoritative placement record")
     return placement
 
 

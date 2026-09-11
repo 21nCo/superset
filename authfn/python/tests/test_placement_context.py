@@ -284,10 +284,21 @@ async def test_keeps_issued_grants_after_revoke_and_uses_new_epoch_after_move() 
             updated_at="2026-09-04T13:00:00.000Z",
         ),
     )
-    next_context = await moved.issuer.derive(moved.request)
-    assert next_context.home_region == "eu-west-1"
-    assert next_context.placement_epoch == 6
-    assert next_context.subject == first.subject
+    with pytest.raises(PlacementMovingError):
+        await moved.issuer.derive(moved.request)
+    assert first.home_region == "us-east-1"
+
+    current = await _setup(region_id="eu-west-1", directory=moved.directory)
+    await current.config.database.create(
+        model="sessions", namespace="authfn",
+        data={**moved.issued["record"], "revokedAt": datetime.now(timezone.utc)},
+    )
+    with pytest.raises(SessionRevokedError):
+        await current.issuer.derive(moved.request)
+    fresh_context = await current.issuer.derive(current.request)
+    assert fresh_context.home_region == "eu-west-1"
+    assert fresh_context.placement_epoch == 6
+    assert fresh_context.subject == first.subject
 
 
 @pytest.mark.asyncio
@@ -843,6 +854,7 @@ def test_rejects_fractional_and_boolean_ttl() -> None:
     )
     directory = InMemoryIdentityPlacementDirectory()
     kwargs = {
+        "region_id": "us-east-1",
         "config": config,
         "subject_secret": SUBJECT_SECRET,
         "audiences": ["nucleum-datafn"],
@@ -860,6 +872,7 @@ def test_rejects_fractional_and_boolean_ttl() -> None:
 
 async def _setup(
     *,
+    region_id: str = "us-east-1",
     extra_headers: Optional[Dict[str, str]] = None,
     placement: Optional[IdentityPlacement] = None,
     identity_key: Optional[str] = None,
@@ -919,6 +932,7 @@ async def _setup(
     )
     issuer = create_placement_context_issuer(
         config=config,
+        region_id=region_id,
         subject_secret=SUBJECT_SECRET,
         audiences=["nucleum-datafn"],
         public_authority=public_authority,

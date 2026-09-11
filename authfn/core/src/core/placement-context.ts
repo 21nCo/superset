@@ -56,6 +56,8 @@ export interface AuthFnPlacementBoundAuthContext {
 
 export interface AuthFnPlacementContextIssuerOptions {
   config: AuthFnRuntimeConfig;
+  /** Region owning config.database. Inferred only from a configured gateway cell. */
+  regionId?: string;
   /** HMAC secret used to derive the opaque subject and session binding. */
   subjectSecret: string | Uint8Array;
   /** Audiences this issuer may mint context for. */
@@ -164,6 +166,11 @@ export function createAuthFnPlacementContextIssuer(
   options: AuthFnPlacementContextIssuerOptions
 ): AuthFnPlacementContextIssuer {
   const routing = getMultiRegionPluginConfig(options.config)?.routing;
+  const cellRegionId = routing?.mode === 'gateway' ? routing.cell?.regionId : undefined;
+  const regionId = options.regionId ?? cellRegionId;
+  if (!regionId?.trim() || (cellRegionId && regionId !== cellRegionId)) {
+    throw new AuthFnConfigError('Placement-context issuance requires the region owning config.database');
+  }
   const placementDirectory = options.placementDirectory
     ?? (routing?.mode === 'gateway' ? routing.placementDirectory : undefined);
   const identityKeyForUserId = options.identityKeyForUserId
@@ -228,6 +235,9 @@ export function createAuthFnPlacementContextIssuer(
       const principal = await resolvePrincipal(options.config, sanitizedRequest, now);
       const identityKey = await resolveIdentityKey(principal.userId);
       const placement = await loadActivePlacement(directory, identityKey);
+      if (placement.regionId !== regionId) {
+        throw new AuthFnPlacementMovingError('Session validation region does not own the current placement', { executionStarted: false });
+      }
       const issuedAtDate = now();
       const issuedAtMs = issuedAtDate.getTime();
       const ttlExpiryMs = issuedAtMs + ttlSeconds * 1000;
@@ -515,6 +525,10 @@ async function loadActivePlacement(
   }
   if (placement.state !== 'active') {
     throw new AuthFnRegionNotFoundError('Identity placement is not active');
+  }
+  if (placement.identityKey !== identityKey || !placement.regionId?.trim()
+      || !Number.isSafeInteger(placement.epoch) || placement.epoch < 1) {
+    throw new AuthFnPlacementDirectoryUnavailableError('Invalid authoritative placement record');
   }
   return placement;
 }

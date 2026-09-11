@@ -9,6 +9,8 @@ Use this contract when a canonical application gateway has already authenticated
 
 The API is **opt-in**. Public AuthFn routes, cookies, OAuth issuer behavior, and regional table ownership are unchanged. Enable it only in trusted server-side consumer code.
 
+Issuance runs against the authoritative **regional** AuthFn database. Set `regionId` (`region_id` in Python) to the region owning that database; TypeScript may infer it from `routing.cell.regionId`. A gateway-only config cannot issue context from a local stale database copy. Use AUTH-1's trusted regional dispatch or a private regional exchange, then verify its signed context at the gateway. If placement moves to another region, the old issuer fails closed; retry authentication in the new owning region. The issuer does not automatically dispatch or copy auth tables.
+
 ## Trust boundary
 
 | Actor | May see | Must not do |
@@ -31,6 +33,7 @@ import {
 } from '@authfn/multi-region';
 
 const issuer = createAuthFnPlacementContextIssuer({
+  regionId: 'us-east-1', // region owning config.database
   config: runtimeConfig,
   publicAuthority: 'https://account.example.com',
   placementDirectory,
@@ -97,6 +100,7 @@ Gateway-mode servers can omit `placementDirectory`, `identityKeyForUserId`, and 
 from authfn import create_placement_context_issuer, create_placement_context_verifier
 
 issuer = create_placement_context_issuer(
+    region_id="us-east-1",  # region owning config.database
     config=config,
     public_authority="https://account.example.com",
     placement_directory=directory,
@@ -126,7 +130,7 @@ verified = remote.verify_signed(issued["assertion"])
 | Placement `moving` or `deleting` | `AUTHFN_PLACEMENT_MOVING` | Downstream cells should fence on epoch. Re-bootstrap through the canonical gateway. |
 | Tombstone / missing placement | `AUTHFN_REGION_NOT_FOUND` | Fail closed. |
 | Directory unavailable | `AUTHFN_PLACEMENT_DIRECTORY_UNAVAILABLE` | Fail closed. Do not guess a region. |
-| Placement epoch advance | New context uses the new region/epoch | Old assertions still verify until TTL; DataFn must reject a stale epoch. |
+| Placement epoch advance | Old-region issuer rejects; reauthenticate in the current owning region before issuing | Old assertions still verify until TTL; DataFn must reject a stale epoch. |
 
 There is no public AuthFn introspection route. Immediate revocation of downstream tickets is a consumer concern: short TTL, epoch fencing, or a private lookup the consumer owns.
 

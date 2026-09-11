@@ -105,6 +105,7 @@ Trusted gateway code can derive an immutable, privacy-preserving routing context
 import { createAuthFnPlacementContextIssuer } from "authfn";
 
 const issuer = createAuthFnPlacementContextIssuer({
+  regionId: 'us-east-1', // region owning config.database
   config,
   placementDirectory,
   identityKeyForUserId: (userId) => `person:${userId}`,

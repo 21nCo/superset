@@ -162,6 +162,7 @@ Trusted gateway code can derive an immutable routing context after a valid sessi
 from authfn import create_placement_context_issuer
 
 issuer = create_placement_context_issuer(
+    region_id="us-east-1",  # region owning config.database
     config=config,
     public_authority="https://account.example.com",
     placement_directory=directory,

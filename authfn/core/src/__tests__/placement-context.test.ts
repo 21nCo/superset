@@ -310,10 +310,28 @@ describe('AuthFn placement-bound auth context', () => {
       }
     });
 
-    const next = await issuer.derive(request);
-    expect(next.homeRegion).toBe('eu-west-1');
-    expect(next.placementEpoch).toBe(6);
-    expect(next.subject).toBe(first.subject);
+    // The old region must not turn a still-valid stale copy into a new-region grant.
+    await expect(issuer.derive(request)).rejects.toBeInstanceOf(AuthFnPlacementMovingError);
+    expect(first.homeRegion).toBe('us-east-1');
+  });
+
+  it('rejects an old-region session when the new region has revoked its copy', async () => {
+    const old = await setupIssuer();
+    const identityKey = `person:${old.user.id}`;
+    await old.directory.compareAndSet({ identityKey, expectedEpoch: 4, expectedState: 'active',
+      placement: { identityKey, regionId: 'eu-west-1', epoch: 6, state: 'active', updatedAt: new Date().toISOString() } });
+    const regionalDatabase = memoryAdapter({ debug: false });
+    await regionalDatabase.create({ model: 'users', namespace: 'authfn', data: old.user });
+    const session = await old.config.database.findOne({ model: 'sessions', namespace: 'authfn',
+      where: [{ field: 'id', operator: 'eq', value: old.sessionId }] });
+    await regionalDatabase.create({ model: 'sessions', namespace: 'authfn', data: { ...session, revokedAt: new Date() } });
+    const current = createAuthFnPlacementContextIssuer({
+      config: { ...old.config, database: regionalDatabase }, regionId: 'eu-west-1',
+      subjectSecret: SUBJECT_SECRET, audiences: ['nucleum-datafn'], publicAuthority: 'https://account.example.com',
+      placementDirectory: old.directory, identityKeyForUserId: (id) => `person:${id}`,
+    });
+    await expect(old.issuer.derive(old.request)).rejects.toBeInstanceOf(AuthFnPlacementMovingError);
+    await expect(current.derive(old.request)).rejects.toBeInstanceOf(AuthFnSessionRevokedError);
   });
 
   it('exchanges in-process context for a mock DataFn ticket without exposing cell destinations', async () => {
@@ -512,6 +530,7 @@ describe('AuthFn placement-bound auth context', () => {
     const setup = await setupIssuer();
     const options = {
       config: setup.config,
+      regionId: 'us-east-1',
       subjectSecret: SUBJECT_SECRET,
       audiences: ['nucleum-datafn'] as const,
       placementDirectory: setup.directory,
@@ -535,6 +554,7 @@ describe('AuthFn placement-bound auth context', () => {
     const setup = await setupIssuer();
     const options = {
       config: setup.config,
+      regionId: 'us-east-1',
       subjectSecret: SUBJECT_SECRET,
       audiences: ['nucleum-datafn'] as const,
       placementDirectory: setup.directory,
@@ -743,6 +763,7 @@ async function setupIssuer(options?: {
   });
   const issuer = createAuthFnPlacementContextIssuer({
     config,
+    regionId: options?.regionId ?? 'us-east-1',
     subjectSecret: SUBJECT_SECRET,
     audiences: ['nucleum-datafn'],
     publicAuthority: 'https://account.example.com',
