@@ -1,6 +1,7 @@
 import type { Adapter } from "@superfunctions/db";
 import {
   endpointIncludes,
+  endpointList,
   relationFkFieldForManyOne,
   relationFkFieldForOneMany,
   resolveEndpointResource,
@@ -43,7 +44,19 @@ export async function resolveAuthoritativeAncestorInactive(
       const parentId = row[field];
       if (parentId === null || parentId === undefined || parentId === "") continue;
       if (typeof parentId !== "string") throw new Error("Ancestor repair: malformed parent link");
-      const parentResource = resolveEndpointResource(endpoint, parentId, schema);
+      const resourceField = relation.fkResourceField || (relation.type === "htree"
+        ? `${field.replace(/Id$/, "")}Resource`
+        : `${(relation.type === "many-one" ? relation.relation || "target" : relation.inverse || relation.relation || "source").replace(/Id$/, "")}Resource`);
+      const discriminator = row[resourceField];
+      const inferred = resolveEndpointResource(endpoint, parentId, schema);
+      let parentResource = inferred;
+      if (endpointList(endpoint).length > 1 && discriminator != null) {
+        if (typeof discriminator !== "string" || !endpointIncludes(endpoint, discriminator) ||
+            (inferred && inferred !== discriminator)) {
+          throw new Error("Ancestor repair: invalid parent resource discriminator");
+        }
+        parentResource = discriminator;
+      }
       if (!parentResource) throw new Error("Ancestor repair: ambiguous parent resource");
       const parent = await adapter.findOne<Record<string, unknown>>({
         model: parentResource, where: [{ field: "id", operator: "eq", value: parentId }], namespace,

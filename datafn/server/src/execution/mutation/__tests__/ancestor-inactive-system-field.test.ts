@@ -396,3 +396,16 @@ describe("isAncestorInactive as a system field (server)", () => {
     });
   });
 });
+
+describe("polymorphic ancestor repair", () => {
+  it.each([undefined, "parentKind"])("uses the stored resource discriminator (%s)", async (fkResourceField) => {
+    const { resolveAuthoritativeAncestorInactive } = await import("../../migration/ancestor-state.js");
+    const db = memoryAdapter();
+    const polymorphic: DatafnSchema = { resources: ["child", "folder", "project"].map((name) => ({ name, version: 1, fields: [] })),
+      relations: [{ from: "child", to: ["folder", "project"], relation: "parent", inverse: "children", type: "many-one", fkField: "parentId", fkResourceField, inheritsInactive: true }] };
+    await db.create({ model: "folder", data: { id: "plain-id", isArchived: true }, namespace: NS });
+    const row = { id: "child:1", parentId: "plain-id", [fkResourceField ?? "parentResource"]: "folder" };
+    await expect(resolveAuthoritativeAncestorInactive(db, polymorphic, "child", row, NS, 10)).resolves.toBe(true);
+    await expect(resolveAuthoritativeAncestorInactive(db, polymorphic, "child", { ...row, [fkResourceField ?? "parentResource"]: "outsider" }, NS, 10)).rejects.toThrow("invalid parent resource discriminator");
+  });
+});
