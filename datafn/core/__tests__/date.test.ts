@@ -159,7 +159,8 @@ describe("timezone-less datetime parsing contract", () => {
   const TZ_LESS = "2026-06-15T12:00:00";
   const UTC_EPOCH = Date.parse("2026-06-15T12:00:00.000Z");
 
-  it("toEpochMs, fromEpochMs, and toBoundsEpochMs resolve the same instant", () => {
+  const instantTestName = "toEpochMs, fromEpochMs, and toBoundsEpochMs resolve the same instant";
+  it(instantTestName, () => {
     expect(toEpochMs(TZ_LESS)).toBe(UTC_EPOCH);
     expect(fromEpochMs(TZ_LESS).getTime()).toBe(UTC_EPOCH);
     expect(toBoundsEpochMs(TZ_LESS)).toBe(UTC_EPOCH);
@@ -172,7 +173,7 @@ describe("timezone-less datetime parsing contract", () => {
     const runner = join(dirname(require.resolve("vitest/package.json")), "vitest.mjs");
     const result = spawnSync(process.execPath, [
       runner, "run", "__tests__/date.test.ts", "--maxWorkers=1", "--minWorkers=1",
-      "--testNamePattern=toEpochMs, fromEpochMs, and toBoundsEpochMs resolve the same instant",
+      `--testNamePattern=${instantTestName}`,
     ], {
       cwd: fileURLToPath(new URL("../", import.meta.url)),
       env: { ...process.env, TZ: "America/New_York" },

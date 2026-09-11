@@ -4,6 +4,7 @@
 
 import type { DatafnSchema, DatafnTemporalConfig } from "@datafn/core";
 import {
+  stripNullsForNonNullableFields,
   evaluateFilter as coreEvaluateFilter,
   calculateAggregation,
   getTemporalGroups,
@@ -144,16 +145,16 @@ export async function executeAggregateQuery(
       return 0;
   });
 
+  const resourceSchema = schema.resources.find((entry) => entry.name === resource);
   return {
     groups: results.map((row) => {
+      const groupValues = Object.fromEntries(groupBy
+        .filter((field) => !Object.prototype.hasOwnProperty.call(aggregations ?? {}, field))
+        .map((field) => [field, row[field]]));
+      const normalized = stripNullsForNonNullableFields(groupValues, resourceSchema);
       const output = { ...row };
-      const resourceSchema = schema.resources.find((entry) => entry.name === resource);
-      for (const field of groupBy) {
-        if (Object.prototype.hasOwnProperty.call(aggregations ?? {}, field)) continue;
-        const definition = resourceSchema?.fields.find((entry) => entry.name === field);
-        if (definition && definition.nullable !== true && output[field] === null) {
-          delete output[field];
-        }
+      for (const field of Object.keys(groupValues)) {
+        if (!Object.prototype.hasOwnProperty.call(normalized, field)) delete output[field];
       }
       return output;
     }),
