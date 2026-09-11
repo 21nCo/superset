@@ -139,7 +139,13 @@ function asSelector(value: string): DatafnResourceSelector {
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return false;
+  // A polluted Object.prototype must not provide absent protocol fields.
+  return !["resource", "resources", "protocolVersion", "query", "mutation", "steps",
+    "mutations", "operation", "filters", "temporalByResource", "tables", "page", "table", "cursors"]
+    .some((key) => key in value && !Object.prototype.hasOwnProperty.call(value, key));
 }
 
 function invalid(message: string, path: string): DatafnEnvelope<never> {
@@ -190,12 +196,13 @@ class SelectorBuilder {
     return ok(undefined);
   }
 
-  addMapKeys(value: unknown, path: string): DatafnEnvelope<void> {
+  addMapKeys(value: unknown, path: string, excluded?: string): DatafnEnvelope<void> {
     if (value === undefined) return ok(undefined);
     if (!isPlainObject(value)) {
       return invalid("Invalid DFQL: expected object", path);
     }
     for (const key of Object.keys(value)) {
+      if (key === excluded) continue;
       if (DISALLOWED_KEYS.has(key)) {
         return invalid(`Disallowed key: ${key}`, path);
       }
@@ -212,14 +219,15 @@ class SelectorBuilder {
 
 function readProtocolVersion(
   payload: unknown,
+  path = "protocolVersion",
 ): DatafnEnvelope<DatafnRequestProtocolVersion> {
-  if (!isPlainObject(payload) || payload.protocolVersion === undefined) {
+  if (!isPlainObject(payload) || !Object.prototype.hasOwnProperty.call(payload, "protocolVersion") || payload.protocolVersion === undefined) {
     return ok(DATAFN_REQUEST_PROTOCOL_VERSION);
   }
   if (typeof payload.protocolVersion !== "string") {
     return invalid(
       "Invalid DFQL: protocolVersion must be a string",
-      "protocolVersion",
+      path,
     );
   }
   if (
@@ -227,7 +235,7 @@ function readProtocolVersion(
       payload.protocolVersion,
     )
   ) {
-    return unsupportedVersion(payload.protocolVersion, "protocolVersion");
+    return unsupportedVersion(payload.protocolVersion, path);
   }
   return ok(payload.protocolVersion as DatafnRequestProtocolVersion);
 }
@@ -239,12 +247,14 @@ function parseQueryEnvelope(
   if (!isPlainObject(query)) {
     return invalid("Invalid DFQL: expected object", path);
   }
+  const version = readProtocolVersion(query, `${path}.protocolVersion`);
+  if (!version.ok) return version;
   for (const key of Object.keys(query)) {
     if (DISALLOWED_KEYS.has(key)) {
       return invalid(`Disallowed key: ${key}`, path);
     }
   }
-  const resource = normalizeSelector(query.resource, `${path}.resource`);
+  const resource = normalizeSelector(Object.prototype.hasOwnProperty.call(query, "resource") ? query.resource : undefined, `${path}.resource`);
   if (!resource.ok) return resource;
   return ok({ resource: resource.result });
 }
@@ -256,12 +266,14 @@ function parseMutationEnvelope(
   if (!isPlainObject(mutation)) {
     return invalid("Invalid DFQL: mutation must be object", path);
   }
+  const version = readProtocolVersion(mutation, `${path}.protocolVersion`);
+  if (!version.ok) return version;
   for (const key of Object.keys(mutation)) {
     if (DISALLOWED_KEYS.has(key)) {
       return invalid(`Disallowed key: ${key}`, path);
     }
   }
-  const resource = normalizeSelector(mutation.resource, `${path}.resource`);
+  const resource = normalizeSelector(Object.prototype.hasOwnProperty.call(mutation, "resource") ? mutation.resource : undefined, `${path}.resource`);
   if (!resource.ok) return resource;
   return ok({ resource: resource.result });
 }
@@ -321,6 +333,8 @@ function parseTransactStep(
   if (!isPlainObject(step)) {
     return invalid("Invalid DFQL: step must be object", path);
   }
+  const version = readProtocolVersion(step, `${path}.protocolVersion`);
+  if (!version.ok) return version;
   for (const key of Object.keys(step)) {
     if (DISALLOWED_KEYS.has(key)) {
       return invalid(`Disallowed key: ${key}`, path);
@@ -438,7 +452,7 @@ function parsePullPayload(
   }
   const selectors = new SelectorBuilder();
   if (payload.cursors !== undefined) {
-    const added = selectors.addMapKeys(payload.cursors, "cursors");
+    const added = selectors.addMapKeys(payload.cursors, "cursors", "__datafn_actor_feed__");
     if (!added.ok) return added;
   }
   return ok({
@@ -546,6 +560,9 @@ export function parseDatafnRequest(
     return err("DFQL_UNSUPPORTED", `Unsupported DataFn action: ${action}`, {
       path: "$",
     });
+  }
+  if (payload !== null && typeof payload === "object" && !Array.isArray(payload) && !isPlainObject(payload)) {
+    return invalid("Invalid DFQL: expected plain protocol object", "$");
   }
   const protocolVersion = readProtocolVersion(
     Array.isArray(payload) ? undefined : payload,

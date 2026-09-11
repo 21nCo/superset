@@ -9,6 +9,8 @@ Don't ship DataFn to production without ticking every item below. They're indepe
 
 ## Server configuration
 
+- [ ] `authorize` requires a verified authenticated session for protected actions. Selector extraction does not authenticate callers.
+
 - [ ] Resource gating in `authorize` uses `extractStructuralResourceSelectors` rather than reading `payload.resource` or recursively searching JSON.
 - [ ] `allowUnknownResources` is `false` (the default — do not override).
 - [ ] `debug` is `false` (set explicitly or rely on `NODE_ENV=production`).

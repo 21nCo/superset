@@ -33,9 +33,9 @@ These fire at server startup (during `validateSchema`) or when a schema is loade
 | `CAPABILITY_FIELD_COLLISION` | A field you declared has the same name as a capability-injected system field (e.g. declaring `createdAt` while `timestamps` is enabled). | Drop the conflicting field; capabilities own these names. See [System Fields](/docs/dfql/schema/system-fields). |
 | `CAPABILITY_DEPENDENCY` | A capability requires another that isn't enabled (`shareable` depends on `audit`). | Add the dependency to the schema or remove the dependent capability. |
 
-## DFQL errors
+## Request protocol and DFQL errors
 
-These fire on query, mutation, or transaction requests when the payload doesn't match the schema.
+Protocol-version errors apply to every action before authorization. DFQL errors describe malformed envelopes or schema-invalid query, mutation, and transaction payloads.
 
 | Code | Common cause | Fix |
 | --- | --- | --- |

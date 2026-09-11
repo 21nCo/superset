@@ -19,7 +19,7 @@ Returned selectors are **inputs to product policy**. The extractor does not gran
 
 Prefer the two composable layers:
 
-1. `parseDatafnRequest(action, payload)` validates the unknown body into a discriminated protocol envelope.
+1. `parseDatafnRequest(action, payload)` validates selector-bearing protocol structure into a discriminated envelope. Schema and operation semantics are validated separately before execution.
 2. `collectStructuralResourceSelectors(parsed)` visits that envelope exhaustively.
 
 `extractStructuralResourceSelectors(action, payload)` runs both steps for gateway preflight.
@@ -48,7 +48,7 @@ The parser accepts every current `DatafnRequestAction` and inspects only protoco
 | `transact` | `steps[].resource`, `steps[].query.resource`, `steps[].mutation.resource` | empty `steps` is valid |
 | `search` | `resources[]`, keys of `filters`, keys of `temporalByResource` | yes — omitted `resources` searches all |
 | `clone` | `tables[]`, `page.table` | yes — omitted `tables` clones all |
-| `pull` | keys of `cursors` | yes — global `cursor` pull |
+| `pull` | keys of `cursors`, excluding `__datafn_actor_feed__` | yes — global `cursor` pull |
 | `push` | `mutations[].resource` | no — `mutations` is required |
 | `reconcile` | `resources[]` | no |
 | `status`, `seed` | none | yes |
@@ -79,6 +79,9 @@ extractStructuralResourceSelectors("transact", {
 
 ## Authorization preflight
 
+Selectors are structural anchors, **not the complete set of resources execution may access**. Relation queries, nested select tokens and mutation relations can reach other resources. Clone with joins can include join tables beyond explicit `tables`. Keep execution-time resource, relation, field and row policies enabled; this callback is only an additional coarse gate. Broad operations in this example require an administrator. Do not infer permission from an empty selector set.
+
+
 `authorize` still receives untrusted JSON. Derive selectors from the canonical API instead of reading `payload.resource` by hand:
 
 ```typescript
@@ -88,20 +91,26 @@ authorize: (ctx, action, payload) => {
   if (!ctx.session?.userId) return false;
   if (action === "status") return true;
 
+  // Broad operations need an explicit action policy, even with no selectors.
+  if (["seed", "search", "clone", "pull"].includes(action)) {
+    return ctx.session.role === "admin";
+  }
   const extracted = extractStructuralResourceSelectors(action, payload);
   if (!extracted.ok) return false;
 
-  return extracted.result.selectors.every((resource) =>
+  return extracted.result.selectors.length > 0 && extracted.result.selectors.every((resource) =>
     ctx.session.allowedResources.includes(resource),
   );
 }
 ```
 
-Empty selector sets are meaningful: `status` and `seed` never address a resource; `search` without `resources` addresses the full searchable set. Decide product policy on that empty set — do not invent selectors by scanning JSON.
+Empty selector sets are meaningful: `status` and `seed` have no explicit resource selector; `seed` still writes server state; `search` without `resources` addresses the full searchable set. Decide product policy on that empty set — do not invent selectors by scanning JSON.
 
 ## Errors
 
 Malformed selector positions return `DFQL_INVALID` with `details.path` pointing at the bad field. Unknown actions return `DFQL_UNSUPPORTED`. An explicit `protocolVersion` other than `"1"` returns `DATAFN_UNSUPPORTED_PROTOCOL_VERSION` and fails closed before routing or authorization.
+
+Batch entries, transaction wrappers and nested query/mutation nodes also reject unsupported versions. Version-shaped fields inside application data are ignored.
 
 Current requests may omit `protocolVersion`; the parser stamps the parsed envelope with `"1"`. Do not add recursive discovery for future indirect addressing — introduce a new explicit protocol variant instead.
 

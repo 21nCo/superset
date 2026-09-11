@@ -86,4 +86,34 @@ describe("structural resource-selector preflight", () => {
     expect(deniedBody.error?.code).toBe("FORBIDDEN");
     expect(seen).toEqual([["tasks"], ["billing"]]);
   });
+  it("rejects nested unsupported versions before HTTP or executor authorization", async () => {
+    let authorized = 0;
+    const server = await createDatafnServer({
+      schema: { resources: [{ name: "tasks", version: 1, fields: [] }] },
+      authorize: () => { authorized++; return true; },
+    });
+    servers.push(server);
+    const payload = [{ resource: "tasks", protocolVersion: "2" }];
+    const response = await server.router.handle(new Request("http://localhost/datafn/query", {
+      method: "POST", body: JSON.stringify(payload),
+    }));
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as { error: { code: string } }).error.code).toBe("DATAFN_UNSUPPORTED_PROTOCOL_VERSION");
+    await expect(server.executor.query(payload)).rejects.toMatchObject({ code: "DATAFN_UNSUPPORTED_PROTOCOL_VERSION" });
+    expect(authorized).toBe(0);
+  });
+
+  it("derives REST selectors from the URL and accepts selector-less status", async () => {
+    const server = await createDatafnServer({
+      schema: { resources: [{ name: "tasks", version: 1, fields: [] }] },
+      rest: true,
+    });
+    servers.push(server);
+    const status = await server.router.handle(new Request("http://localhost/datafn/status"));
+    expect(status.status).toBe(200);
+    const response = await server.router.handle(new Request("http://localhost/datafn/resources/tasks"));
+    // Schema authorization can deny the query; structural parsing must accept it.
+    expect(((await response.json()) as { error?: { code: string } }).error?.code).not.toBe("DFQL_INVALID");
+  });
+
 });

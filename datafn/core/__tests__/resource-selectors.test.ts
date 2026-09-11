@@ -386,3 +386,27 @@ describe("TV-DATA-6-EXHAUSTIVE: parsed-request visitor", () => {
     expect([...seen].sort()).toEqual([...DATAFN_REQUEST_ACTIONS].sort());
   });
 });
+
+
+describe("protocol boundary regressions", () => {
+  it("excludes the reserved actor-feed cursor while preserving resource cursors", () => {
+    expectSelectors("pull", { cursors: { __datafn_actor_feed__: 7, tasks: 2 } }, ["tasks"]);
+  });
+  it.each([
+    ["query", [{ resource: "tasks", protocolVersion: "2" }]],
+    ["mutation", [{ resource: "tasks", protocolVersion: "2" }]],
+    ["transact", { steps: [{ protocolVersion: "2", query: { resource: "tasks" } }] }],
+    ["transact", { steps: [{ query: { resource: "tasks", protocolVersion: "2" } }] }],
+    ["push", { mutations: [{ resource: "tasks", protocolVersion: "2" }] }],
+  ])("rejects unsupported nested versions for %s", (action, payload) => {
+    expectError(action as string, payload, "DATAFN_UNSUPPORTED_PROTOCOL_VERSION");
+  });
+  it("ignores version-shaped application data", () => {
+    expectSelectors("mutation", { resource: "tasks", record: { protocolVersion: "99" } }, ["tasks"]);
+  });
+  it("rejects inherited protocol fields", () => {
+    expectError("query", Object.create({ resource: "tasks" }), "DFQL_INVALID");
+    expectError("search", Object.create({ resources: ["tasks"] }), "DFQL_INVALID");
+    expectSelectors("query", Object.assign(Object.create(null), { resource: "tasks" }), ["tasks"]);
+  });
+});

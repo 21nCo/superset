@@ -65,14 +65,20 @@ authorize: async (ctx, action, payload) => {
   if (!ctx.session?.userId) return false;
   if (action === "status") return true;
 
+  // Broad operations need an explicit action policy, even with no selectors.
+  if (["seed", "search", "clone", "pull"].includes(action)) {
+    return ctx.session.role === "admin";
+  }
   const extracted = extractStructuralResourceSelectors(action, payload);
   if (!extracted.ok) return false;
 
-  return extracted.result.selectors.every((resource) =>
+  return extracted.result.selectors.length > 0 && extracted.result.selectors.every((resource) =>
     ctx.session.allowedResources.includes(resource),
   );
 }
 ```
+
+This is a coarse preflight, not transitive authorization: relations and nested selects can access resources beyond the anchors. Execution-time permissions must still enforce access. Broad operations require their own policy, as above.
 
 See [Structural resource selectors](/docs/documentation/security/resource-selectors) for batch, transaction, search, and sync envelopes.
 
@@ -143,7 +149,7 @@ describe("authorize", () => {
   it("denies anonymous", async () => {
     const server = await makeTestServer({ authorize: (ctx) => Boolean(ctx.session?.userId) });
     const env = await server.router.fetch(
-      new Request("http://t/datafn/query", { method: "POST", body: "{}" }),
+      new Request("http://t/datafn/query", { method: "POST", body: JSON.stringify({ resource: "tasks" }) }),
     );
     const body = await env.json();
     expect(body.ok).toBe(false);
