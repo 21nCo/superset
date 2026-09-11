@@ -325,6 +325,18 @@ async def test_keeps_issued_grants_after_revoke_and_uses_new_epoch_after_move() 
     padded = await _setup(region_id="  us-east-1  ")
     assert (await padded.issuer.derive(padded.request)).home_region == "us-east-1"
 
+    padded_record = await _setup(
+        region_id="  us-east-1  ",
+        placement=IdentityPlacement(
+            identity_key="person:user_ada",
+            region_id="  us-east-1  ",
+            epoch=4,
+            state="active",
+            updated_at="2026-09-04T00:00:00.000Z",
+        ),
+    )
+    assert (await padded_record.issuer.derive(padded_record.request)).home_region == "us-east-1"
+
 
 @pytest.mark.asyncio
 async def test_falls_back_to_authorization_when_cookie_is_stale() -> None:
