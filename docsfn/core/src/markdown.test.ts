@@ -422,12 +422,23 @@ describe("resolveMarkdownRelativeLinks", () => {
 });
 
 it("rejects executable table HTML through the compiler", () => {
-  expect(() => compileMarkdown({ source: "| X |\n| --- |\n| <svg/onload=alert(1)> |" })).toThrow();
+  expect(() => compileMarkdown({ source: "| X |\n| --- |\n| <svg/onload=alert(1)> |" })).toThrow(/unsafe HTML/);
 });
 
 it("sanitizes browser URL whitespace and slash handlers in trusted HTML tables", () => {
   const compiled = compileMarkdown({ source: '| X |\n| --- |\n| <svg/onload=alert(1)> <a href="java&#x09;script:alert(1)">click</a> |', allowRawHtml: true });
   const table = compiled.blocks.find((block) => block.type === "table");
   expect(table).toBeDefined();
-  expect(JSON.stringify(table)).not.toMatch(/onload=|java&#x09;script:/);
+  expect(JSON.stringify(table)).not.toMatch(/<svg\/onload=|java&#x09;script:/);
+});
+
+it('sanitizes unquoted executable URLs while preserving text and safe URL paths', () => {
+  const result = compileMarkdown({ source: '<a href=javascript:alert(1)>click</a> /onload=text <a href="/onload=value">safe</a>', allowRawHtml: true });
+  const text = JSON.stringify(result.blocks);
+  expect(text).not.toContain('href=javascript:');
+  expect(text).toContain('/onload=text');
+  expect(text).toContain('/onload=value');
+});
+it('does not merge independent links into a forbidden scheme', () => {
+  expect(() => compileMarkdown({ source: '[one](java)[two](script:foo) <a href="/onload=value">safe</a>' })).not.toThrow();
 });

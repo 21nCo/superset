@@ -106,7 +106,14 @@ export function scanFenceLines(
 ): void {
   let fence: FenceState | null = null;
   let containers: Array<number | "quote"> = [];
-  for (const line of lines) {
+  for (const rawLine of lines) {
+    // CommonMark tabs advance to four-column stops for container indentation.
+    let column = 0;
+    const line = rawLine.replace(/^[ \t]*/, (prefix) => [...prefix].map((character) => {
+      const width = character === "\t" ? 4 - column % 4 : 1;
+      column += width;
+      return " ".repeat(width);
+    }).join(""));
     let content = line;
     if (fence) {
       for (const container of containers) {
@@ -128,7 +135,7 @@ export function scanFenceLines(
             match[1][0] === fence.marker &&
             match[1].length >= fence.length
         );
-        onLine(line, true, closing);
+        onLine(rawLine, true, closing);
         if (closing) fence = null;
         continue;
       }
@@ -152,7 +159,7 @@ export function scanFenceLines(
         ...fenceMatch,
         containerIndent: splitMarkdownContainerPrefix(line).containerIndent,
       };
-      onLine(line, true, true);
-    } else onLine(line, false, false);
+      onLine(rawLine, true, true);
+    } else onLine(rawLine, false, false);
   }
 }

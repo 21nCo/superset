@@ -1,3 +1,4 @@
+import { mapHtmlAttributes } from "./html-attributes";
 import { marked } from "marked";
 import { decodeHTML } from "entities";
 import { parseMarkdown } from "@mdfn/markdown";
@@ -40,9 +41,6 @@ const COMPONENT_START_REGEX = /^<\s*([A-Z][A-Za-z0-9]*)\b[^>]*>\s*$/;
 const LIST_UNORDERED_REGEX = /^[-*+]\s+/;
 const LIST_ORDERED_REGEX = /^\d+[.)]\s+/;
 const TABLE_ROW_REGEX = /^\|.+\|/;
-
-const URL_ATTRIBUTE_RE = /(\b(?:href|src|xlink:href)\s*=\s*)(["'])(.*?)\2/gi;
-const EVENT_ATTR_RE = /(?:\s+|\/)on[a-z][a-z0-9]*\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi;
 
 interface ParseBlocksOptions {
   source: string;
@@ -109,12 +107,11 @@ function parseComponentProps(rawAttributes: string): Record<string, string | num
 }
 
 function sanitizeMarkdownHtml(html: string): string {
-  return html
-    .replace(URL_ATTRIBUTE_RE, (attribute, prefix, quote, value) => {
-      const normalized = decodeHTML(value).replace(/[\t\n\r]/g, "").trim();
-      return /^javascript:/i.test(normalized) ? `${prefix}${quote}#${quote}` : attribute;
-    })
-    .replace(EVENT_ATTR_RE, "");
+  return mapHtmlAttributes(html, (name, value, raw) => {
+    if (/^on[a-z][a-z0-9]*$/.test(name)) return "";
+    if (["href", "src", "xlink:href"].includes(name) && /^javascript:/i.test(decodeHTML(value).replace(/[\t\n\r]/g, "").trim())) return ` ${name}="#"`;
+    return raw;
+  });
 }
 
 function renderInlineHtml(text: string): string {

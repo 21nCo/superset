@@ -1,3 +1,4 @@
+import { mapHtmlAttributes } from "./html-attributes";
 import { createDiagnostic, createDocsError } from "./diagnostics";
 import { scanFenceLines, splitMarkdownContainerPrefix } from "./markdown-fences";
 import { decodeHTML } from "entities";
@@ -99,19 +100,6 @@ function collectRawHtml(source: string): string {
   return html.join("\n");
 }
 
-function collectHrefAndHtml(source: string): string {
-  const parts: string[] = [];
-  marked.walkTokens(marked.lexer(source), (token: Token) => {
-    if (token.type === "html") {
-      parts.push(token.raw);
-    }
-    if ((token.type === "link" || token.type === "image") && typeof token.href === "string") {
-      parts.push(token.href);
-    }
-  });
-  return parts.join("\n");
-}
-
 export function findUnsafeHtml(source: string): UnsafeHtmlMatch[] {
   const tagScan = `${collectRawHtml(source)}\n${stripCodeExamples(source)}`;
   const matches: UnsafeHtmlMatch[] = [];
@@ -124,17 +112,18 @@ export function findUnsafeHtml(source: string): UnsafeHtmlMatch[] {
     }
   }
 
-  const rawTags = stripCodeExamples(source).match(/<[a-z][^>]*>/gi) ?? [];
-  const decodedForUrls = decodeHTML(`${collectHrefAndHtml(source)}\n${rawTags.join("\n")}`);
-  for (const pattern of BLOCKED_HTML_PATTERNS) {
-    const candidate = pattern.category === "javascript-url"
-      ? decodedForUrls.replace(/[\t\n\r]/g, "")
-      : decodedForUrls;
-    const found = candidate.match(pattern.regex);
-    if (found) {
-      matches.push({ category: pattern.category, match: found[0] });
-    }
-  }
+  const checkUrl = (value: string) => {
+    const normalized = decodeHTML(value).replace(/[\t\n\r]/g, "").trim();
+    if (/^javascript:/i.test(normalized)) matches.push({ category: "javascript-url", match: value });
+  };
+  marked.walkTokens(marked.lexer(source), (token: Token) => {
+    if ((token.type === "link" || token.type === "image") && typeof token.href === "string") checkUrl(token.href);
+  });
+  mapHtmlAttributes(stripCodeExamples(source), (name, value, raw) => {
+    if (/^on[a-z][a-z0-9]*$/.test(name)) matches.push({ category: "event-handler", match: name });
+    if (["href", "src", "xlink:href"].includes(name)) checkUrl(value);
+    return raw;
+  });
 
   return matches;
 }

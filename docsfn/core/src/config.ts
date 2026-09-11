@@ -311,9 +311,17 @@ async function fileExists(targetPath: string): Promise<boolean> {
   }
 }
 
+const pendingConfigLoads = new Map<string, Promise<unknown>>();
+
 async function loadConfigModule(configPath: string): Promise<unknown> {
   try {
-    return await loadFreshConfigGraph(configPath);
+    const key = resolve(configPath);
+    let pending = pendingConfigLoads.get(key);
+    if (!pending) {
+      pending = loadFreshConfigGraph(key).finally(() => pendingConfigLoads.delete(key));
+      pendingConfigLoads.set(key, pending);
+    }
+    return await pending;
   } catch (error) {
     throw createDocsError({
       code: "DOCS_CONFIG_INVALID",
@@ -337,6 +345,17 @@ const configDependencyPaths = new Map<string, string[]>();
 
 export function getDocsConfigDependencies(configPath: string): string[] {
   return configDependencyPaths.get(resolve(configPath)) ?? [];
+}
+
+async function isCommonJsScope(file: string): Promise<boolean> {
+  let directory = dirname(file);
+  while (true) {
+    const manifest = join(directory, "package.json");
+    if (await fileExists(manifest)) return JSON.parse(await readFile(manifest, "utf8")).type !== "module";
+    const parent = dirname(directory);
+    if (parent === directory) return true;
+    directory = parent;
+  }
 }
 
 async function loadFreshConfigGraph(configPath: string): Promise<unknown> {
@@ -387,7 +406,9 @@ async function loadFreshConfigGraph(configPath: string): Promise<unknown> {
     );
     const commonjs =
       extname(file) === ".cjs" ||
-      (!ts.isExternalModule(ast) && /\b(?:module\.exports|exports\.)/.test(source));
+      (!ts.isExternalModule(ast) && (extname(file) === ".js"
+        ? await isCommonJsScope(file)
+        : /\b(?:module\.exports|exports\.)/.test(source)));
     const record = {
       source,
       commonjs,
@@ -436,8 +457,8 @@ async function loadFreshConfigGraph(configPath: string): Promise<unknown> {
     for (const { literal, require: isRequire } of literals) {
       if (!literal.text.startsWith(".")) continue;
       let target = resolve(dirname(file), literal.text);
-      if (isRequire && !extname(target)) {
-        for (const extension of [".js", ".cjs", ".json"]) {
+      if (!extname(target)) {
+        for (const extension of [".ts", ".js", ".mjs", ".cjs", ".json"]) {
           if (await fileExists(target + extension)) {
             target += extension;
             break;

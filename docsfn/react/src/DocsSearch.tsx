@@ -77,16 +77,18 @@ export function DocsSearch({
   const inputRef = useRef<HTMLInputElement>(null);
   const runtimeRef = useRef<DocsSearchRuntime | null>(null);
   const queryRequestRef = useRef(0);
-  const [loadedScopes, setLoadedScopes] = useState<SearchScopeFilter[]>([]);
+  const [loadedScopes, setLoadedScopes] = useState<SearchScopeFilter[] | null>(null);
   const artifact = searchArtifact ?? searchIndex;
-  const supportedScopes = useMemo(() => normalizeScopes(scopeInput ?? ["all", ...(artifact?.scopes ?? loadedScopes)]), [scopeInput, artifact, loadedScopes]);
+  const supportedScopes = useMemo(() => normalizeScopes(scopeInput ?? ["all", ...(artifact?.scopes ?? loadedScopes ?? [])]), [scopeInput, artifact, loadedScopes]);
   useEffect(() => {
-    if (!supportedScopes.includes(scope)) setScope("all");
-  }, [supportedScopes, scope]);
+    if (!scopeInput && !artifact && loadSearchArtifact && loadedScopes === null) return;
+    if (!supportedScopes.includes(scope)) setScope(supportedScopes[0] ?? "all");
+  }, [supportedScopes, scope, scopeInput, artifact, loadSearchArtifact, loadedScopes]);
 
   useEffect(() => {
     let active = true;
-    setLoadedScopes([]);
+    setLoadedScopes(null);
+    queryRequestRef.current += 1;
     runtimeRef.current = createDocsSearchRuntime({
       artifact: searchArtifact ?? searchIndex,
       loadArtifact: loadSearchArtifact ? async () => {
@@ -95,7 +97,7 @@ export function DocsSearch({
         return loaded;
       } : undefined,
     });
-    return () => { active = false; };
+    return () => { active = false; queryRequestRef.current += 1; };
   }, [searchArtifact, searchIndex, loadSearchArtifact]);
 
   useEffect(() => {
@@ -160,7 +162,7 @@ export function DocsSearch({
         setResults([]);
         setSelectedIndex(0);
       });
-  }, [query, scope, analytics]);
+  }, [query, scope, analytics, searchArtifact, searchIndex, loadSearchArtifact]);
 
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);

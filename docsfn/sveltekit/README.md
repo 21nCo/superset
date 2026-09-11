@@ -1,7 +1,7 @@
 # @docsfn/sveltekit
 
 SvelteKit site-kit helpers for `docsfn`.
-Supports SvelteKit `2` with Svelte `4` and `5`.
+Supports SvelteKit `2` with Svelte `5` (>=5.20.0).
 
 ## Install
 

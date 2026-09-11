@@ -1,9 +1,10 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { buildManifest, loadDocsConfig, type DocsManifest } from "../../core/src/index";
+import { buildManifest, buildOpenApiReference, loadDocsConfig, type DocsManifest } from "../../core/src/index";
 import { FsContentProvider } from "../../provider-fs/src/index";
 import {
+  generateApiParams as generateNextApiParams,
   generateCollectionParams as generateNextCollectionParams,
   generateStaticParams as generateNextStaticParams,
   getCollectionPostData as getNextCollectionPostData,
@@ -322,7 +323,7 @@ it("retains root-base docs routes in both static parameter adapters", async () =
   manifest.routes = Object.fromEntries(Object.entries(manifest.routes).map(([route, id]) => [route.replace(/^\/docs(?=\/|$)/, "") || "/", id]));
   for (const generate of [generateStaticParams, generateNextStaticParams]) {
     const params = generate(manifest, { basePath: "/" });
-    expect(params.length).toBeGreaterThan(0);
+    expect(params).toContainEqual({});
   }
 });
 it("does not assign hidden docs to the default sidebar", async () => {
@@ -339,4 +340,18 @@ it("supports catch-all Next collection parameters and lookup", async () => {
   post.slug = "releases/v1";
   expect(generateNextCollectionParams("blog", manifest, { catchAll: true })).toContainEqual({ slug: ["releases", "v1"] });
   expect(getNextCollectionPostData("blog", ["releases", "v1"], manifest)?.id).toBe(post.id);
+});
+
+it('emits every OpenAPI child route as a Next catch-all parameter', async () => {
+  const manifest = structuredClone(await loadCanonicalManifest());
+  const spec = buildOpenApiReference({ sourceId: 'api:x.json', sourcePath: 'x.json', fallbackTitle: 'X', body: JSON.stringify({ openapi: '3.0.3', info: { title: 'X', version: '1' }, paths: { '/items': { get: { responses: {} } } } }) });
+  manifest.apis = { x: { kind: 'api', id: 'x', slug: 'x', path: spec.routes.overview, title: spec.title, frontmatter: {}, spec } };
+  const params = generateNextApiParams(manifest, { catchAll: true });
+  for (const api of Object.values(manifest.apis)) {
+    const paths = (api.spec as { routes: { all: string[] } }).routes.all;
+    for (const route of paths) {
+      expect(params).toContainEqual({ slug: `${api.slug}${route.slice(api.path.length)}`.split('/').filter(Boolean) });
+    }
+  }
+  expect(params.length).toBeGreaterThan(Object.keys(manifest.apis).length);
 });

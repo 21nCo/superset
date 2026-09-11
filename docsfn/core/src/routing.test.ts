@@ -223,3 +223,8 @@ describe("routing", () => {
     ).toThrowError(/DOCS_VERSION_INVALID|duplicated/);
   });
 });
+
+it.each(['path-prefix', 'path-segment'] as const)('rejects conflicting frontmatter in %s', (mode) => {
+  const config = createConfig({ versions: { mode, versions: [{ slug: 'v1', label: 'V1', default: true }, { slug: 'v2', label: 'V2' }] } });
+  expect(() => buildRoute({ collection: 'docs', sourcePath: mode === 'path-prefix' ? 'v1/page' : 'page/v1', frontmatter: { version: 'v2' }, config })).toThrow(/version/i);
+});

@@ -6,8 +6,10 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); document.querySelectorAll("h
 
 it("reconnects heading observation after client navigation and respects controlled hashes", async () => {
   const observed: string[] = [];
+  const callbacks: IntersectionObserverCallback[] = [];
   const disconnect = vi.fn();
   vi.stubGlobal("IntersectionObserver", class {
+    constructor(callback: IntersectionObserverCallback) { callbacks.push(callback); }
     observe(element: Element) { observed.push(element.id); }
     disconnect = disconnect;
   });
@@ -21,5 +23,6 @@ it("reconnects heading observation after client navigation and respects controll
   await waitFor(() => expect(observed).toContain("second"));
   expect(disconnect).toHaveBeenCalled();
   await view.rerender({ headings: [heading("second")], activeHash: "#second" });
+  callbacks[0]([{ isIntersecting: true, target: { id: "first" } }] as unknown as IntersectionObserverEntry[], {} as IntersectionObserver);
   expect(screen.getByRole("link", { name: "second" }).getAttribute("aria-current")).toBe("location");
 });

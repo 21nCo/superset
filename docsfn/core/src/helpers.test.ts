@@ -23,6 +23,7 @@ it("projects API subroutes without mutating the manifest overview", () => {
   const operation = spec.operations[0];
   const selected = selectApiReferenceRoute(api, operation.routePath);
   expect(selected.path).toBe(operation.routePath);
+  expect((selected.spec as typeof spec).title).toBe(selected.title);
   expect((selected.spec as typeof spec).operations).toEqual([operation]);
   expect(spec.operations).toHaveLength(2);
   expect(selectApiReferenceRoute(api, api.path)).toBe(api);

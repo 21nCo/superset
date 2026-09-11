@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createDocsSiteSearchRuntime,
   getCompiledDocsPage,
@@ -6,7 +6,7 @@ import {
   loadDocsSiteSource,
 } from "./docs-site-source";
 import { load as loadBlogListPage } from "../../routes/blog/+page.server";
-import { load as loadBlogPage } from "../../routes/blog/[slug]/+page.server";
+import { load as loadBlogPage } from "../../routes/blog/[...slug]/+page.server";
 import { load as loadChangelogPage } from "../../routes/changelog/[slug]/+page.server";
 import { GET as getLatestChangelog } from "../../routes/changelog/latest/+server";
 import { GET as getChangelogJson } from "../../routes/changelog.json/+server";
@@ -173,4 +173,19 @@ describe("docsfn dogfood site source", () => {
     expect(html).toContain('href="/docs/core-concepts/configuration"');
     expect(html).not.toContain('href="./configuration"');
   });
+});
+
+it('rejects changelog paths that are not mounted by the site', async () => {
+  vi.resetModules();
+  vi.doMock('@docsfn/core', async (importOriginal) => {
+    const core = await importOriginal<typeof import('@docsfn/core')>();
+    return { ...core, loadDocsConfig: async (input: Parameters<typeof core.loadDocsConfig>[0]) => {
+      const config = await core.loadDocsConfig(input);
+      return { ...config, collections: { ...config.collections, changelog: { ...config.collections?.changelog, routeBase: '/elsewhere' } } };
+    } };
+  });
+  try {
+    const { loadDocsSiteSource: loadFresh } = await import('./docs-site-source');
+    await expect(loadFresh()).rejects.toThrow(/changelog routes are mounted/);
+  } finally { vi.doUnmock('@docsfn/core'); vi.resetModules(); }
 });

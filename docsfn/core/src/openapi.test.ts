@@ -353,3 +353,12 @@ it("resolves local parameter references and emits single-slash root routes", () 
 it("rejects explicit operation IDs that collide with generated IDs", () => {
   expect(() => createReference({ sourceId: "api:x.json", sourcePath: "x.json", body: JSON.stringify({ openapi: "3.0.3", info: { title: "X", version: "1" }, paths: { "/a": { get: { responses: {} } }, "/b": { get: { operationId: "get:/a", responses: {} } } } }) })).toThrow(/duplicate operationId/);
 });
+
+it('decodes percent-encoded local parameter references', () => {
+  const spec = JSON.parse(createJsonSpec());
+  spec.components = { parameters: { 'id param': { name: 'id', in: 'query', schema: { type: 'string' } } } };
+  spec.paths['/search'].get.parameters = [{ $ref: '#/components/parameters/id%20param' }];
+  expect(createReference({ sourceId: 'api:x.json', sourcePath: 'x.json', body: JSON.stringify(spec) }).operations[0].parameters[0].name).toBe('id');
+  spec.paths['/search'].get.parameters[0].$ref = '#/components/parameters/%ZZ';
+  expect(() => createReference({ sourceId: 'api:x.json', sourcePath: 'x.json', body: JSON.stringify(spec) })).toThrow(/malformed parameter reference/);
+});

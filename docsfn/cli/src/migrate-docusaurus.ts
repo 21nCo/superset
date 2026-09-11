@@ -1029,7 +1029,9 @@ function rewriteColocatedAssets(source: string, record: ContentRecord): string {
   const rewrite = (href: string): string => {
     if (!href.startsWith("./") && !href.startsWith("../")) return href;
     const [, pathname, suffix] = href.match(/^([^?#]*)(.*)$/s)!;
-    const target = path.resolve(path.dirname(record.sourcePath), pathname);
+    let decoded: string;
+    try { decoded = decodeURIComponent(pathname); } catch { return href; }
+    const target = path.resolve(path.dirname(record.sourcePath), decoded);
     const relative = path.relative(docsRoot, target);
     if (
       relative.startsWith("..") ||
@@ -1042,11 +1044,11 @@ function rewriteColocatedAssets(source: string, record: ContentRecord): string {
     } catch {
       return href;
     }
-    return `/docs-assets/${normalizePath(relative)}${suffix}`;
+    return `/docs-assets/${normalizePath(relative).split("/").map(encodeURIComponent).join("/")}${suffix}`;
   };
   return source
     .replace(
-      /(!?\[[^\]]*\]\()([^\s)]+)(\))/g,
+      /(!?\[[^\]]*\]\()([^\s)]+)((?:\s+"[^"\n]*"|\s+'[^'\n]*')?\))/g,
       (_match, prefix, href, close) => `${prefix}${rewrite(href)}${close}`
     )
     .replace(

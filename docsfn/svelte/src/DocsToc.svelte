@@ -24,6 +24,7 @@
     await tick();
     if (!mounted || request !== generation || typeof IntersectionObserver === "undefined") return;
     observer = new IntersectionObserver((entries) => {
+      if (!mounted || request !== generation) return;
       const entry = entries.find((item) => item.isIntersecting);
       if (entry?.target.id) currentHash = `#${entry.target.id}`;
     }, { rootMargin: "-80px 0px -80% 0px", threshold: 0 });

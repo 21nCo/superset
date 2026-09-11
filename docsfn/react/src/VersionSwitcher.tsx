@@ -19,9 +19,7 @@ export interface VersionSwitcherProps {
   versionMode?: "path-prefix" | "path-segment";
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+
 
 export function VersionSwitcher({
   surface,
@@ -57,19 +55,15 @@ export function VersionSwitcher({
       return;
     }
 
-    const pattern = resolvedVersions.map((version) => escapeRegExp(version.slug)).join("|");
-    if (!pattern) {
-      return;
-    }
-
-    const nextPath = window.location.pathname.replace(
-      versionMode === "path-segment"
-        ? new RegExp(`/(${pattern})$`)
-        : new RegExp(`^${escapeRegExp(basePath.replace(/\/+$/, ""))}/(${pattern})(?=/|$)`),
-      versionMode === "path-segment"
-        ? `/${versionSlug}`
-        : `${basePath.replace(/\/+$/, "")}/${versionSlug}`
-    );
+    const segments = window.location.pathname.split("/");
+    const baseSegments = basePath.split("/").filter(Boolean);
+    const index = versionMode === "path-segment"
+      ? segments.length - 1 - [...segments].reverse().findIndex((segment) => segment.length > 0)
+      : baseSegments.length + 1;
+    if (versionMode === "path-prefix" && baseSegments.some((part, i) => segments[i + 1] !== part)) return;
+    if (!resolvedVersions.some((version) => version.slug === segments[index])) return;
+    segments[index] = versionSlug;
+    const nextPath = segments.join("/");
     if (nextPath !== window.location.pathname) {
       window.location.href = `${nextPath}${window.location.search}${window.location.hash}`;
     }

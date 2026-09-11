@@ -46,7 +46,6 @@ describe("markdown fence scanning", () => {
     const states = scanStates(["    ```", "    still indented", "    ```", "outside"].join("\n"));
     expect(states.every((state) => !state.inFence && !state.isFenceLine)).toBe(true);
   });
-});
 
 it("does not end a root fence on a literal list marker", () => {
   const states = scanStates(["```", "- ```", "<Tabs>", "```", "after"].join("\n"));
@@ -62,4 +61,12 @@ it("ends an unclosed fence when its list or quote container ends", () => {
 it("distinguishes quote-inside-list from list-inside-quote", () => {
   const states = scanStates(["- > ```", "> - text"].join("\n"));
   expect(states[1].inFence).toBe(false);
+});
+
+it('retains tab-indented list fence continuations', () => {
+  const states = scanStates('- ```md\n\t<Tabs>\n\t```\noutside');
+  expect(states[1].inFence).toBe(true);
+  expect(states[2].isFenceLine).toBe(true);
+  expect(states[3].inFence).toBe(false);
+});
 });

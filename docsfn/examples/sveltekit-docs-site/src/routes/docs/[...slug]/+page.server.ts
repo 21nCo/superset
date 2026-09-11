@@ -118,8 +118,8 @@ export const load: PageServerLoad = async ({ params, parent }) => {
   return {
     routeEntry,
     compiled: routeEntry.kind === "page" ? resolveMarkdownRelativeLinks({
-      compiled: compileSvelteContent({ source: routeEntry.page.body, sourcePath: routeEntry.page.id, compatPreset: source.compatPreset }),
-      route: routeEntry.route, sourcePath: routeEntry.page.id,
+      compiled: compileSvelteContent({ source: routeEntry.page.body, sourcePath: routeEntry.page.id.replace(/^[^:]+:/, ""), compatPreset: source.compatPreset }),
+      route: routeEntry.route, sourcePath: routeEntry.page.id.replace(/^[^:]+:/, ""),
     }) : undefined,
     surface,
     sidebarLinks,

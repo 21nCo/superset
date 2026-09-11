@@ -309,7 +309,10 @@ function resolveParameterReference(
     }
     visited.add(reference);
     resolved = document;
-    for (const segment of reference.slice(2).split("/")) {
+    let pointer: string;
+    try { pointer = decodeURIComponent(reference.slice(2)); }
+    catch { throw createOpenApiParseError({ message: `malformed parameter reference ${reference}`, sourceId: input.sourceId, sourcePath: input.sourcePath }); }
+    for (const segment of pointer.split("/")) {
       const key = segment.replace(/~1/g, "/").replace(/~0/g, "~");
       const object = toObject(resolved);
       resolved = Object.prototype.hasOwnProperty.call(object, key)

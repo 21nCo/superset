@@ -80,7 +80,7 @@ There is no `getApiDataOrThrow` variant in this package; handle `null` or use `r
 | **`generateVersionedStaticParams(manifest, options?)`** | Adds `version` alongside optional `slug` |
 | **`generateBlogParams(manifest)`** | `{ slug: string }[]` sorted by slug |
 | **`generateCollectionParams(collectionId, manifest, options?)`** | `{ slug: string }[]` for any dated collection, e.g. `changelog` |
-| **`generateApiParams(manifest)`** | `{ slug: string }[]` sorted by slug |
+| **`generateApiParams(manifest, { catchAll: true })`** | Overview and child routes as `{ slug: string[] }[]` for `[...slug]`; omit `catchAll` for slash-delimited strings |
 
 ## Page metadata
 

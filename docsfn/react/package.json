@@ -20,8 +20,7 @@
     "@docsfn/core": "0.0.6",
     "@uifn/react": "0.0.2",
     "lucide-react": "^0.575.0",
-    "markdown-to-jsx": "^7.3.2",
-    "@searchfn/client": "^0.3.0"
+    "markdown-to-jsx": "^7.3.2"
   },
   "devDependencies": {
     "@searchfn/client": "0.3.0",

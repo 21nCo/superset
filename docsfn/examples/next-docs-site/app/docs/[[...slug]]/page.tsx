@@ -221,8 +221,8 @@ export default async function DocsPage(props: {
 
             <DocsContent
               compiled={resolveMarkdownRelativeLinks({
-                compiled: compileReactContent({ source: routeEntry.page.body, sourcePath: routeEntry.page.id, compatPreset: source.compatPreset }),
-                route: routeEntry.route, sourcePath: routeEntry.page.id,
+                compiled: compileReactContent({ source: routeEntry.page.body, sourcePath: routeEntry.page.id.replace(/^[^:]+:/, ""), compatPreset: source.compatPreset }),
+                route: routeEntry.route, sourcePath: routeEntry.page.id.replace(/^[^:]+:/, ""),
               })}
             />
           </article>

@@ -179,7 +179,7 @@ export function getPaginationFromSidebarWithTitles(
     if (currentPage?.frontmatter?.[direction] === false) pagination[direction] = undefined;
     else if (override) pagination[direction] = {
       path: override.path,
-      title: override.title ?? resolveTitleForPath(override.path, pages, override.path),
+      title: override.title?.trim() || resolveTitleForPath(override.path, pages, override.path),
     };
   }
   return pagination;
@@ -212,6 +212,7 @@ export function selectApiReferenceRoute(
     title,
     spec: {
       ...spec,
+      title,
       info: { ...spec.info, title },
       operations: operation
         ? [operation]

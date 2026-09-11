@@ -320,9 +320,9 @@ export const load: PageServerLoad = async ({ params, parent }) => {
   const compiled =
     routeEntry.kind === "page"
       ? resolveMarkdownRelativeLinks({
-          compiled: compileSvelteContent({ source: routeEntry.page.body, sourcePath: routeEntry.page.id, compatPreset: source.compatPreset }),
+          compiled: compileSvelteContent({ source: routeEntry.page.body, sourcePath: routeEntry.page.id.replace(/^[^:]+:/, ""), compatPreset: source.compatPreset }),
           route: routeEntry.route,
-          sourcePath: routeEntry.page.id,
+          sourcePath: routeEntry.page.id.replace(/^[^:]+:/, ""),
         })
       : undefined;
 
@@ -430,7 +430,7 @@ export const load: PageLoad = async ({ parent }) => {
 };
 ```
 
-**`src/routes/blog/[slug]/+page.server.ts`**:
+**`src/routes/blog/[...slug]/+page.server.ts`**:
 
 ```ts
 import { error } from "@sveltejs/kit";
@@ -442,15 +442,15 @@ export const load: PageServerLoad = async ({ params, parent }) => {
   const { source } = await parent();
   const post = getPostData(params.slug, source.manifest);
   if (!post || post.draft) throw error(404, "Not found");
-  const compiled = compileSvelteContent({
-    source: post.body,
-    compatPreset: source.compatPreset,
+  const compiled = resolveMarkdownRelativeLinks({
+    compiled: compileSvelteContent({ source: post.body, compatPreset: source.compatPreset }),
+    route: post.path, sourcePath: post.id.replace(/^[^:]+:/, ""),
   });
   return { post, compiled, siteTitle: source.siteTitle };
 };
 ```
 
-Render with **`DocsContent`** and link the list to `/blog/[slug]`.
+Render with **`DocsContent`** and link the list to `/blog/[...slug]`.
 
 **RSS** — optional `src/routes/blog/rss.xml/+server.ts` using **`generateRSSFeed`** from `@docsfn/core` (see [RSS](../core-concepts/rss)).
 

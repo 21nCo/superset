@@ -460,3 +460,20 @@ it("reloads local CommonJS and JSON dependencies without retaining files", async
   expect((await loadDocsConfig({ cwd })).site.title).toBe("After");
   expect((await readdir(cwd)).filter((name) => name.startsWith(".docsfn."))).toEqual([]);
 });
+
+it('loads extensionless TypeScript config dependencies concurrently', async () => {
+  const cwd = await createTempDir();
+  await writeFile(join(cwd, 'theme.ts'), 'export const title: string = "Theme";');
+  await writeFile(join(cwd, 'docsfn.config.ts'), `import { title } from './theme'; export default { schemaVersion: 1, site: { title }, content: { root: ${JSON.stringify(cwd)} }, compat: { preset: 'none' } };`);
+  const loaded = await Promise.all(Array.from({ length: 12 }, () => loadDocsConfig({ cwd })));
+  expect(loaded.every(config => config.site.title === 'Theme')).toBe(true);
+  expect((await readdir(cwd)).some(file => file.includes('.docsfn-config'))).toBe(false);
+});
+it('respects CommonJS scope for side-effect-only require dependencies', async () => {
+  const cwd = await createTempDir();
+  await writeFile(join(cwd, 'package.json'), '{"type":"commonjs"}');
+  await writeFile(join(cwd, 'side.js'), 'require("./values.json");');
+  await writeFile(join(cwd, 'values.json'), '{}');
+  await writeFile(join(cwd, 'docsfn.config.cjs'), `require('./side.js'); module.exports = { schemaVersion: 1, site: { title: 'CJS' }, content: { root: ${JSON.stringify(cwd)} }, compat: { preset: 'none' } };`);
+  expect((await loadDocsConfig({ cwd, configPath: 'docsfn.config.cjs' })).site.title).toBe('CJS');
+});

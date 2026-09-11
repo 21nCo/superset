@@ -225,3 +225,7 @@ describe("buildCanonicalBlogRecords", () => {
 it.each(["", "rss.xml", "tags/release"])("rejects reserved collection route %s", (slug) => {
   expect(() => buildCanonicalBlogRecords({ posts: [createPost("blog:entry.mdx", { slug, tags: ["release"] })], basePath: "/docs" })).toThrow(/conflicts with generated collection route/);
 });
+
+it('rejects a feed mounted at the list surface', () => {
+  expect(() => buildCanonicalDatedCollectionRecords({ posts: [], collectionId: 'news', routeBase: '/news', feedPath: '/news' })).toThrow(/routes conflict/);
+});

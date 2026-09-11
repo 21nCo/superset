@@ -5,7 +5,7 @@ Reference example sites used by the release gate.
 ## Included apps
 
 - `next-docs-site` - Next 15 + React 18/19
-- `sveltekit-docs-site` - SvelteKit 2 + Svelte 4/5
+- `sveltekit-docs-site` - SvelteKit 2 + Svelte 5 (>=5.20.0)
 
 Both examples load canonical fixtures through `DOCSFN_FIXTURE_ROOT`.
 
