@@ -167,8 +167,8 @@ export function createAuthFnPlacementContextIssuer(
 ): AuthFnPlacementContextIssuer {
   const routing = getMultiRegionPluginConfig(options.config)?.routing;
   const cellRegionId = routing?.mode === 'gateway' ? routing.cell?.regionId : undefined;
-  const regionId = options.regionId ?? cellRegionId;
-  if (!regionId?.trim() || (cellRegionId && regionId !== cellRegionId)) {
+  const regionId = (options.regionId ?? cellRegionId)?.trim();
+  if (!regionId || (cellRegionId && regionId !== cellRegionId)) {
     throw new AuthFnConfigError('Placement-context issuance requires the region owning config.database');
   }
   const placementDirectory = options.placementDirectory
@@ -526,7 +526,8 @@ async function loadActivePlacement(
   if (placement.state !== 'active') {
     throw new AuthFnRegionNotFoundError('Identity placement is not active');
   }
-  if (placement.identityKey !== identityKey || !placement.regionId?.trim()
+  if (placement.identityKey !== identityKey || typeof placement.regionId !== 'string'
+      || !placement.regionId.trim()
       || !Number.isSafeInteger(placement.epoch) || placement.epoch < 1) {
     throw new AuthFnPlacementDirectoryUnavailableError('Invalid authoritative placement record');
   }
