@@ -376,14 +376,16 @@ export class McpFnServer<TContext = undefined> {
             });
             const completedStages = new Set<McpFnClientProfileLifecycleStage>();
             const observer = {
-              onTaskOutput: async (outcome: "succeeded" | "failed") => {
+              onTaskOutput: async (outcome: "succeeded" | "failed", error?: unknown) => {
                 taskOutputReported = true;
                 completedStages.delete("output-validation");
                 await this.emitProfileEvidence({
                   stage: "output-validation", outcome,
                   profile: this.profileReference(resolved),
                   tool: request.params.name,
-                  ...(outcome === "failed" ? { code: "MCPFN_INVALID_OUTPUT" } : {}),
+                  ...(outcome === "failed" ? { code: "MCPFN_INVALID_OUTPUT",
+                    ...(error instanceof McpFnOutputValidationError ? { issues: (error.details as { issues?: McpFnClientProfileEvidence["issues"] } | undefined)?.issues } : {}),
+                  } : {}),
                 });
               },
               onStage: (

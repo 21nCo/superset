@@ -990,7 +990,7 @@ export class McpFnRegistry<TContext = undefined> {
             observer.onStage?.("output-validation");
             let validated: CallToolResult;
             try {
-              validated = this.finalizeResult(registered, result);
+              validated = this.finalizeResult(registered, status === "failed" ? { ...result, isError: true } : result);
             } catch (error) {
               await observer.onTaskOutput?.("failed", error);
               throw error;

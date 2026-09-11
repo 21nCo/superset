@@ -259,6 +259,11 @@ function assertProjectedCatalog(
     const canonicalTool = canonical.get(visibleTool.name)!;
     const canonicalShape = rootShape(canonicalTool.inputSchema);
     const visibleShape = rootShape(visibleTool.inputSchema);
+    if (canonicalJson(canonicalShape.constraints) !== canonicalJson(visibleShape.constraints) ||
+        canonicalJson(canonicalTool.outputSchema ?? null) !== canonicalJson(visibleTool.outputSchema ?? null) ||
+        canonicalTool.execution?.taskSupport !== visibleTool.execution?.taskSupport) {
+      throw new McpFnClientProfileError("MCPFN_PROFILE_ASYMMETRIC", "Projected tools must preserve root constraints, output schemas and task support");
+    }
     const visibleRequired = visibleShape.required;
     const visibleProperties = visibleShape.properties;
     const owned = new Set(
@@ -426,18 +431,24 @@ function assertTrustedProfileIdentity<T>(resolved: McpFnResolvedClientProfile<T>
 }
 
 /** Resolve only root object composition; never traverse argument values. */
-function rootShape(root: Record<string, unknown>): { properties: Record<string, unknown>; required: Set<string> } {
+function rootShape(root: Record<string, unknown>): { properties: Record<string, unknown>; required: Set<string>; constraints: string[] } {
   const properties: Record<string, unknown> = Object.create(null);
   const required = new Set<string>();
+  const constraints = new Set<string>();
   const seen = new Set<unknown>();
   const visit = (value: unknown) => {
     if (!value || typeof value !== "object" || Array.isArray(value) || seen.has(value)) return;
     seen.add(value);
     const schema = value as Record<string, unknown>;
+    for (const [key, value] of Object.entries(schema)) {
+      if (!["properties", "required", "allOf", "$ref", "title", "description", "$comment", "examples"].includes(key)) {
+        constraints.add(canonicalJson({ [key]: value }));
+      }
+    }
     if (typeof schema.$ref === "string") {
-      if (!schema.$ref.startsWith("#/")) throw new McpFnClientProfileError("MCPFN_INVALID_PROJECTED_CATALOG", "Profile root references must be local JSON pointers");
+      if (schema.$ref !== "#" && !schema.$ref.startsWith("#/")) throw new McpFnClientProfileError("MCPFN_INVALID_PROJECTED_CATALOG", "Profile root references must be local JSON pointers");
       let target: unknown = root;
-      for (const part of schema.$ref.slice(2).split("/")) {
+      for (const part of schema.$ref === "#" ? [] : schema.$ref.slice(2).split("/")) {
         const key = part.replace(/~1/g, "/").replace(/~0/g, "~");
         target = target && typeof target === "object" && Object.hasOwn(target, key) ? (target as Record<string, unknown>)[key] : undefined;
       }
@@ -455,5 +466,5 @@ function rootShape(root: Record<string, unknown>): { properties: Record<string, 
     if (Array.isArray(schema.allOf)) for (const child of schema.allOf) visit(child);
   };
   visit(root);
-  return { properties, required };
+  return { properties, required, constraints: [...constraints].sort(compareCodeUnits) };
 }

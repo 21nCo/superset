@@ -454,3 +454,40 @@ describe("McpFn client profiles", () => {
   });
 
 });
+
+describe("projected contract boundaries", () => {
+  it.each(["additionalProperties", "minProperties", "outputSchema", "taskSupport"])("rejects changed %s", async (change) => {
+    const { buildMcpFnEffectiveCatalog } = await import("../src/client-profiles.js");
+    const tool = { name: "test", description: "test", inputSchema: { type: "object" as const, properties: {}, additionalProperties: false } };
+    await expect(buildMcpFnEffectiveCatalog({ canonicalTools: [tool], resolved: {
+      context: undefined, extra: {} as any, reportedClient: {}, verifiedIdentity: { subject: "trusted" },
+      profile: { id: "test", version: "1", matches: () => true, projectCatalog: ({ tools }) => tools.map((entry) => ({ ...entry,
+        ...(change === "outputSchema" ? { outputSchema: { type: "object" as const } } :
+          change === "taskSupport" ? { execution: { taskSupport: "required" as const } } :
+          { inputSchema: { ...entry.inputSchema, [change]: change === "additionalProperties" ? true : 2 } }),
+      })) },
+    } })).rejects.toThrow(/preserve root constraints/);
+  });
+
+  it("accepts an unchanged local root reference", async () => {
+    const { buildMcpFnEffectiveCatalog } = await import("../src/client-profiles.js");
+    await expect(buildMcpFnEffectiveCatalog({ canonicalTools: [{ name: "test", inputSchema: { type: "object", $ref: "#" } }], resolved: {
+      context: undefined, extra: {} as any, reportedClient: {}, verifiedIdentity: { subject: "trusted" },
+      profile: { id: "test", version: "1", matches: () => true },
+    } })).resolves.toMatchObject({ changes: [] });
+  });
+
+  it("persists failed task results without applying success output requirements", async () => {
+    const stored = vi.fn();
+    const registry = new McpFnRegistry().register({ name: "task", description: "test", inputSchema: { type: "object" },
+      outputSchema: { type: "object", required: ["answer"] }, execution: { taskSupport: "required" },
+      handler: async () => structuredResult({ answer: true }),
+      taskHandler: { createTask: async (_args, _context, extra) => {
+        await extra.taskStore.storeTaskResult("task:1", "failed", { content: [{ type: "text", text: "Failed" }] });
+        return { task: { taskId: "task:1", status: "failed", createdAt: new Date().toISOString(), lastUpdatedAt: new Date().toISOString(), ttl: null } };
+      } },
+    });
+    await registry.createToolTask("task", {}, undefined, { taskStore: { storeTaskResult: stored } } as unknown as McpFnTaskRequestExtra);
+    expect(stored).toHaveBeenCalledWith("task:1", "failed", expect.objectContaining({ isError: true }));
+  });
+});

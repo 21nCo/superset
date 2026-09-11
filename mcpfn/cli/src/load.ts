@@ -126,8 +126,8 @@ export async function loadClientProfileContracts(
   if (options.maxReportBytes !== undefined && (!Number.isSafeInteger(options.maxReportBytes) || options.maxReportBytes < 2049)) {
     throw new Error("Client profile maxReportBytes must be an integer of at least 2049");
   }
-  if (options.allowSideEffects !== undefined && typeof options.allowSideEffects !== "boolean") {
-    throw new Error("Client profile allowSideEffects must be a boolean");
+  if (options.allowSideEffects !== undefined) {
+    throw new Error("Client profile side effects require the explicit --allow-side-effects CLI flag; remove allowSideEffects from config");
   }
   return options as RunMcpFnClientProfileContractsOptions;
 }
