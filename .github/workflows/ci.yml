@@ -59,6 +59,9 @@ jobs:
           git fetch --no-tags --depth=1 origin next || true
           git fetch --no-tags --depth=1 origin main || true
 
+      - name: Verify CI planner
+        run: node --test scripts/ci-plan.test.mjs
+
       - name: Build CI plan
         id: plan
         run: node scripts/ci-plan.mjs

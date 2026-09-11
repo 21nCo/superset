@@ -23,6 +23,8 @@ const JS_GLOBAL_PATTERNS = [
 ];
 
 const PYTHON_GLOBAL_PATTERNS = [
+  /^\.github\/workflows\/ci\.yml$/,
+  /^scripts\/ci-plan\.mjs$/,
   /^scripts\/ci-run-python-package\.mjs$/,
   /^scripts\/ci-utils\.mjs$/,
 ];
