@@ -55,6 +55,7 @@ describe('UIFnPresetV1 contract', () => {
     const preset = randomPreset({ seed: 21, locks: { framework: true, installMode: true }, base: PRESET_DEFAULTS });
     expect(preset.framework).toBe('react');
     expect(preset.installMode).toBe('package');
+    expect(PRESET_FIELD_ORDER.some(axis => !['framework', 'installMode'].includes(axis) && preset[axis] !== PRESET_DEFAULTS[axis])).toBe(true);
     expect(encodePreset(randomPreset({ seed: 21 }))).toBe(encodePreset(randomPreset({ seed: 21 })));
   });
 
@@ -78,4 +79,12 @@ describe('UIFnPresetV1 contract', () => {
     const styles = new Set(rows.map((row) => row.style));
     expect(styles.size).toBe(PRESET_AXES.style.length);
   });
+  it('rejects noncanonical codes and malformed JSON roots', () => {
+    const code = encodePreset({});
+    expect(() => decodePreset(code + 'A')).toThrow();
+    for (const input of [null, [], 'wrong', 12, { version: null }]) expect(() => normalizePreset(input as never)).toThrow();
+    expect(() => decodePreset('uifn2_aaaa')).toThrow(expect.objectContaining({ code: 'UIFN_PRESET_UNSUPPORTED_VERSION' }));
+    expect(presetFromUrl('#preset=' + code)).toEqual(PRESET_DEFAULTS);
+  });
+
 });

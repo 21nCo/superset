@@ -1,11 +1,12 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync } from 'node:fs';
 import path from 'node:path';
 import { planInstall } from '../plan';
 import { checksumContent } from '../lockfile';
 import { commitTransaction, type TransactionChange } from '../transaction';
 import { decodePreset, encodePreset, normalizePreset } from './codec';
 import { assertApprovedInit, compilePreset, type PresetCompilePlan } from './compiler';
-import { fixtureCss, fixtureMarkup } from './fixtures';
+import { fixtureCss } from './fixtures';
+import { presetFixtureTree, PRESET_FIXTURE_COMPONENTS } from './fixture-tree';
 import { APPROVED_SUPPORT_MATRIX, type ApprovedTemplate, type PartialPresetDomain, type UIFnPresetV1 } from './schema';
 import { presetFailure, UIFnPresetError } from './errors';
 
@@ -58,7 +59,7 @@ function resolveInput(options: PresetMutationOptions): UIFnPresetV1 {
   throw new UIFnPresetError('UIFN_PRESET_USAGE', 'A preset object or code is required.');
 }
 
-function serializeState(plan: PresetCompilePlan, files: Record<string, string>): string {
+function serializeState(plan: PresetCompilePlan, files: Record<string, string>, previous: Record<string, string> = {}): string {
   const managed = Object.fromEntries(
     Object.entries(files)
       .filter(([relativePath]) => relativePath !== PRESET_STATE_PATH)
@@ -69,7 +70,7 @@ function serializeState(plan: PresetCompilePlan, files: Record<string, string>):
     code: plan.code,
     preset: plan.preset,
     template: plan.template,
-    files: managed,
+    files: { ...previous, ...managed },
   };
   return `${JSON.stringify(state, null, 2)}\n`;
 }
@@ -79,7 +80,9 @@ function themeCss(plan: PresetCompilePlan): string {
 }
 
 function appSource(plan: PresetCompilePlan): string {
-  return `export function App() {\n  return (\n    <div dangerouslySetInnerHTML={{ __html: ${JSON.stringify(fixtureMarkup(plan))} }} />\n  );\n}\n`;
+  const imports = Object.entries(PRESET_FIXTURE_COMPONENTS).map(([name, module]) =>
+    `import { ${name} } from '${plan.preset.installMode === 'source' ? '../components/uifn/react/' + module : '@uifn/components-react/' + module}';`).join('\n');
+  return `import * as React from 'react';\n${imports}\nimport '@uifn/components/styles.css';\nconst components: Record<string, React.ElementType> = { ${Object.keys(PRESET_FIXTURE_COMPONENTS).join(', ')} };\ntype Node = { type: string; props?: Record<string, unknown>; children?: Array<Node | string> };\nconst tree: Node = ${JSON.stringify(presetFixtureTree(plan))};\nfunction render(node: Node | string, key: number): React.ReactNode {\n  if (typeof node === 'string') return node;\n  return React.createElement(components[node.type] ?? node.type, { ...node.props, key, ...(['SelectContent', 'MenuContent', 'DialogPortal'].includes(node.type) && typeof document !== 'undefined' ? { container: document.getElementById('root') } : {}) }, ...(node.children ?? []).map(render));\n}\nexport function App() { return render(tree, 0); }\n`;
 }
 
 function mainSource(): string {
@@ -175,7 +178,7 @@ function planFileChanges(rootDir: string, files: Record<string, string>): { chan
       continue;
     }
     const baseSha256 = tracked[relativePath];
-    if (relativePath !== PRESET_STATE_PATH && baseSha256 && baseSha256 !== previousSha256) {
+    if (relativePath !== PRESET_STATE_PATH && (!baseSha256 || baseSha256 !== previousSha256)) {
       return {
         changes: [],
         summary: [],
@@ -196,8 +199,14 @@ export function readProjectPreset(rootDir: string): { ok: true; state: PresetPro
   if (!existsSync(pathname)) return presetFailure('UIFN_PRESET_PROJECT_MISSING', 'No .uifn/preset.json was found in this project.');
   try {
     const parsed = JSON.parse(readFileSync(pathname, 'utf8')) as PresetProjectState;
+    if (!parsed || parsed.schemaVersion !== 1 || !parsed.preset ||
+        !APPROVED_SUPPORT_MATRIX.templates.includes(parsed.template) ||
+        !parsed.files || typeof parsed.files !== 'object' || Array.isArray(parsed.files) ||
+        Object.values(parsed.files).some(hash => typeof hash !== 'string' || !/^[a-f0-9]{64}$/.test(hash))) {
+      throw new UIFnPresetError('UIFN_PRESET_INVALID_JSON', 'Invalid managed preset state.');
+    }
     const preset = normalizePreset(parsed.preset);
-    const code = encodePreset(preset);
+    const code = typeof parsed.code === 'string' ? parsed.code : encodePreset(preset);
     return { ok: true, state: { schemaVersion: 1, code, preset, template: parsed.template ?? 'react-vite', files: parsed.files ?? {} } };
   } catch (cause) {
     if (cause instanceof UIFnPresetError) return presetFailure(cause.code, cause.message, cause.details);
@@ -213,20 +222,39 @@ export function resolveProjectPreset(rootDir: string) {
 }
 
 function mutate(options: PresetMutationOptions, mode: 'init' | 'apply'): PresetMutationResult {
-  const template = options.template ?? 'react-vite';
+  let template = options.template ?? 'react-vite';
+  const createdDirectories: string[] = [];
+  let succeeded = false;
   const only = options.only?.length ? options.only : undefined;
   try {
-    const preset = resolveInput(options);
+    let preset = resolveInput(options);
+    const rootDir = path.resolve(options.rootDir);
+    const hasState = existsSync(path.join(rootDir, PRESET_STATE_PATH));
+    let previous: PresetProjectState | undefined;
+    if (mode === 'apply' || hasState) {
+      const resolved = readProjectPreset(rootDir);
+      if (!resolved.ok) return { ...flag(resolved.error.code, resolved.error.message), dryRun: Boolean(options.dryRun) };
+      previous = resolved.state;
+      template = options.template ?? previous.template;
+    }
+    if (mode === 'apply' && only && previous) {
+      const incoming = preset;
+      preset = { ...previous.preset };
+      if (only.includes('font')) { preset.font = incoming.font; preset.headingFont = incoming.headingFont; }
+      if (only.includes('theme')) {
+        for (const field of ['style', 'baseColor', 'theme', 'chartColor', 'radius', 'density', 'menuTreatment'] as const) {
+          preset[field] = incoming[field] as never;
+        }
+      }
+    }
     assertApprovedInit(preset, template);
     const plan = compilePreset(preset, template);
-    const rootDir = path.resolve(options.rootDir);
     if (mode === 'init') {
       if (!existsSync(rootDir)) {
-        if (options.dryRun) {
-          const files = Object.keys(desiredFiles(plan, ['full'])).map((relativePath) => ({ path: relativePath, operation: 'create' as const }));
-          return { ok: true, dryRun: true, written: [], unchanged: [], plan: { code: plan.code, url: plan.url, files, artifacts: plan.preset.installMode === 'source' ? plan.project.artifacts : [], commands: plan.commands } };
+        if (!options.dryRun) {
+          for (let directory = rootDir; !existsSync(directory); directory = path.dirname(directory)) createdDirectories.push(directory);
+          mkdirSync(rootDir, { recursive: true });
         }
-        mkdirSync(rootDir, { recursive: true });
       } else if (readdirSync(rootDir).length > 0 && !existsSync(path.join(rootDir, PRESET_STATE_PATH))) {
         return flag('UIFN_PRESET_PROJECT_AMBIGUOUS', 'Refusing to initialize a non-empty directory that is not already a uifn preset project.');
       }
@@ -236,15 +264,16 @@ function mutate(options: PresetMutationOptions, mode: 'init' | 'apply'): PresetM
 
     const domains: Array<'full' | PartialPresetDomain> = mode === 'init' || !only ? ['full'] : only;
     const files = desiredFiles(plan, domains);
+    files[PRESET_STATE_PATH] = serializeState(plan, files, previous?.files);
 
     let artifactChanges: TransactionChange[] = [];
     let artifactFiles: Array<{ path: string; operation: 'create' | 'update' | 'unchanged' }> = [];
     if ((mode === 'init' || !only) && plan.preset.installMode === 'source') {
-      const installed = planInstall({ rootDir, artifacts: [...plan.project.artifacts], framework: plan.preset.framework });
+      const installed = planInstall({ rootDir, artifacts: [...plan.project.artifacts], framework: plan.preset.framework, allowMissingRoot: mode === 'init' && options.dryRun });
       if (!installed.ok) return { ok: false, dryRun: Boolean(options.dryRun), written: [], unchanged: [], error: installed.error };
       if (files['package.json']) {
         files['package.json'] = mergePackageDependencies(files['package.json'], installed.plan.dependencies);
-        files[PRESET_STATE_PATH] = serializeState(plan, files);
+        files[PRESET_STATE_PATH] = serializeState(plan, files, previous?.files);
       }
       artifactChanges = installed.plan.changes.filter((change) => change.path !== 'package.json');
       artifactFiles = installed.plan.files
@@ -262,6 +291,7 @@ function mutate(options: PresetMutationOptions, mode: 'init' | 'apply'): PresetM
 
     const committed = commitTransaction({ rootDir, changes: [...planned.changes, ...artifactChanges] }, { faultAfterWrites: options.faultAfterWrites });
     if (!committed.ok) return { ok: false, dryRun: false, written: [], unchanged: [], rolledBack: committed.rolledBack, error: committed.error };
+    succeeded = true;
     return {
       ok: true,
       dryRun: false,
@@ -272,6 +302,10 @@ function mutate(options: PresetMutationOptions, mode: 'init' | 'apply'): PresetM
   } catch (cause) {
     if (cause instanceof UIFnPresetError) return flag(cause.code, cause.message, cause.details);
     return flag('UIFN_REGISTRY_CLI_ERROR', cause instanceof Error ? cause.message : String(cause));
+  } finally {
+    if (!succeeded) for (const directory of createdDirectories) {
+      try { rmdirSync(directory); } catch { /* Preserve nonempty directories after incomplete rollback. */ }
+    }
   }
 }
 

@@ -54,3 +54,19 @@ Mutating commands plan first. Reapplying an identical preset is a no-op. Consume
 ## Compatibility
 
 V1 decoders must remain available for the life of schema version 1. Adding a field requires a new schema version, documented defaults, and a new code prefix.
+
+## Safe application and public previews
+
+Apply requires valid managed preset state. Existing files without a recorded base
+hash, and locally edited managed files, are conflicts. Partial apply retains all
+untouched hashes and merges only the selected theme or font axes. Theme includes
+style, color, chart, radius, density and menu tokens; font includes body and heading.
+A source-mode dry run lists the complete trusted registry plan without creating the
+project directory. Failed initialization removes only directories it created that
+are empty after rollback.
+
+Create and generated React apps render the same `presetFixtureTree` using public
+styled components and `@uifn/components/styles.css`. Source mode imports the same
+parts from registry-installed files. Fixture CSS owns layout only. Tests compare
+package/source rendered HTML and exercise the editor's actual public tabs.
+Visual baseline approval remains separate from functional parity and build checks.

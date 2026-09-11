@@ -38,7 +38,7 @@ button, select, input { font: inherit; }
 .layout {
   display: grid;
   grid-template-columns: 280px 1fr;
-  min-height: calc(100vh - 88px);
+  flex: 1;
 }
 
 .controls {
@@ -84,3 +84,5 @@ button, select, input { font: inherit; }
   .layout { grid-template-columns: 1fr; }
   .controls { border-right: 0; border-bottom: 1px solid #d7deea; }
 }
+
+#app { min-height: 100vh; display: flex; flex-direction: column; }

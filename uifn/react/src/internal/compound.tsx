@@ -466,7 +466,7 @@ function useDomOwnership<TInputs extends object>(bridge: ReactPrimitiveBridge<TI
           positioner: () => bridge.getElement('positioner'),
           arrow: () => bridge.getElement('arrow'),
           portalNode: bridge.getElement('portal') ?? bridge.getElement('positioner') ?? content,
-          portalManagedExternally: bridge.getElement('portal') !== null,
+          portalManagedExternally: bridge.getElement('portal') !== null || ['Select', 'Menu'].includes(bridge.definition.name),
           validateAccessibleName: true,
         }));
       }
@@ -482,7 +482,7 @@ function useDomOwnership<TInputs extends object>(bridge: ReactPrimitiveBridge<TI
           trigger,
           content,
           positioner: () => bridge.getElement('positioner'),
-          portalManagedExternally: bridge.getElement('portal') !== null,
+          portalManagedExternally: bridge.getElement('portal') !== null || ['Select', 'Menu'].includes(bridge.definition.name),
           getItemElement: (id) => bridge.getElement('item', id),
         }));
       }
@@ -521,7 +521,7 @@ function useDomOwnership<TInputs extends object>(bridge: ReactPrimitiveBridge<TI
           content: () => bridge.getElement('content'),
           positioner: () => bridge.getElement('positioner'),
           portalNode: bridge.getElement('portal') ?? bridge.getElement('positioner'),
-          portalManagedExternally: bridge.getElement('portal') !== null,
+          portalManagedExternally: bridge.getElement('portal') !== null || ['Select', 'Menu'].includes(bridge.definition.name),
           placement: 'bottom-start',
           matchReferenceWidth: ['Autocomplete', 'Combobox', 'Select'].includes(bridge.definition.name),
           getOpen: (state: Record<string, unknown>) => state.open === true,
@@ -748,7 +748,10 @@ export function ReactPrimitivePart({
     counters: bridge.getLifecycleCounters(),
     bridge,
   });
-  return part === 'portal' ? <Portal container={container}>{rendered}</Portal> : rendered;
+  // These compounds have no Portal part. React must own their popup portal so
+  // delegated events continue to reach the root after the popup opens.
+  const automaticPortal = part === 'content' && ['Select', 'Menu'].includes(definition.name);
+  return part === 'portal' || automaticPortal ? <Portal container={container}>{rendered}</Portal> : rendered;
 }
 
 export function useReactPrimitive<TInputs extends object>(

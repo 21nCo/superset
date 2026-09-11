@@ -1,11 +1,3 @@
 import { defineConfig } from 'vitest/config';
-import path from 'node:path';
-
-export default defineConfig({
-  test: { environment: 'node' },
-  resolve: {
-    alias: {
-      '@uifn/registry/preset': path.resolve(__dirname, '../registry/src/preset/index.ts'),
-    },
-  },
-});
+import { aliases } from './aliases';
+export default defineConfig({ define: { __UIFN_DEV_TRACE__: "false" }, resolve: { alias: aliases }, test: { environment: 'node' } });

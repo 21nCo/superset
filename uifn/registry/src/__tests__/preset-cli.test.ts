@@ -5,7 +5,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runCli } from '../cli';
 import { encodePreset, normalizePreset } from '../preset';
-import { applyPreset, initProject } from '../preset/project';
+import { applyPreset, initProject, readProjectPreset } from '../preset/project';
 
 function snapshot(rootDir: string): string {
   const entries: string[] = [];
@@ -129,4 +129,65 @@ describe('preset CLI and project workflows', () => {
       expect(committed.plan?.artifacts).toEqual(expect.arrayContaining(['button']));
     });
   });
+  it('rejects unmanaged collisions without changing any bytes', async () => {
+    await withProject(rootDir => {
+      writeFileSync(path.join(rootDir, 'package.json'), '{"name":"consumer"}');
+      const before = snapshot(rootDir);
+      expect(applyPreset({ rootDir, preset: code }).ok).toBe(false);
+      expect(snapshot(rootDir)).toBe(before);
+    });
+  });
+
+  it('retains untouched ownership and isolates theme from font changes', async () => {
+    await withProject(rootDir => {
+      expect(initProject({ rootDir, preset: code }).ok).toBe(true);
+      const old = readProjectPreset(rootDir);
+      if (!old.ok) throw new Error('Missing state');
+      const incoming = encodePreset({ font: 'literata', radius: 'xl', baseColor: 'mauve', framework: 'solid' });
+      expect(applyPreset({ rootDir, preset: incoming, only: ['font'] }).ok).toBe(true);
+      const next = readProjectPreset(rootDir);
+      if (!next.ok) throw new Error('Missing state');
+      expect(next.state.preset).toEqual({ ...old.state.preset, font: 'literata', headingFont: 'inherit' });
+      expect(next.state.files['src/App.tsx']).toBe(old.state.files['src/App.tsx']);
+      writeFileSync(path.join(rootDir, 'src/App.tsx'), '// consumer edit');
+      const before = snapshot(rootDir);
+      expect(applyPreset({ rootDir, preset: code }).ok).toBe(false);
+      expect(snapshot(rootDir)).toBe(before);
+      expect(applyPreset({ rootDir, preset: incoming, only: ['theme'] }).ok).toBe(true);
+      const final = readProjectPreset(rootDir);
+      expect(final.ok && final.state.preset.font).toBe('literata');
+      expect(final.ok && final.state.preset.framework).toBe('react');
+    });
+  });
+
+  it('removes a newly created root after rollback', async () => {
+    await withProject(parent => {
+      const rootDir = path.join(parent, 'new', 'app');
+      expect(initProject({ rootDir, preset: code, faultAfterWrites: 1 }).ok).toBe(false);
+      expect(existsSync(rootDir)).toBe(false);
+      expect(existsSync(path.join(parent, 'new'))).toBe(false);
+    });
+  });
+
+  it.each([['apply', '--only'], ['init', '--dir']])('rejects missing flag values: %j', async (...args) => {
+    await withProject(async rootDir => {
+      const result = await runCli([args[0], '--preset', code, args[1]], { cwd: rootDir, stdout: () => {}, stderr: () => {} });
+      expect(result.exitCode).not.toBe(0);
+      expect(readdirSync(rootDir)).toEqual([]);
+    });
+  });
+
+  it('plans all source files for a missing root without creating it', async () => {
+    await withProject(parent => {
+      const rootDir = path.join(parent, 'source-preview');
+      const preset = encodePreset({ installMode: 'source' });
+      const dry = initProject({ rootDir, preset, dryRun: true });
+      expect(dry.ok).toBe(true);
+      expect(existsSync(rootDir)).toBe(false);
+      const committed = initProject({ rootDir, preset });
+      expect(committed.ok).toBe(true);
+      expect(dry.plan?.files).toEqual(committed.plan?.files);
+    });
+  });
+
 });

@@ -42,9 +42,7 @@ export function pairwisePresets(): UIFnPresetV1[] {
       candidate[axis] = best as never;
     }
     const preset = normalizePreset(candidate);
-    const before = uncovered.size;
     for (const pair of coveredPairs(preset)) uncovered.delete(pair);
-    if (uncovered.size === before) uncovered.delete(seed);
     rows.push(preset);
   }
   return rows;

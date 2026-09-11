@@ -1,13 +1,3 @@
 import { defineConfig } from 'vite';
-import path from 'node:path';
-
-export default defineConfig({
-  resolve: {
-    alias: {
-      '@uifn/registry/preset': path.resolve(__dirname, '../registry/src/preset/index.ts'),
-    },
-  },
-  server: {
-    port: 4177,
-  },
-});
+import { aliases } from './aliases';
+export default defineConfig({ define: { __UIFN_DEV_TRACE__: "false" }, resolve: { alias: aliases }, server: { port: 4177 } });

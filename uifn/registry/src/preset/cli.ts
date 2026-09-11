@@ -11,12 +11,15 @@ function kebabToCamel(value: string): string {
 }
 
 function presetFromFlags(flags: Record<string, string | boolean>, extra?: string): ReturnType<typeof normalizePreset> {
+  if (flags['from-json'] !== undefined && typeof flags['from-json'] !== 'string') throw new UIFnPresetError('UIFN_PRESET_USAGE', '--from-json requires a value.');
+  if (extra !== undefined && !extra.startsWith('{')) throw new UIFnPresetError('UIFN_PRESET_USAGE', 'Expected a JSON preset object.');
   if (typeof flags['from-json'] === 'string') return parsePresetJson(flags['from-json']);
   if (extra?.startsWith('{')) return parsePresetJson(extra);
   const input: UIFnPresetInput = {};
   for (const field of PRESET_FIELD_ORDER) {
     const kebab = field.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
     const value = flags[field] ?? flags[kebab] ?? flags[kebabToCamel(kebab)];
+    if (value !== undefined && typeof value !== 'string') throw new UIFnPresetError('UIFN_PRESET_USAGE', `--${kebab} requires a value.`);
     if (typeof value === 'string') input[field] = value as never;
   }
   return normalizePreset(input);
@@ -29,7 +32,7 @@ export function runPresetCommand(options: {
   rootDir: string;
   dryRun: boolean;
 }): { ok: boolean; [key: string]: unknown } {
-  const { action, positionals, flags, rootDir, dryRun } = options;
+  const { action, positionals, flags, rootDir } = options;
   try {
     if (action === 'encode') {
       const preset = presetFromFlags(flags, positionals[0]);
@@ -75,6 +78,7 @@ export function runInitCommand(options: {
 }): ReturnType<typeof initProject> {
   const code = typeof options.flags.preset === 'string' ? options.flags.preset : '';
   if (!code) return { ok: false, dryRun: options.dryRun, written: [], unchanged: [], error: { code: 'UIFN_PRESET_USAGE', message: 'Usage: uifn init --preset <code> [--dir <path>] [--template react-vite] [--dry-run]' } };
+  if (options.flags.dir !== undefined && (typeof options.flags.dir !== 'string' || !options.flags.dir.trim())) return { ok: false, dryRun: options.dryRun, written: [], unchanged: [], error: { code: 'UIFN_PRESET_USAGE', message: '--dir requires a path.' } };
   const rootDir = typeof options.flags.dir === 'string' ? path.resolve(options.rootDir, options.flags.dir) : options.rootDir;
   return initProject({
     rootDir,
@@ -91,6 +95,7 @@ export function runApplyCommand(options: {
 }): ReturnType<typeof applyPreset> {
   const code = typeof options.flags.preset === 'string' ? options.flags.preset : '';
   if (!code) return { ok: false, dryRun: options.dryRun, written: [], unchanged: [], error: { code: 'UIFN_PRESET_USAGE', message: 'Usage: uifn apply --preset <code> [--only theme,font] [--dry-run]' } };
+  if (options.flags.only !== undefined && (typeof options.flags.only !== 'string' || !options.flags.only.trim() || options.flags.only.split(',').some(value => !value.trim()))) return { ok: false, dryRun: options.dryRun, written: [], unchanged: [], error: { code: 'UIFN_PRESET_USAGE', message: '--only requires theme and/or font.' } };
   const only = typeof options.flags.only === 'string' ? options.flags.only.split(',').map((value) => value.trim()).filter(Boolean) as PartialPresetDomain[] : undefined;
   return applyPreset({ rootDir: options.rootDir, preset: code, dryRun: options.dryRun, only });
 }

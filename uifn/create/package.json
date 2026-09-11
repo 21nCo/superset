@@ -19,5 +19,11 @@
     "status": "tooling",
     "layer": "create",
     "sourcePolicy": "clean-room"
+  },
+  "dependencies": {
+    "@uifn/components-react": "0.0.1",
+    "@uifn/components": "0.0.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   }
 }

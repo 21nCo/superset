@@ -1,3 +1,48 @@
+import * as React from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import '@uifn/components/styles.css';
+import { ButtonRoot } from '@uifn/components-react/button';
+import { CardRoot } from '@uifn/components-react/card';
+import { CardHeader } from '@uifn/components-react/card';
+import { CardTitle } from '@uifn/components-react/card';
+import { CardContent } from '@uifn/components-react/card';
+import { FieldRoot } from '@uifn/components-react/field';
+import { FieldLabel } from '@uifn/components-react/field';
+import { SelectRoot } from '@uifn/components-react/select';
+import { SelectLabel } from '@uifn/components-react/select';
+import { SelectTrigger } from '@uifn/components-react/select';
+import { SelectValueText } from '@uifn/components-react/select';
+import { SelectContent } from '@uifn/components-react/select';
+import { SelectItem } from '@uifn/components-react/select';
+import { InputRoot } from '@uifn/components-react/input';
+import { CheckboxRoot } from '@uifn/components-react/checkbox';
+import { CheckboxControl } from '@uifn/components-react/checkbox';
+import { CheckboxLabel } from '@uifn/components-react/checkbox';
+import { SwitchRoot } from '@uifn/components-react/switch';
+import { SwitchControl } from '@uifn/components-react/switch';
+import { SwitchThumb } from '@uifn/components-react/switch';
+import { SwitchLabel } from '@uifn/components-react/switch';
+import { TabsRoot } from '@uifn/components-react/tabs';
+import { TabsList } from '@uifn/components-react/tabs';
+import { TabsTrigger } from '@uifn/components-react/tabs';
+import { TabsContent } from '@uifn/components-react/tabs';
+import { MenuRoot } from '@uifn/components-react/menu';
+import { MenuTrigger } from '@uifn/components-react/menu';
+import { MenuContent } from '@uifn/components-react/menu';
+import { MenuItem } from '@uifn/components-react/menu';
+import { DialogPortal } from '@uifn/components-react/dialog';
+import { DialogRoot } from '@uifn/components-react/dialog';
+import { DialogTrigger } from '@uifn/components-react/dialog';
+import { DialogContent } from '@uifn/components-react/dialog';
+import { DialogTitle } from '@uifn/components-react/dialog';
+import { DialogClose } from '@uifn/components-react/dialog';
+import { TableRoot } from '@uifn/components-react/table';
+import { TableTable } from '@uifn/components-react/table';
+import { TableHeader } from '@uifn/components-react/table';
+import { TableBody } from '@uifn/components-react/table';
+import { TableRow } from '@uifn/components-react/table';
+import { TableHead } from '@uifn/components-react/table';
+import { TableCell } from '@uifn/components-react/table';
 import {
   PRESET_AXES,
   PRESET_AXIS_LABELS,
@@ -6,7 +51,8 @@ import {
   compilePreset,
   encodePreset,
   fixtureCss,
-  fixtureMarkup,
+  presetFixtureTree,
+  type PresetFixtureNode,
   normalizePreset,
   presetFromUrl,
   randomPreset,
@@ -14,6 +60,13 @@ import {
   type PresetAxis,
   type UIFnPresetV1,
 } from '@uifn/registry/preset';
+
+const components: Record<string, React.ElementType> = { ButtonRoot, CardRoot, CardHeader, CardTitle, CardContent, FieldRoot, FieldLabel, SelectRoot, SelectLabel, SelectTrigger, SelectValueText, SelectContent, SelectItem, InputRoot, CheckboxRoot, CheckboxControl, CheckboxLabel, SwitchRoot, SwitchControl, SwitchThumb, SwitchLabel, TabsRoot, TabsList, TabsTrigger, TabsContent, MenuRoot, MenuTrigger, MenuContent, MenuItem, DialogRoot, DialogPortal, DialogTrigger, DialogContent, DialogTitle, DialogClose, TableRoot, TableTable, TableHeader, TableBody, TableRow, TableHead, TableCell };
+let preview: Root | undefined;
+export function renderFixture(node: PresetFixtureNode | string, key: number): React.ReactNode {
+  if (typeof node === 'string') return node;
+  return React.createElement(components[node.type] ?? node.type, { ...node.props, key, ...(['SelectContent', 'MenuContent', 'DialogPortal'].includes(node.type) ? { container: document.querySelector('.preview-root') } : {}) }, ...(node.children ?? []).map(renderFixture));
+}
 
 const VIEWPORTS = {
   desktop: 1120,
@@ -45,6 +98,7 @@ function render(preset: UIFnPresetV1, locked: Set<PresetAxis>, mode: 'light' | '
   const tokens = themeTokenDocument(preset);
   const app = document.querySelector('#app');
   if (!app) return;
+  preview?.unmount();
   app.innerHTML = `
     <header class="shell-header">
       <div>
@@ -72,8 +126,8 @@ function render(preset: UIFnPresetV1, locked: Set<PresetAxis>, mode: 'light' | '
           </div>
         </div>
         <div class="preview-frame" data-mode="${mode}" style="width:${VIEWPORTS[viewport]}px">
-          <style>${plan.css.light}${plan.css.dark}${fixtureCss()}</style>
-          <div class="preview-root" data-uifn-mode="${mode}">${fixtureMarkup(plan)}</div>
+          <style>${plan.css.fonts}${plan.css.light}${plan.css.dark}${fixtureCss()}</style>
+          <div class="preview-root" data-uifn-mode="${mode}"></div>
         </div>
         <section class="outputs">
           <article>
@@ -92,7 +146,7 @@ function render(preset: UIFnPresetV1, locked: Set<PresetAxis>, mode: 'light' | '
           </article>
           <article>
             <h2>Theme tokens</h2>
-            <pre><code>${JSON.stringify(tokens.light, null, 2)}</code></pre>
+            <pre><code>${JSON.stringify(tokens, null, 2)}</code></pre>
           </article>
         </section>
       </section>
@@ -100,6 +154,8 @@ function render(preset: UIFnPresetV1, locked: Set<PresetAxis>, mode: 'light' | '
   `;
   const previewRoot = app.querySelector('.preview-root') as HTMLElement | null;
   if (previewRoot) {
+    preview = createRoot(previewRoot);
+    preview.render(renderFixture(presetFixtureTree(plan), 0));
     const vars = mode === 'dark' ? plan.theme.darkVars : plan.theme.lightVars;
     Object.entries(vars).forEach(([name, value]) => previewRoot.style.setProperty(name, String(value)));
     previewRoot.style.background = vars['--uifn-color-surface-canvas'];
@@ -146,7 +202,7 @@ function boot() {
     if (nextViewport) { viewport = nextViewport; paint(); }
     if (action === 'random') { preset = randomPreset({ seed: Date.now(), locks: Object.fromEntries([...locked].map((axis) => [axis, true])), base: preset }); paint(); }
     if (action === 'copy-code') await navigator.clipboard?.writeText(encodePreset(preset));
-    if (action === 'copy-url') await navigator.clipboard?.writeText(`${window.location.origin}${window.location.pathname}?preset=${encodePreset(preset)}`);
+    if (action === 'copy-url') await navigator.clipboard?.writeText(compilePreset(preset).url);
   });
 }
 

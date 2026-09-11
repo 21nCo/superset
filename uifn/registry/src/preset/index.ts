@@ -21,4 +21,6 @@ export { presetFromUrl, presetShareUrl } from './url';
 export { hashSeed, randomPreset, type PresetLocks } from './random';
 export { compilePreset, themeTokenDocument, type PresetCompilePlan } from './compiler';
 export { pairwiseCoverageCount, pairwisePresets } from './pairwise';
-export { fixtureCss, fixtureMarkup } from './fixtures';
+export { fixtureCss } from './fixtures';
+
+export { presetFixtureTree, PRESET_FIXTURE_COMPONENTS, type PresetFixtureNode } from './fixture-tree';

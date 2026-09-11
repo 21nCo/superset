@@ -69,6 +69,7 @@ function assertAxisValue<K extends PresetAxis>(axis: K, value: unknown): (typeof
 }
 
 export function normalizePreset(input: UIFnPresetInput | UIFnPresetV1 = {}): UIFnPresetV1 {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new UIFnPresetError('UIFN_PRESET_INVALID_JSON', 'Preset must be an object.');
   if (input && typeof input === 'object') {
     for (const key of Object.keys(input)) {
       if (key === 'version') continue;
@@ -77,7 +78,7 @@ export function normalizePreset(input: UIFnPresetInput | UIFnPresetV1 = {}): UIF
       }
     }
   }
-  const version = input.version ?? PRESET_SCHEMA_VERSION;
+  const version = input.version === undefined ? PRESET_SCHEMA_VERSION : input.version;
   if (version !== PRESET_SCHEMA_VERSION) {
     throw new UIFnPresetError('UIFN_PRESET_UNSUPPORTED_VERSION', `Unsupported preset schema version: ${version}.`, {
       version,
@@ -104,12 +105,14 @@ export function encodePreset(input: UIFnPresetInput | UIFnPresetV1 = {}): string
 }
 
 export function decodePreset(code: string): UIFnPresetV1 {
+  const prefix = typeof code === 'string' ? /^uifn(\d+)_/.exec(code) : null;
+  if (prefix && prefix[1] !== '1') throw new UIFnPresetError('UIFN_PRESET_UNSUPPORTED_VERSION', `Unsupported preset code version: ${prefix[1]}.`);
   if (typeof code !== 'string' || !code.startsWith(PRESET_CODE_PREFIX)) {
     throw new UIFnPresetError('UIFN_PRESET_CODE_INVALID', 'Preset code is missing the uifn1_ version prefix.');
   }
   const bytes = fromBase64Url(code.slice(PRESET_CODE_PREFIX.length));
-  if (bytes.length < PRESET_FIELD_ORDER.length + 2) {
-    throw new UIFnPresetError('UIFN_PRESET_CODE_INVALID', 'Preset code is truncated.');
+  if (bytes.length !== PRESET_FIELD_ORDER.length + 2 || toBase64Url(bytes) !== code.slice(PRESET_CODE_PREFIX.length)) {
+    throw new UIFnPresetError('UIFN_PRESET_CODE_INVALID', 'Preset code has invalid framing or noncanonical base64.');
   }
   const payload = bytes.slice(0, PRESET_FIELD_ORDER.length + 1);
   const checksum = bytes[payload.length];

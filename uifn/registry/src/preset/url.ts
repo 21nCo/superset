@@ -12,6 +12,7 @@ export function presetShareUrl(input: UIFnPresetInput | UIFnPresetV1 | string, o
 }
 
 export function presetFromUrl(value: string): UIFnPresetV1 {
+  if (value.startsWith('#preset=')) return decodePreset(value.slice('#preset='.length));
   try {
     const url = new URL(value);
     const code = url.searchParams.get('preset') ?? url.searchParams.get('p') ?? url.hash.replace(/^#preset=/, '');
