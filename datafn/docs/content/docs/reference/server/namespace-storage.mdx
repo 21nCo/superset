@@ -24,7 +24,7 @@ Validates the installed PostgreSQL schema against the logical manifest and retur
 
 ```typescript
 function inspectPostgresNamespaceStorage(
-  query: (sql: string) => Promise<readonly { table_name: string; column_name: string }[]>,
+  query: PostgresNamespaceStorageQuery,
 ): Promise<NamespaceStorageCatalog>;
 ```
 
@@ -58,3 +58,18 @@ Drains permission-directory outbox rows for one namespace without touching other
 ## composeNamespaceStoragePlan
 
 Adds application-owned relations. DataFn does not claim those tables. Collisions with DataFn relations throw `DATAFN_NAMESPACE_STORAGE_INVALID`.
+
+### Installed-schema and drain guarantees
+
+Catalog inspection reads both columns and valid, non-partial PostgreSQL indexes.
+A supplied catalog must include index metadata: namespace-only table stubs are
+rejected. Plans require operational columns, canonical generated physical column
+names, and a primary row identity on `id` or `(namespace selector, id)`.
+Expression/partial/invalid indexes cannot certify that identity. Custom physical
+mappings outside these conventions fail closed instead of producing a partial plan.
+This is structural validation, not a live tenant-migration rehearsal.
+
+Namespace draining respects unexpired pre-commit and retry leases. `pending` is
+an existence indicator (0 or 1), including rows still owned by active mutations;
+never treat `processed: 0` as proof of quiescence. Fence new writes, settle active
+writers, and retry until pending is zero before copying or cleaning up storage.

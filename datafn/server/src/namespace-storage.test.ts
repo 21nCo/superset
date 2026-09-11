@@ -3,6 +3,8 @@ import {
   DATAFN_NAMESPACE_STORAGE_MANIFEST_VERSION,
   DATAFN_NAMESPACE_STORAGE_SCHEMA_VERSION,
   defineSchema,
+  getCapabilityFields,
+  resolveCapabilities,
   type DatafnSchema,
 } from "@datafn/core";
 import {
@@ -21,6 +23,7 @@ import {
 import {
   DatafnNamespaceStorageError,
   POSTGRES_NAMESPACE_STORAGE_CATALOG_SQL,
+  POSTGRES_NAMESPACE_STORAGE_INDEX_SQL,
   assertInternalNamespaceStorageMetadataComplete,
   composeNamespaceStoragePlan,
   drainNamespaceStorage,
@@ -65,31 +68,21 @@ function relation(
   name: string,
   columns: readonly string[],
 ): NamespaceStorageCatalog["relations"][number] {
-  return { name, columns };
+  return { name, columns, indexes: [{ columns: ["id"], unique: true, primary: true }] };
 }
 
 function installedCatalog(extra: NamespaceStorageCatalog["relations"] = []): NamespaceStorageCatalog {
   return {
     dialect: "postgres",
     relations: [
-      relation("tasks", ["id", "title", "__ns"]),
+      relation("tasks", ["id", "title", "__ns", ...getCapabilityFields(resolveCapabilities(undefined, ["timestamps", "audit", { shareable: { levels: ["viewer", "editor", "owner"], default: "private" } }])).map((field) => field.name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase())]),
       relation("projects", ["id", "name", "__ns"]),
-      relation("__datafn_join_projects_projectTasks", ["from_id", "to_id", "__ns"]),
-      relation("__datafn_permissions_global", ["id", "resourceType", "__ns"]),
-      relation("__datafn_permissions_tasks", ["id", "userId", "__ns"]),
-      relation("__datafn_principal_memberships", ["id", "namespace", "actorId", "__ns"]),
-      relation("__datafn_principal_hierarchy", ["id", "namespace", "principalId", "__ns"]),
-      relation("__datafn_meta", ["id", "namespace", "next_server_seq"]),
-      relation("__datafn_changes", ["id", "namespace", "server_seq", "resource"]),
-      relation("__datafn_idempotency", ["id", "namespace", "client_id", "mutation_id"]),
-      relation("__datafn_seed", ["id", "namespace", "seed_id"]),
-      relation("__datafn_permission_directory_outbox", [
-        "id",
-        "namespace",
-        "region_id",
-        "mutation",
-        "next_attempt_at",
-      ]),
+      relation("__datafn_join_projects_projectTasks", ["id", "from", "to", "__ns"]),
+      relation("__datafn_permissions_global", ["id", "resource_type", "resource_ns", "resource_id", "principal_id", "level", "grant_kind", "source_ref", "granted_by", "granted_at", "revoked_at", "__ns"]),
+      relation("__datafn_permissions_tasks", ["id", "resource_id", "user_id", "level", "granted_by", "granted_at", "revoked_at", "__ns"]),
+      relation("__datafn_principal_memberships", ["id", "namespace", "actor_id", "principal_id", "granted_at", "revoked_at", "__ns"]),
+      relation("__datafn_principal_hierarchy", ["id", "namespace", "principal_id", "parent_principal_id", "created_at", "revoked_at", "__ns"]),
+      ...Object.entries(INTERNAL_TABLE_SCHEMAS).map(([name, columns]) => relation(name, columns.map((column) => column.name))),
       relation("workspaces", ["id", "workspace_id", "name"]),
       ...extra,
     ],
@@ -211,6 +204,20 @@ describe("resolveNamespaceStoragePlan", () => {
     ).toThrow(/missing selector column "namespace"/);
   });
 
+  it("rejects missing operational columns and missing or insufficient uniqueness", () => {
+    for (const name of ["tasks", "__datafn_permission_directory_outbox"]) {
+      const catalog = installedCatalog();
+      const relations = catalog.relations.map((entry) => entry.name === name
+        ? { ...entry, columns: [name === "tasks" ? "__ns" : "namespace"] } : entry);
+      expect(() => resolveNamespaceStoragePlan({ schema, catalog: { ...catalog, relations } })).toThrow("missing required columns");
+    }
+    for (const indexes of [undefined, [], [{ columns: ["id"], unique: false }], [{ columns: ["id", "title"], unique: true, primary: true }]]) {
+      const catalog = installedCatalog();
+      const relations = catalog.relations.map((entry) => entry.name === "tasks" ? { ...entry, indexes } : entry);
+      expect(() => resolveNamespaceStoragePlan({ schema, catalog: { ...catalog, relations } })).toThrow("unique identity index");
+    }
+  });
+
   it("rejects unsupported schema and manifest versions instead of a partial plan", () => {
     expect(() =>
       resolveNamespaceStoragePlan({
@@ -249,7 +256,7 @@ describe("resolveNamespaceStoragePlan", () => {
       dialect: "postgres",
       relations: [
         relation("projects", ["id", "name", "__ns"]),
-        relation("__datafn_join_projects_projectTasks", ["from_id", "to_id", "__ns"]),
+        relation("__datafn_join_projects_projectTasks", ["id", "from", "to", "__ns"]),
       ],
     };
     expect(() => resolveNamespaceStoragePlan({ schema, catalog })).toThrow(
@@ -270,9 +277,9 @@ describe("resolveNamespaceStoragePlan", () => {
     const catalog: NamespaceStorageCatalog = {
       dialect: "postgres",
       relations: [
-        relation("tasks", ["id", "title", "__ns"]),
+        relation("tasks", ["id", "title", "__ns", ...getCapabilityFields(resolveCapabilities(undefined, ["timestamps", "audit", { shareable: { levels: ["viewer", "editor", "owner"], default: "private" } }])).map((field) => field.name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase())]),
         relation("projects", ["id", "name", "__ns"]),
-        relation("__datafn_join_projects_projectTasks", ["from_id", "to_id", "__ns"]),
+        relation("__datafn_join_projects_projectTasks", ["id", "from", "to", "__ns"]),
       ],
     };
     const plan = resolveNamespaceStoragePlan({ schema, catalog });
@@ -306,6 +313,10 @@ describe("inspectPostgresNamespaceStorage", () => {
   it("maps information_schema rows through DataFn-owned SQL", async () => {
     expect(POSTGRES_NAMESPACE_STORAGE_CATALOG_SQL).toContain("information_schema.columns");
     const catalog = await inspectPostgresNamespaceStorage(async (sql) => {
+      if (sql === POSTGRES_NAMESPACE_STORAGE_INDEX_SQL) return [
+        { table_name: "tasks", index_columns: ["__ns", "id"], index_unique: true, index_primary: true, primary: true },
+        { table_name: "__datafn_meta", index_columns: ["id"], index_unique: true, index_primary: true, primary: true },
+      ];
       expect(sql).toBe(POSTGRES_NAMESPACE_STORAGE_CATALOG_SQL);
       return [
         { table_name: "tasks", column_name: "id" },
@@ -317,8 +328,8 @@ describe("inspectPostgresNamespaceStorage", () => {
     expect(catalog).toEqual({
       dialect: "postgres",
       relations: [
-        { name: "__datafn_meta", columns: ["id", "namespace"] },
-        { name: "tasks", columns: ["id", "__ns"] },
+        { name: "__datafn_meta", columns: ["id", "namespace"], indexes: [{ columns: ["id"], unique: true, primary: true }] },
+        { name: "tasks", columns: ["id", "__ns"], indexes: [{ columns: ["__ns", "id"], unique: true, primary: true }] },
       ],
     });
   });
@@ -335,6 +346,21 @@ describe("quotePostgresIdentifier", () => {
 });
 
 describe("drainNamespaceStorage", () => {
+  it("preserves active pre-commit leases and reports the namespace as pending", async () => {
+    const adapter = memoryAdapter();
+    await adapter.initialize();
+    const runtime = { regionId: "region:test", directory: createMemoryIndexedDirectoryStore() };
+    await enqueuePermissionDirectorySync(adapter, {
+      operation: "unshare", resource: "tasks", id: "task:leased", scope: "record",
+      shareWith: { principalId: "user:a" },
+    }, "tenant:a", runtime.regionId, { pending: true });
+    const before = await adapter.internal.findMany("__datafn_permission_directory_outbox", []);
+    const plan = resolveNamespaceStoragePlan({ schema, catalog: installedCatalog() });
+    await expect(drainNamespaceStorage({ adapter, plan, namespace: "tenant:a", runtime }))
+      .resolves.toEqual({ processed: 0, pending: 1 });
+    expect(await adapter.internal.findMany("__datafn_permission_directory_outbox", [])).toEqual(before);
+  });
+
   it("drains the permission-directory outbox for one namespace without touching another", async () => {
     const adapter = memoryAdapter();
     await adapter.initialize();

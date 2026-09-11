@@ -118,6 +118,7 @@ export {
 export {
   DatafnNamespaceStorageError,
   POSTGRES_NAMESPACE_STORAGE_CATALOG_SQL,
+  POSTGRES_NAMESPACE_STORAGE_INDEX_SQL,
   assertInternalNamespaceStorageMetadataComplete,
   composeNamespaceStoragePlan,
   drainNamespaceStorage,

@@ -420,12 +420,13 @@ export async function drainNamespacePermissionDirectoryOutbox(
     const tasks = await db.internal.findMany(OUTBOX_TABLE, [
       { field: "namespace", op: "eq", value: namespace },
       { field: "region_id", op: "eq", value: runtime.regionId },
+      { field: "next_attempt_at", op: "lte", value: new Date().toISOString() },
     ], {
       orderBy: "next_attempt_at",
       limit,
     });
     if (tasks.length === 0) {
-      return { processed, pending: 0 };
+      break;
     }
     let roundProcessed = 0;
     for (const task of tasks) {

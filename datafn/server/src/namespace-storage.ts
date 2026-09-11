@@ -11,6 +11,7 @@ import {
   DATAFN_NAMESPACE_STORAGE_SCHEMA_VERSION,
   assertSupportedNamespaceStorageVersions,
   getRelationJoinTableName,
+  getCapabilityFields,
   isNamespaced,
   namespaceStorageManifestEntry,
   resolveCapabilities,
@@ -100,6 +101,8 @@ export class DatafnNamespaceStorageError extends Error {
 export interface NamespaceStorageCatalogRelation {
   readonly name: string;
   readonly columns: readonly string[];
+  /** Valid, non-partial indexes, with expression and INCLUDE columns excluded. */
+  readonly indexes?: readonly { columns: readonly string[]; unique: boolean; primary?: boolean }[];
 }
 
 export interface NamespaceStorageCatalog {
@@ -137,6 +140,7 @@ type PlannedRelation = {
   logicalRole: NamespaceStorageLogicalRole;
   relation: string;
   copyOrder: number;
+  requiredColumns?: readonly string[];
 };
 
 function fail(
@@ -169,6 +173,7 @@ function catalogByName(
 ): Map<string, NamespaceStorageCatalogRelation> {
   const map = new Map<string, NamespaceStorageCatalogRelation>();
   for (const relation of catalog.relations) {
+    if (map.has(relation.name)) fail("DATAFN_NAMESPACE_STORAGE_INVALID", "Duplicate catalog relation.");
     map.set(relation.name, relation);
   }
   return map;
@@ -200,6 +205,9 @@ function schemaDerivedRelations(schema: DatafnSchema): PlannedRelation[] {
     planned.push({
       logicalRole: "resource",
       relation: resource.name,
+      requiredColumns: ["id", ...resource.fields.map((field) => field.name),
+        ...getCapabilityFields(resolveCapabilities(schema.capabilities, resource.capabilities)).map((field) => field.name)
+      ].map(physicalColumn),
       copyOrder: resourceRole.copyOrder + index,
     });
   });
@@ -214,6 +222,8 @@ function schemaDerivedRelations(schema: DatafnSchema): PlannedRelation[] {
     planned.push({
       logicalRole: "join",
       relation: table,
+      requiredColumns: ["id", relation.joinColumns?.from ?? "from", relation.joinColumns?.to ?? "to",
+        ...(relation.metadata ?? []).map((field) => field.name)].map(physicalColumn),
       copyOrder: joinRole.copyOrder + joinTables.size,
     });
   }
@@ -247,6 +257,17 @@ function sharingPlannedRelations(): PlannedRelation[] {
   }));
 }
 
+function physicalColumn(name: string): string {
+  return name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
+}
+
+const SHARING_REQUIRED_COLUMNS: Record<string, readonly string[]> = {
+  permissions_global: ["id", "resource_type", "resource_ns", "resource_id", "principal_id", "level", "grant_kind", "source_ref", "granted_by", "granted_at", "revoked_at"],
+  permissions_legacy: ["id", "resource_id", "user_id", "level", "granted_by", "granted_at", "revoked_at"],
+  principal_memberships: ["id", "namespace", "actor_id", "principal_id", "granted_at", "revoked_at"],
+  principal_hierarchy: ["id", "namespace", "principal_id", "parent_principal_id", "created_at", "revoked_at"],
+};
+
 function toEntry(
   planned: PlannedRelation,
   catalog: Map<string, NamespaceStorageCatalogRelation>,
@@ -275,6 +296,20 @@ function toEntry(
         columns: relation.columns,
       },
     );
+  }
+  const required = planned.requiredColumns
+    ?? INTERNAL_TABLE_SCHEMAS[planned.relation]?.map((column) => column.name)
+    ?? SHARING_REQUIRED_COLUMNS[planned.logicalRole] ?? ["id"];
+  const missing = required.filter((column) => !hasColumn(relation, column));
+  if (missing.length > 0) {
+    fail("DATAFN_NAMESPACE_STORAGE_INCOMPLETE", `Relation "${planned.relation}" is missing required columns: ${missing.join(", ")}.`);
+  }
+  // Tenant operations require a stable unique row identity. An arbitrary index,
+  // partial index or unique key with additional columns does not establish it.
+  const hasIdentity = relation.indexes?.some((index) => index.unique && index.primary === true &&
+    index.columns.includes("id") && index.columns.every((column) => column === "id" || column === namespaceColumn));
+  if (!hasIdentity) {
+    fail("DATAFN_NAMESPACE_STORAGE_INCOMPLETE", `Relation "${planned.relation}" is missing a validated unique identity index.`);
   }
   return {
     logicalRole: planned.logicalRole,
@@ -437,16 +472,40 @@ export function composeNamespaceStoragePlan(
   return { ...plan, entries: composed };
 }
 
+export const POSTGRES_NAMESPACE_STORAGE_INDEX_SQL = `
+SELECT t.relname AS table_name,
+       array_agg(a.attname ORDER BY k.ordinality) AS index_columns,
+       i.indisunique AS index_unique, i.indisprimary AS index_primary
+  FROM pg_index i
+  JOIN pg_class t ON t.oid = i.indrelid
+  JOIN pg_namespace n ON n.oid = t.relnamespace
+  CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ordinality)
+  LEFT JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum
+ WHERE n.nspname = current_schema() AND i.indisvalid AND i.indisready
+   AND i.indpred IS NULL AND i.indexprs IS NULL
+   AND k.ordinality <= i.indnkeyatts
+ GROUP BY t.relname, i.indexrelid, i.indisunique, i.indisprimary
+ ORDER BY t.relname, i.indexrelid
+`.trim();
+
 export type PostgresNamespaceStorageQuery = (
   sql: string,
-) => Promise<readonly { table_name: string; column_name: string }[]>;
+) => Promise<readonly {
+  table_name: string;
+  column_name?: string;
+  index_columns?: readonly string[];
+  index_unique?: boolean;
+  index_primary?: boolean;
+}[]>;
 
 export async function inspectPostgresNamespaceStorage(
   query: PostgresNamespaceStorageQuery,
 ): Promise<NamespaceStorageCatalog> {
   const rows = await query(POSTGRES_NAMESPACE_STORAGE_CATALOG_SQL);
+  const indexRows = await query(POSTGRES_NAMESPACE_STORAGE_INDEX_SQL);
   const relations = new Map<string, string[]>();
   for (const row of rows) {
+    if (typeof row.column_name !== "string") fail("DATAFN_NAMESPACE_STORAGE_INCOMPLETE", "Catalog column metadata is missing.");
     const columns = relations.get(row.table_name) ?? [];
     columns.push(row.column_name);
     relations.set(row.table_name, columns);
@@ -455,7 +514,9 @@ export async function inspectPostgresNamespaceStorage(
     dialect: "postgres",
     relations: [...relations.entries()]
       .sort(([left], [right]) => left.localeCompare(right))
-      .map(([name, columns]) => ({ name, columns })),
+      .map(([name, columns]) => ({ name, columns, indexes: indexRows
+        .filter((row) => row.table_name === name && Array.isArray(row.index_columns) && typeof row.index_unique === "boolean")
+        .map((row) => ({ columns: row.index_columns!, unique: row.index_unique!, primary: row.index_primary === true })) })),
   };
 }
 
