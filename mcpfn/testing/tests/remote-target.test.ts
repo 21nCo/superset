@@ -18,6 +18,27 @@ describe("authenticated remote MCP targets", () => {
     await Promise.allSettled(closeCallbacks.splice(0).map((close) => close()));
   });
 
+
+  it("rejects plaintext remote credentials and removes descriptor query values", () => {
+    const credential = { headers: { authorization: "Bearer secret" } };
+    expect(() => authenticatedHttpTarget("http://example.com/mcp", { credential })).toThrow(/HTTPS/);
+    expect(authenticatedHttpTarget("https://example.com/mcp?credential=secret", { credential }).describe().url)
+      .toBe("https://example.com/mcp");
+  });
+
+  it("checks visible tools without a manifest and reports cleanup failures", async () => {
+    const fixture = await startAuthenticatedServer("cleanup-secret");
+    closeCallbacks.push(fixture.close);
+    const report = await runMcpFnTargetSuite({
+      target: authenticatedHttpTarget(fixture.url, { credential: {
+        acquire: () => ({ headers: { authorization: "Bearer cleanup-secret" } }),
+        revoke: () => { throw new Error("credential cleanup failed"); },
+      } }), expectedToolNames: ["missing-tool"],
+    });
+    expect(report.ok).toBe(false);
+    expect(report.failure?.message).toContain("Tool inventory mismatch");
+    expect(report.incompleteReason).toContain("credential cleanup failed");
+  });
   it("uses URL plus a real auth-provider adapter without server or registry types in the consumer", async () => {
     const fixture = await startAuthenticatedServer("remote-secret");
     closeCallbacks.push(fixture.close);
@@ -67,7 +88,7 @@ describe("authenticated remote MCP targets", () => {
       failure: {
         code: expect.any(String),
         phase: expect.any(String),
-        layer: expect.stringMatching(/authorization-server|resource-server|mcp-initialization/),
+        layer: "resource-server",
       },
     });
     expect(report.results).toEqual([]);

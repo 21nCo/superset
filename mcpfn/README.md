@@ -80,7 +80,7 @@ mcpfn validate ./mcpfn.manifest.json
 mcpfn diff ./mcpfn.manifest.json ./candidate.manifest.json --fail-on-behavioral
 mcpfn test ./src/mcp/server.ts ./tests/mcp.scenarios.ts --output ./mcpfn-report.json
 mcpfn test-target https://api.example.com/mcp ./tests/mcp.scenarios.ts --bearer-token-env MCP_TOKEN --junit ./mcpfn-report.xml
-mcpfn inspect https://api.example.com/mcp --output ./mcpfn-inspection.json
+mcpfn inspect https://api.example.com/mcp --bearer-token-env MCP_TOKEN --output ./mcpfn-inspection.json
 mcpfn auth-diagnose https://api.example.com/mcp
 mcpfn conformance http://127.0.0.1:3000/mcp --suite active --bearer-token-env MCP_TOKEN --report ./mcpfn-conformance.json
 ```

@@ -228,7 +228,10 @@ export function buildOfficialConformanceEnvironment(
   source: NodeJS.ProcessEnv = process.env,
 ): NodeJS.ProcessEnv {
   const environment = { ...source };
-  for (const name of sensitiveNames) delete environment[name];
+  const sensitive = new Set(sensitiveNames.map((name) => name.toLowerCase()));
+  for (const name of Object.keys(environment)) {
+    if (sensitive.has(name.toLowerCase())) delete environment[name];
+  }
   environment.PATH = [path.dirname(process.execPath), environment.PATH]
     .filter(Boolean)
     .join(path.delimiter);

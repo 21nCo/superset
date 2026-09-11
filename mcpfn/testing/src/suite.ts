@@ -7,7 +7,7 @@ import type {
 import type { McpFnManifest } from "@mcpfn/core";
 import { redactOAuthValue } from "@superfunctions/oauth-core";
 
-import { assertManifestContract } from "./assertions.js";
+import { assertManifestContract, McpFnAssertionError, stableJson } from "./assertions.js";
 import { McpFnTestClient, type McpFnTestClientOptions } from "./client.js";
 import {
   MCPFN_REPORT_SCHEMA_VERSION,
@@ -80,6 +80,7 @@ export async function runMcpFnTargetSuite(
   let client: McpFnTestClient | undefined;
   let manifestChecked = false;
   let failure: McpFnReportFailure | undefined;
+  let cleanupFailure: McpFnReportFailure | undefined;
   let execution: {
     results: McpFnScenarioResult[];
     server?: Implementation;
@@ -92,6 +93,12 @@ export async function runMcpFnTargetSuite(
       {
         ...options.client,
         diagnostics: async (event) => {
+          if (event.phase === "transport-close" && event.outcome === "failed") {
+            cleanupFailure = normalizeMcpFnReportFailure({
+              name: "CleanupError", message: event.details?.message ?? "Target cleanup failed",
+              code: event.code, phase: event.phase,
+            });
+          }
           timeline.push(redactOAuthValue(event) as unknown as McpFnDiagnosticEvent);
           if (timeline.length > maxTimelineEvents) {
             timeline.shift();
@@ -107,6 +114,13 @@ export async function runMcpFnTargetSuite(
         expectedToolNames: options.expectedToolNames,
       });
     }
+    if (!options.manifest && options.expectedToolNames) {
+      const actual = (await client.listTools()).map((tool) => tool.name).sort();
+      const expected = [...options.expectedToolNames].sort();
+      if (stableJson(actual) !== stableJson(expected)) {
+        throw new McpFnAssertionError(`Tool inventory mismatch: expected ${stableJson(expected)}, actual ${stableJson(actual)}`);
+      }
+    }
     execution = {
       results: await runScenarios(
         client,
@@ -119,8 +133,14 @@ export async function runMcpFnTargetSuite(
   } catch (error) {
     failure = normalizeMcpFnReportFailure(error);
   } finally {
-    await client?.close();
+    try {
+      await client?.close();
+    } catch (error) {
+      cleanupFailure = normalizeMcpFnReportFailure(error);
+      if (!failure) failure = cleanupFailure;
+    }
   }
+  failure ??= cleanupFailure;
   const results = execution.results;
   const failed = results.filter((result) => result.status === "failed").length;
   const incomplete = results.filter((result) => result.status === "incomplete").length;
@@ -159,6 +179,7 @@ export async function runMcpFnTargetSuite(
       ? {
         incompleteReason: [
           ...(failure ? [`${failure.layer}: ${failure.message}`] : []),
+          ...(cleanupFailure ? [`Cleanup: ${cleanupFailure.message}`] : []),
           ...(droppedTimelineEvents > 0
             ? ["Diagnostic timeline exceeded maxTimelineEvents"]
             : []),

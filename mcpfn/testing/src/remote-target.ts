@@ -6,6 +6,8 @@ import {
   type McpFnTransportHandle,
 } from "@mcpfn/client";
 
+import { normalizeMcpFnReportFailure } from "./reports.js";
+
 const MAX_CREDENTIAL_HEADERS = 32;
 const MAX_CREDENTIAL_HEADER_BYTES = 16_384;
 const MAX_CREDENTIAL_HEADER_VALUE_BYTES = 8_192;
@@ -100,13 +102,15 @@ export function authenticatedHttpTarget(
   options: McpFnAuthenticatedHttpTargetOptions,
 ): McpFnTarget {
   const targetUrl = normalizeRemoteTargetUrl(url);
+  const descriptorUrl = new URL(targetUrl);
+  descriptorUrl.search = "";
   const { credential: _credential, requestInit, ...transportOptions } = options;
   void _credential;
 
   return customTarget({
     kind: "authenticated-streamable-http",
     descriptor: {
-      url: targetUrl.toString(),
+      url: descriptorUrl.toString(),
       authenticated: true,
     },
     async open(targetContext): Promise<McpFnTransportHandle> {
@@ -145,7 +149,16 @@ export function authenticatedHttpTarget(
           closePromise ??= closeAuthenticatedHandle(
             handle!,
             lease,
-          );
+          ).catch(async (error) => {
+            const failure = normalizeMcpFnReportFailure(error);
+            await targetContext.diagnostic({
+              phase: "transport-close", outcome: "failed", code: "MCPFN_CREDENTIAL_CLEANUP_FAILED",
+              requestId: targetContext.requestId, at: new Date().toISOString(),
+              target: { kind: "authenticated-streamable-http", url: descriptorUrl.toString() },
+              details: { message: failure.message },
+            });
+            throw error;
+          });
           return closePromise;
         },
       };
@@ -157,6 +170,10 @@ function normalizeRemoteTargetUrl(value: string | URL): URL {
   const url = new URL(value.toString());
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new TypeError("Authenticated MCP targets must use HTTP or HTTPS");
+  }
+  if (url.protocol === "http:" && url.hostname !== "[::1]" &&
+      !/^127(?:\.\d{1,3}){3}$/.test(url.hostname)) {
+    throw new TypeError("Credential-bearing HTTP targets require a literal loopback address; use HTTPS remotely");
   }
   if (url.username || url.password || url.hash) {
     throw new TypeError(

@@ -55,6 +55,27 @@ describe("McpFn machine-readable reports", () => {
     expect(xml).toContain("mcpfn.testing.version");
     expect(xml).toContain("mcpfn.report.schema");
   });
+  it("marks incomplete evidence as a JUnit failure even without scenarios", () => {
+    const report = fixtureReport([]);
+    report.status = "incomplete";
+    report.incompleteReason = "Diagnostic events dropped";
+    const xml = createMcpFnTargetSuiteJUnit(report);
+    expect(xml).toContain('failures="1"');
+    expect(xml).toContain("suite-incomplete");
+  });
+
+  it("handles redaction truncation beyond 1000 results", () => {
+    const report = fixtureReport(Array.from({ length: 1001 }, (_, index) => ({
+      formatVersion: 1 as const, name: `case-${index}`, operation: "tools.list", status: "passed" as const,
+      sideEffect: "none" as const, durationMs: 0,
+    })));
+    report.ok = true;
+    report.failed = 0;
+    const xml = createMcpFnTargetSuiteJUnit(report);
+    expect(xml).toContain('failures="1"');
+    expect(xml).toContain("suite-incomplete");
+  });
+
 });
 
 function fixtureReport(

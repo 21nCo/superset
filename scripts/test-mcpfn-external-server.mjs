@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
+import { request as httpRequest } from "node:http";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -33,7 +34,7 @@ server.stderr.setEncoding("utf8");
 server.stderr.on("data", (chunk) => { serverStderr += chunk; });
 
 try {
-  const url = await waitForUrl(server, serverStderr);
+  const url = await waitForUrl(server, () => serverStderr);
   const authenticated = spawnSync(process.execPath, [
     cli,
     "test-target",
@@ -89,12 +90,20 @@ try {
   assert.equal(unauthenticatedReport.ok, false);
   assert.ok(unauthenticatedReport.failure);
 
-  const rejectedBeforeBody = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: "x".repeat(1_048_577),
+  // Send only headers, deliberately withholding the body. A handler that
+  // waits for body consumption before authenticating will time out here.
+  await new Promise((resolve, reject) => {
+    const request = httpRequest(url, { method: "POST", headers: {
+      "content-type": "application/json", "content-length": "1048577",
+    } }, (response) => {
+      try { assert.equal(response.statusCode, 401); resolve(); }
+      catch (error) { reject(error); }
+      finally { request.destroy(); }
+    });
+    request.setTimeout(10_000, () => request.destroy(new Error("Unauthorized body preflight timed out")));
+    request.once("error", reject);
+    request.flushHeaders();
   });
-  assert.equal(rejectedBeforeBody.status, 401);
 
   process.stdout.write(`${JSON.stringify({
     ok: true,
@@ -110,25 +119,22 @@ try {
   }
 }
 
-function waitForUrl(child, initialStderr) {
+function waitForUrl(child, readStderr) {
   return new Promise((resolve, reject) => {
     const lines = readline.createInterface({ input: child.stdout });
-    const timer = setTimeout(() => {
-      reject(new Error(`External MCP fixture did not start\n${initialStderr}`));
-    }, 10_000);
-    lines.once("line", (line) => {
+    const settle = (error, url) => {
       clearTimeout(timer);
       lines.close();
-      resolve(line.trim());
-    });
-    child.once("error", (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-    child.once("exit", (code) => {
-      clearTimeout(timer);
-      reject(new Error(`External MCP fixture exited with ${code}\n${initialStderr}`));
-    });
+      child.off("error", onError);
+      child.off("exit", onExit);
+      if (error) reject(error); else resolve(url);
+    };
+    const onError = (error) => settle(error);
+    const onExit = (code) => settle(new Error(`External MCP fixture exited with ${code}\n${readStderr()}`));
+    const timer = setTimeout(() => settle(new Error(`External MCP fixture did not start\n${readStderr()}`)), 10_000);
+    lines.once("line", (line) => settle(undefined, line.trim()));
+    child.once("error", onError);
+    child.once("exit", onExit);
   });
 }
 

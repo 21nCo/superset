@@ -21,6 +21,7 @@ describe("hosted role-3 regression harness", () => {
         resolve: async (clientId) => registrations.get(clientId) ?? null,
       },
       allowedResources: [resource],
+      capabilities: { requireRefreshResource: true },
       supportedScopes: ["mcp:read"],
       authorize: async (input) => {
         const callback = new URL(input.redirectUri);
@@ -56,7 +57,7 @@ describe("hosted role-3 regression harness", () => {
     }, fixtures);
 
     expect(results).toHaveLength(6);
-    expect(results.every((result) => result.status === "passed")).toBe(true);
+    expect(results.filter((result) => result.status !== "passed")).toEqual([]);
     expect(results).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: "claude-client-metadata-extensible-grants",
@@ -74,4 +75,26 @@ describe("hosted role-3 regression harness", () => {
       }),
     ]));
   });
+  it.each(["throw", "no-redirect", "missing-code", "wrong-state", "wrong-callback", "empty-token", "token-redirect"])("fails broken hosted flow: %s", async (fault) => {
+    const issuer = "https://login.example.com";
+    const fixture = createHostedAuthorizationFixtures({ issuer, resource: "https://mcp.example.com/mcp" })[0]!;
+    const results = await runHostedAuthorizationRegression({
+      issuer, prepareRegistration: async () => {},
+      request: async (request) => {
+        if (fault === "throw") throw new Error("transport aborted");
+        if (new URL(request.url).pathname.endsWith("authorize")) {
+          if (fault === "no-redirect") return new Response("", { status: 200 });
+          const callback = new URL(fault === "wrong-callback" ? "https://evil.example/callback" : fixture.authorization.redirectUri);
+          if (fault !== "missing-code") callback.searchParams.set("code", "real-code");
+          callback.searchParams.set("state", fault === "wrong-state" ? "wrong" : fixture.authorization.state);
+          return Response.redirect(callback, 302);
+        }
+        expect(request.redirect).toBe("manual");
+        if (fault === "token-redirect") return Response.redirect("https://evil.example/token", 307);
+        return Response.json({});
+      },
+    }, [fixture]);
+    expect(results[0]?.status).toBe("failed");
+  });
+
 });

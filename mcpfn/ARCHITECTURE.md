@@ -64,7 +64,7 @@ success or failure, and delegates all MCP lifecycle behavior to
 
 Testing failures retain a machine-readable phase and classify the failing layer
 as McpFn preflight, authorization server, resource server, MCP initialization,
-scenario, or upstream conformance. JSON and JUnit serializers apply redaction
+scenario, or upstream conformance. Target-suite JSON and JUnit serializers apply redaction
 and aggregate bounds after serialization and include the testing package, report
 schema, and Node runtime versions.
 

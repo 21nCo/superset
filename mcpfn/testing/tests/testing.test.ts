@@ -518,9 +518,10 @@ describe("McpFn testing", () => {
   it("does not inherit selected credential environment variables into conformance", () => {
     const environment = buildOfficialConformanceEnvironment(
       ["MCPFN_TEST_BEARER"],
-      { PATH: "/usr/bin", MCPFN_TEST_BEARER: "secret", SAFE_VALUE: "kept" },
+      { PATH: "/usr/bin", MCPFN_TEST_BEARER: "secret", mcpfn_test_bearer: "secret2", SAFE_VALUE: "kept" },
     );
     expect(environment.MCPFN_TEST_BEARER).toBeUndefined();
+    expect(environment.mcpfn_test_bearer).toBeUndefined();
     expect(environment.SAFE_VALUE).toBe("kept");
     expect(environment.PATH).toContain("/usr/bin");
   });

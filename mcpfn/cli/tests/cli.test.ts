@@ -56,6 +56,19 @@ describe("mcpfn CLI", () => {
     expect(errors).toContain("--timeout must be a positive integer");
   });
 
+  it("rejects invalid conformance report options before launching a runner", async () => {
+    let errors = "";
+    expect(await runCli(["conformance", "http://127.0.0.1:1/mcp", "--max-report-bytes", "12", "--report", "never-created.json"], {
+      stderr: (text) => { errors += text; },
+    })).toBe(2);
+    expect(errors).toContain("at least 1025");
+    errors = "";
+    expect(await runCli(["conformance", "http://127.0.0.1:1/mcp", "--max-report-bytes", "2048"], {
+      stderr: (text) => { errors += text; },
+    })).toBe(2);
+    expect(errors).toContain("requires --report");
+  });
+
   it("validates and diffs manifests with stable exit codes", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mcpfn-cli-"));
     roots.push(root);

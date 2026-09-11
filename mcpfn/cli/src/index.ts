@@ -185,6 +185,10 @@ export async function runCli(
       maxReportBytes?: string;
       verbose?: boolean;
     } & RemoteAuthCliOptions) => {
+      const maxBytes = parseCliReportCap(options.maxReportBytes);
+      if (options.maxReportBytes !== undefined && !options.report) {
+        throw new Error("--max-report-bytes requires --report for conformance");
+      }
       const auth = readRemoteCredential(options);
       const conformanceOptions = {
         url,
@@ -209,7 +213,6 @@ export async function runCli(
       if (result.stdout) stdout(result.stdout);
       if (result.stderr) stderr(result.stderr);
       if (options.report) {
-        const maxBytes = parseCliReportCap(options.maxReportBytes);
         await writeFile(
           path.resolve(cwd, options.report),
           serializeBoundedReport(result, maxBytes),
@@ -282,7 +285,7 @@ export async function runCli(
           ?.split(",")
           .map((name) => name.trim())
           .filter(Boolean),
-        maxReportBytes: maxReportBytes === undefined ? undefined : maxReportBytes - 1,
+        maxReportBytes: (maxReportBytes ?? 1_048_576) - 1,
       });
       const serialized = serializeBoundedReport(report, maxReportBytes);
       if (options.output) {
@@ -372,7 +375,7 @@ function serializeBoundedReport(value: unknown, maxBytes?: number): string {
     bounded.stdout = bounded.stdout ? "[TRUNCATED]" : "";
     bounded.stderr = bounded.stderr ? "[TRUNCATED]" : "";
     if (bounded.failure) {
-      bounded.failure.message = bounded.failure.message?.slice(0, 256);
+      bounded.failure.message = bounded.failure.message ? Array.from(bounded.failure.message).slice(0, 64).join("") : undefined;
       bounded.failure.details = undefined;
     }
     serialized = serialize(bounded);

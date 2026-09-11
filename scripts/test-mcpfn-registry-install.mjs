@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
   copyFileSync,
   mkdtempSync,
@@ -45,7 +45,7 @@ try {
       ? testingConsumerSource(packageVersion)
       : cliConsumerSource(packageVersion),
   );
-  const verification = spawnSync(process.execPath, ["verify.mjs"], {
+  const verification = await runVerification(process.execPath, ["verify.mjs"], {
     cwd: root,
     env: {
       ...process.env,
@@ -53,7 +53,6 @@ try {
     },
     encoding: "utf8",
     stdio: "pipe",
-    timeout: 30_000,
   });
   if (verification.status !== 0) {
     throw new Error(
@@ -155,4 +154,47 @@ try {
   server.kill("SIGTERM");
 }
 `;
+}
+
+// Supervise the complete verifier process group: its HTTP fixture must not
+// survive a timeout. Registry installation itself does not run fixture servers.
+async function runVerification(command, args, options) {
+  const child = spawn(command, args, { ...options, detached: process.platform !== "win32" });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk) => { stdout = (stdout + chunk).slice(-262144); });
+  child.stderr.on("data", (chunk) => { stderr = (stderr + chunk).slice(-262144); });
+  const killTree = (signal) => {
+    if (!child.pid) return;
+    if (process.platform === "win32") {
+      spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+    } else {
+      try { process.kill(-child.pid, signal); }
+      catch (error) { if (error.code !== "ESRCH") throw error; }
+    }
+  };
+  let timedOut = false;
+  let forceTimer;
+  const terminate = () => {
+    killTree("SIGTERM");
+    forceTimer ??= setTimeout(() => killTree("SIGKILL"), 3000);
+  };
+  const onSignal = () => { timedOut = true; terminate(); };
+  process.once("SIGTERM", onSignal);
+  process.once("SIGINT", onSignal);
+  const timer = setTimeout(() => { timedOut = true; terminate(); }, 30000);
+  try {
+    const status = await new Promise((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", resolve);
+    });
+    return { status: timedOut ? null : status, stdout, stderr };
+  } finally {
+    clearTimeout(timer);
+    clearTimeout(forceTimer);
+    // Also remove descendants that outlived a normally exiting verifier.
+    killTree("SIGKILL");
+    process.off("SIGTERM", onSignal);
+    process.off("SIGINT", onSignal);
+  }
 }

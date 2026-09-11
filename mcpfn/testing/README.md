@@ -29,6 +29,7 @@ by applications, the inspector, and CLI. Scenario execution is serial and
 capability calls are never retried implicitly.
 
 ```ts
+import { writeFile } from "node:fs/promises";
 import {
   McpFnTestClient,
   assertManifestContract,
@@ -65,6 +66,7 @@ descriptors and reports, and releases the credential exactly once even when
 initialization fails.
 
 ```ts
+import { writeFile } from "node:fs/promises";
 import {
   authenticatedHttpTarget,
   createMcpFnTargetSuiteJUnit,
@@ -81,7 +83,7 @@ const report = await runMcpFnTargetSuite({
   scenarios,
 });
 
-await writeArtifact("mcpfn-report.xml", createMcpFnTargetSuiteJUnit(report));
+await writeFile("mcpfn-report.xml", createMcpFnTargetSuiteJUnit(report));
 ```
 
 Use a provider instead of a static credential for short-lived OAuth access
@@ -162,3 +164,5 @@ test("accepts extensible OAuth client metadata", async ({ page, mcpfnOAuth }) =>
 The fixture starts a local mock server that publishes authorization-server discovery, consent UI, callback capture, client metadata variants, PKCE token exchange, refresh rotation, revocation, and an SDK-compatible access-token verifier. Extend the exported `test` with Skillplane's signed-in page or database fixtures; do not copy the OAuth machinery into the application.
 
 See [Testing and CI](https://github.com/21nCo/super-functions/blob/main/mcpfn/TESTING.md) for the complete layered strategy.
+
+When credentials come from environment variables, pass their names in `sensitiveEnvironmentVariables` to authenticated official conformance. Those names are removed case-insensitively before the upstream runner is spawned. The library cannot infer the source of arbitrary provider-returned headers.

@@ -74,7 +74,8 @@ export function normalizeMcpFnReportFailure(
   return {
     name: stringField(record.name) ?? "Error",
     message,
-    layer: failureLayer(phase),
+    layer: [401, 403].includes(Number(causeRecord?.code ?? causeRecord?.status ?? record.status))
+      ? "resource-server" : failureLayer(phase),
     ...(stringField(record.code) ? { code: stringField(record.code)! } : {}),
     ...(phase ? { phase } : {}),
     ...(combinedDetails ? { details: combinedDetails } : {}),
@@ -94,7 +95,10 @@ export function createMcpFnTargetSuiteJUnit(
     maxObjectEntries: 200,
     maxStringLength: 4_096,
   }) as unknown as McpFnTargetSuiteReport;
-  const cases = safe.results.map((result) => {
+  // Redaction appends a string sentinel when an array exceeds its cap.
+  const results = safe.results.filter((result) => result && typeof result === "object" && typeof result.name === "string");
+  const omitted = report.results.length - results.length;
+  const cases = results.map((result) => {
     const duration = Math.max(0, result.durationMs ?? 0) / 1_000;
     const failure = result.status === "passed"
       ? ""
@@ -109,12 +113,15 @@ export function createMcpFnTargetSuiteJUnit(
       `    <testcase name="${xml(safe.failure.phase ?? "target")}" classname="mcpfn.${xml(safe.failure.layer)}" time="0.000">${junitFailure(safe.failure.message, safe.failure.code ?? safe.failure.layer)}</testcase>`,
     );
   }
+  if (safe.status === "incomplete" || omitted > 0 || (!safe.ok && !safe.failure && results.every((result) => result.status === "passed"))) {
+    cases.push(`    <testcase name="suite-incomplete" classname="mcpfn.report" time="0.000">${junitFailure(safe.incompleteReason ?? "Suite evidence is incomplete or omitted", "incomplete")}</testcase>`);
+  }
   if (cases.length === 0) {
     cases.push(
       '    <testcase name="target-suite" classname="mcpfn.target" time="0.000"></testcase>',
     );
   }
-  const failures = safe.failed + (safe.failure ? 1 : 0);
+  const failures = cases.filter((entry) => entry.includes("<failure ")).length;
   let serialized = junitDocument(safe, cases, failures);
   if (bytes(serialized) <= maxBytes) return serialized;
 
@@ -194,7 +201,7 @@ function xml(value: string): string {
 }
 
 function stripInvalidXmlControls(value: string): string {
-  return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
+  return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\uFFFE\uFFFF\uD800-\uDFFF]/gu, "");
 }
 
 function validateArtifactCap(maxBytes: number): void {
