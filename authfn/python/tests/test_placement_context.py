@@ -224,6 +224,28 @@ async def test_fails_closed_for_moving_deleting_tombstoned_missing_and_unavailab
     with pytest.raises(PlacementDirectoryUnavailableError):
         await down.issuer.derive(down.request)
 
+    class NonStringRegionDirectory:
+        async def get(self, identity_key: str) -> IdentityPlacement:
+            placement = IdentityPlacement(
+                identity_key=identity_key,
+                region_id="us-east-1",
+                epoch=4,
+                state="active",
+                updated_at="2026-09-04T00:00:00.000Z",
+            )
+            placement.region_id = 123  # type: ignore[assignment]
+            return placement
+
+        async def put_if_absent(self, _placement: IdentityPlacement) -> Dict[str, Any]:
+            return {"inserted": False}
+
+        async def compare_and_set(self, **_kwargs: Any) -> Dict[str, Any]:
+            return {"updated": False}
+
+    malformed = await _setup(directory=NonStringRegionDirectory())
+    with pytest.raises(PlacementDirectoryUnavailableError):
+        await malformed.issuer.derive(malformed.request)
+
 
 @pytest.mark.asyncio
 async def test_signed_private_consumer_and_in_process_ticket_exchange() -> None:
@@ -299,6 +321,9 @@ async def test_keeps_issued_grants_after_revoke_and_uses_new_epoch_after_move() 
     assert fresh_context.home_region == "eu-west-1"
     assert fresh_context.placement_epoch == 6
     assert fresh_context.subject == first.subject
+
+    padded = await _setup(region_id="  us-east-1  ")
+    assert (await padded.issuer.derive(padded.request)).home_region == "us-east-1"
 
 
 @pytest.mark.asyncio
