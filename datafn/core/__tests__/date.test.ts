@@ -3,6 +3,10 @@
  * Tests TV-DTE-001, TV-DTE-002 from TEST_VECTORS.md
  */
 
+import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import {
   toEpochMs,
@@ -164,17 +168,20 @@ describe("timezone-less datetime parsing contract", () => {
   it("parsing does not depend on the process timezone", () => {
     // Run in a child process pinned to a non-UTC zone: the canonical
     // conversion must still resolve the timezone-less string as UTC.
-    const script =
-      'import { toEpochMs, toBoundsEpochMs, fromEpochMs } from "./src/date.ts";' +
-      `if (toEpochMs(${JSON.stringify(TZ_LESS)}) !== ${UTC_EPOCH}) throw new Error("toEpochMs diverged");` +
-      `if (toBoundsEpochMs(${JSON.stringify(TZ_LESS)}) !== ${UTC_EPOCH}) throw new Error("toBoundsEpochMs diverged");` +
-      `if (fromEpochMs(${JSON.stringify(TZ_LESS)}).getTime() !== ${UTC_EPOCH}) throw new Error("fromEpochMs diverged");`;
-    const result = Bun.spawnSync(["bun", "-e", script], {
-      cwd: import.meta.dir + "/..",
+    const require = createRequire(import.meta.url);
+    const runner = join(dirname(require.resolve("vitest/package.json")), "vitest.mjs");
+    const result = spawnSync(process.execPath, [
+      runner, "run", "__tests__/date.test.ts", "--maxWorkers=1", "--minWorkers=1",
+      "--testNamePattern=toEpochMs, fromEpochMs, and toBoundsEpochMs resolve the same instant",
+    ], {
+      cwd: fileURLToPath(new URL("../", import.meta.url)),
       env: { ...process.env, TZ: "America/New_York" },
+      encoding: "utf8",
+      timeout: 15000,
     });
-    expect(result.exitCode).toBe(0);
-  });
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr + result.stdout).toBe(0);
+  }, 20000);
 });
 
 describe("toBoundsEpochMs", () => {

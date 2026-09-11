@@ -96,9 +96,6 @@ export type DatafnFieldOptionsByType = {
 
 type KeysOfUnion<Value> = Value extends Value ? keyof Value : never;
 
-type StrictOptions<Options, Shape> = Options &
-  Record<Exclude<keyof Options, KeysOfUnion<Shape>>, never>;
-
 type BooleanOption<
   Options,
   Key extends "required" | "nullable",
@@ -164,10 +161,14 @@ type DatafnFieldBuilder<
   <const Name extends string>(
     name: Name,
   ): DatafnBuiltField<Name, Type, NoFieldOptions>;
-  <const Name extends string, const Options extends OptionsShape>(
+  // Infer the complete caller shape before validating it, so a weak options
+  // constraint cannot discard unknown-only keys. Keep exported unions intact.
+  <const Name extends string, const Options extends object>(
     name: Name,
-    options: StrictOptions<Options, OptionsShape>,
-  ): DatafnBuiltField<Name, Type, Options>;
+    options: Options & ([Options] extends [OptionsShape]
+      ? Record<Exclude<KeysOfUnion<Options>, KeysOfUnion<OptionsShape>>, never>
+      : never),
+  ): DatafnBuiltField<Name, Type, Extract<Options, OptionsShape>>;
 };
 
 function createFieldBuilder<

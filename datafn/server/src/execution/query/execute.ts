@@ -20,7 +20,6 @@ import {
   createTimezoneResolver,
   hasTemporalGrouping,
   normalizeTemporalQuery,
-  stripNullsForNonNullableFields,
 } from "@datafn/core";
 
 /**
@@ -40,17 +39,8 @@ export function executeQuery(
   // Phase 15: Aggregate queries
   if (query.groupBy || hasTemporalGrouping(query as any)) {
     const resourceName = query.resource as string;
-    const aggregateResourceSchema = schema.resources.find(
-      (r) => r.name === resourceName,
-    );
-    // Aggregates never pass through materializeSelect, so normalize persisted
-    // nulls here to keep group keys and outputs on the read contract
-    // (cleared non-nullable fields read as absent).
-    const records = store
-      .getRecords(resourceName)
-      .map((record) =>
-        stripNullsForNonNullableFields(record, aggregateResourceSchema),
-      );
+    // Predicates and aggregation operate on storage values; normalize output only.
+    const records = store.getRecords(resourceName);
     return executeAggregateQuery(query as any, records, schema, store, temporalConfig);
   }
 

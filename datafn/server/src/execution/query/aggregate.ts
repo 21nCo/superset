@@ -20,7 +20,7 @@ import { applyLimitOffset, applyCursorAfter, computeNextCursor } from "./paginat
 export function executeAggregateQuery(
   query: Record<string, unknown>,
   records: Record<string, unknown>[],
-  schema: { resources: readonly { name: string; fields: readonly { name: string }[] }[]; relations?: readonly unknown[] },
+  schema: { resources: readonly { name: string; fields: readonly { name: string; nullable?: boolean }[] }[]; relations?: readonly unknown[] },
   store: { getRecord: (resource: string, id: string) => Record<string, unknown> | null | undefined },
   temporal?: DatafnTemporalConfig,
 ): { groups: Record<string, unknown>[]; nextCursor: unknown | null } {
@@ -155,7 +155,18 @@ export function executeAggregateQuery(
   }
 
   return {
-    groups: paginated,
+    groups: paginated.map((row) => {
+      const output = { ...row };
+      for (const field of groupBy) {
+        // Never normalize an aggregation alias as if it were a source field.
+        if (Object.prototype.hasOwnProperty.call(aggregations, field)) continue;
+        const definition = resourceSchema?.fields.find((entry) => entry.name === field);
+        if (definition && definition.nullable !== true && output[field] === null) {
+          delete output[field];
+        }
+      }
+      return output;
+    }),
     nextCursor,
   };
 }
@@ -192,10 +203,10 @@ function orderGroupedResults(groups: Record<string, unknown>[], sortTerms: Array
 function resolveValue(
   record: Record<string, unknown>,
   path: string,
-  schema: { resources: readonly { name: string; fields: readonly { name: string }[] }[]; relations?: readonly unknown[] },
+  schema: { resources: readonly { name: string; fields: readonly { name: string; nullable?: boolean }[] }[]; relations?: readonly unknown[] },
   store: { getRecord: (resource: string, id: string) => Record<string, unknown> | null | undefined },
   resourceName: string,
-  precomputedResource?: { name: string; fields: readonly { name: string }[] }, // EXE-013: pre-computed to avoid per-record O(n) lookup
+  precomputedResource?: { name: string; fields: readonly { name: string; nullable?: boolean }[] }, // EXE-013: pre-computed to avoid per-record O(n) lookup
 ): unknown {
   if (!path.includes(".")) {
     return record[path];

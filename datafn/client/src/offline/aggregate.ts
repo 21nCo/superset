@@ -145,7 +145,18 @@ export async function executeAggregateQuery(
   });
 
   return {
-    groups: results,
+    groups: results.map((row) => {
+      const output = { ...row };
+      const resourceSchema = schema.resources.find((entry) => entry.name === resource);
+      for (const field of groupBy) {
+        if (Object.prototype.hasOwnProperty.call(aggregations ?? {}, field)) continue;
+        const definition = resourceSchema?.fields.find((entry) => entry.name === field);
+        if (definition && definition.nullable !== true && output[field] === null) {
+          delete output[field];
+        }
+      }
+      return output;
+    }),
     nextCursor: null, // Pagination not fully implemented for local aggregation in this phase
   };
 }

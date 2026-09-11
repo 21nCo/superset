@@ -23,6 +23,7 @@ import type {
 } from "./capabilities.js";
 import type { DatafnEnvelope } from "./errors.js";
 import { ok, err } from "./errors.js";
+import { validateFieldValue } from "./validate.js";
 import { toBoundsEpochMs } from "./date.js";
 import { isDatafnE2eeEnvelope } from "./e2ee.js";
 import {
@@ -434,7 +435,8 @@ export function validateSchema(schema: unknown): DatafnEnvelope<DatafnSchema> {
           // mutation-time bounds checks, so an unparseable default would be
           // persisted as-is. Opaque e2ee envelopes stay exempt.
           if (
-            !Number.isFinite(defaultEpoch) &&
+            (!Number.isFinite(defaultEpoch) ||
+              !validateFieldValue("date", f.default, false).ok) &&
             !isDatafnE2eeEnvelope(f.default)
           ) {
             return err(

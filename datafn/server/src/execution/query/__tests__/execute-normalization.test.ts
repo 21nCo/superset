@@ -104,4 +104,14 @@ describe("executeQuery null normalization", () => {
     expect(keptGroup).toBeDefined();
     expect(keptGroup!.total).toBe(1);
   });
+  it("aggregate filters and having retain stored nulls before output normalization", () => {
+    const result = executeQuery({
+      resource: "tasks", filters: { description: { $eq: null } },
+      groupBy: ["description"], having: { description: { $eq: null } },
+      aggregations: { total: { op: "count", field: "id" } },
+    } as any, schema, makeStore(records)) as unknown as { groups: Record<string, unknown>[] };
+    expect(result.groups).toEqual([{ total: 1 }]);
+    expect(records[0].description).toBeNull();
+  });
+
 });

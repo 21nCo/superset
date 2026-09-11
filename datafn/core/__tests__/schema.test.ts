@@ -643,6 +643,15 @@ describe("validateSchema date bounds", () => {
     expect(nullDefault.ok).toBe(true);
   });
 
+  it("rejects parseable non-ISO defaults using the mutation date contract", () => {
+    const result = validateSchema(schemaWithDateField({
+      name: "startsAt", type: "date", required: false,
+      min: 0, default: "June 15, 2026",
+    }));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("SCHEMA_INVALID");
+  });
+
   it("rejects an unparseable string default on a bounded date field", () => {
     const result = validateSchema(
       schemaWithDateField({

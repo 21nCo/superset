@@ -84,4 +84,17 @@ describe("@datafn/client local query null normalization", () => {
     expect("description" in row).toBe(false);
     expect(row.note).toBeNull();
   });
+  it("aggregate filters keep stored nulls while only non-nullable group keys are omitted", async () => {
+    const storage = await seedStorage();
+    const result = await executeLocalQuery(storage, schema, {
+      resource: "task", version: 1,
+      filters: { description: { $eq: null } },
+      groupBy: ["description", "note"],
+      having: { description: { $eq: null } },
+      aggregations: { total: { op: "count", field: "id" } },
+    });
+    expect(result.groups).toEqual([{ note: null, total: 1 }]);
+    expect((await storage.getRecord("task", "task:1"))?.description).toBeNull();
+  });
+
 });
