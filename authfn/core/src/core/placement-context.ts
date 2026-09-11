@@ -531,7 +531,8 @@ async function loadActivePlacement(
       || !Number.isSafeInteger(placement.epoch) || placement.epoch < 1) {
     throw new AuthFnPlacementDirectoryUnavailableError('Invalid authoritative placement record');
   }
-  return placement;
+  const regionId = placement.regionId.trim();
+  return regionId === placement.regionId ? placement : { ...placement, regionId };
 }
 
 function freezeContext(
