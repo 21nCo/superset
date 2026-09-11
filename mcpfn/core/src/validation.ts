@@ -18,11 +18,11 @@ export function formatMcpFnSchemaIssues(
     const params = error.params as Record<string, unknown>;
     const rejectedProperty =
       error.keyword === "additionalProperties"
-        ? boundedStructuralField(params.additionalProperty)
+        ? typeof params.additionalProperty === "string" ? params.additionalProperty : undefined
         : undefined;
     const missingProperty =
       error.keyword === "required"
-        ? boundedStructuralField(params.missingProperty)
+        ? typeof params.missingProperty === "string" ? params.missingProperty : undefined
         : undefined;
     return {
       path: instancePath,

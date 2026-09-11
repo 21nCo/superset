@@ -421,7 +421,7 @@ export async function runCli(
           options.maxReportBytes,
           "--max-report-bytes",
         );
-        const outputMaxBytes = maxReportBytes ?? configured.maxReportBytes;
+        const outputMaxBytes = maxReportBytes ?? configured.maxReportBytes ?? 1_048_576;
         if (outputMaxBytes !== undefined && outputMaxBytes < 2_049) {
           throw new Error(
             "--max-report-bytes must allow at least 2048 report bytes plus a trailing newline",
@@ -430,7 +430,7 @@ export async function runCli(
         const report = await runMcpFnClientProfileContracts({
           ...configured,
           allowSideEffects:
-            options.allowSideEffects ?? configured.allowSideEffects,
+            options.allowSideEffects === true,
           maxReportBytes:
             outputMaxBytes === undefined ? undefined : outputMaxBytes - 1,
         });

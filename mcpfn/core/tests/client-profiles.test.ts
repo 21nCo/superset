@@ -5,6 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   McpFnRegistry,
   McpFnValidationError,
+  McpFnError,
+  type McpFnClientProfileEvidence,
+  type McpFnTaskRequestExtra,
   createMcpFnServer,
   structuredResult,
   type McpFnClientProfile,
@@ -29,6 +32,7 @@ describe("McpFn client profiles", () => {
     profile: McpFnClientProfile<RequestContext>,
     registry: McpFnRegistry<RequestContext>,
     clientName = "reported-client",
+    evidence?: (event: McpFnClientProfileEvidence) => void,
   ) {
     const server = createMcpFnServer({
       info: { name: "profile-server", version: "1.0.0" },
@@ -36,6 +40,7 @@ describe("McpFn client profiles", () => {
       context: () => context,
       clientProfiles: {
         profiles: [profile],
+        evidence,
         resolveVerifiedIdentity: ({ context: trusted }) =>
           trusted.subject ? { subject: trusted.subject } : undefined,
       },
@@ -376,4 +381,76 @@ describe("McpFn client profiles", () => {
       },
     });
   });
+  it("rejects a projected type incompatible with canonical validation", async () => {
+    const { registry } = lookupRegistry();
+    const bad = tenantProfile();
+    const project = bad.projectCatalog!;
+    bad.projectCatalog = async (input) => (await project(input)).map(tool => ({
+      ...tool, inputSchema: { ...tool.inputSchema, properties: { query: { type: "number" } } },
+    }));
+    const { client } = await connect({ subject: "authenticated-client", tenantId: "trusted" }, bad, registry);
+    await expect(client.listTools()).rejects.toThrow(/canonical schema/);
+  });
+
+  it.each([null, "tenantId", ["tenantId", "tenantId"], [42], ["__proto__"]])(
+    "rejects malformed ownership declarations: %j", (value) => {
+      const bad = tenantProfile();
+      bad.serverOwnedArguments = { lookup: value } as never;
+      expect(() => createMcpFnServer({
+        info: { name: "bad", version: "1" }, registry: lookupRegistry().registry,
+        context: () => ({}), clientProfiles: { profiles: [bad], resolveVerifiedIdentity: () => undefined },
+      })).toThrow();
+    },
+  );
+
+  it("requires sessions for hooks that consume initialization metadata", async () => {
+    const server = createMcpFnServer({
+      info: { name: "http-profile", version: "1" }, registry: lookupRegistry().registry,
+      context: () => ({}), clientProfiles: { profiles: [tenantProfile()], resolveVerifiedIdentity: () => undefined },
+    });
+    await expect(server.createWebStandardHandler()).rejects.toThrow(/session/i);
+    closeables.push(server);
+  });
+
+  it("preserves exact long rejected property names", async () => {
+    const { client } = await connect({ subject: "generic" }, tenantProfile(), lookupRegistry().registry);
+    const unknown = "unexpected".repeat(50);
+    const result = await client.callTool({ name: "lookup", arguments: { query: "ok", tenantId: "ok", [unknown]: "secret" } });
+    expect(JSON.stringify(result)).toContain(unknown);
+    expect(JSON.stringify(result)).not.toContain("secret");
+  });
+
+  it("omits handler-supplied issue payloads from evidence", async () => {
+    const events: McpFnClientProfileEvidence[] = [];
+    const { registry } = lookupRegistry(vi.fn(async () => {
+      throw new McpFnError("HANDLER_ERROR", "secret-input", { issues: [{ message: "secret-input" }] });
+    }));
+    const { client } = await connect({ subject: "generic" }, tenantProfile(), registry, "reported", event => { events.push(event); });
+    await client.callTool({ name: "lookup", arguments: { query: "ok", tenantId: "ok" } });
+    expect(events.filter(e => e.stage === "handler" && e.outcome === "failed")).toHaveLength(1);
+    expect(JSON.stringify(events)).not.toContain("secret-input");
+  });
+
+  it("reports validation when a delayed task result is stored", async () => {
+    let finish!: () => Promise<unknown>;
+    const stored = vi.fn();
+    const outcome = vi.fn();
+    const stages = vi.fn();
+    const registry = new McpFnRegistry().register({
+      name: "delayed", description: "Delayed result", inputSchema: { type: "object" },
+      outputSchema: { type: "object", properties: { value: { type: "string" } }, required: ["value"] },
+      execution: { taskSupport: "required" }, handler: async () => structuredResult({ value: "ok" }),
+      taskHandler: { createTask: async (_args, _context, extra) => {
+        finish = () => extra.taskStore.storeTaskResult("task", "completed", structuredResult({ value: 42 }));
+        return { task: { taskId: "task", status: "working", createdAt: new Date().toISOString(), lastUpdatedAt: new Date().toISOString(), ttl: null } };
+      } },
+    });
+    await registry.createToolTask("delayed", {}, undefined, { taskStore: { storeTaskResult: stored } } as unknown as McpFnTaskRequestExtra, { onStage: stages, onTaskOutput: outcome });
+    expect(outcome).not.toHaveBeenCalled();
+    await expect(finish()).rejects.toThrow(/Invalid output/);
+    expect(stages).toHaveBeenLastCalledWith("output-validation");
+    expect(outcome).toHaveBeenCalledWith("failed", expect.any(Error));
+    expect(stored).not.toHaveBeenCalled();
+  });
+
 });

@@ -365,4 +365,27 @@ describe("client profile compatibility contracts", () => {
       new TextEncoder().encode(JSON.stringify(report)).byteLength,
     ).toBeLessThanOrEqual(2_048);
   });
+  it("rejects captured failures without an error assertion", async () => {
+    const target = targetFor({ subject: "trusted-client", tenantId: "trusted" });
+    await expect(runMcpFnClientProfileContracts({ profiles: [{
+      id: "captured", version: "1", target: target.target,
+      fixtures: [{ name: "unasserted", tool: "lookup", arguments: { query: "ok" }, sideEffect: "read-only", source: "captured-failure" }],
+    }] })).rejects.toThrow(/meaningful error expectations/);
+    expect(target.handler).not.toHaveBeenCalled();
+  });
+
+  it("checks tuple and content schemas under supported dialects", () => {
+    for (const dialect of ["http://json-schema.org/draft-07/schema#", "https://json-schema.org/draft/2019-09/schema"]) {
+      const issues = validateMcpFnSchemaPortability({
+        $schema: dialect, type: "object", properties: {
+          tuple: { type: "array", items: [{ dependentSchemas: { flag: { type: "object" } } }] },
+          encoded: { type: "string", contentSchema: { dependentSchemas: { flag: { type: "object" } } } },
+        },
+      }, "#");
+      expect(issues.some(issue => issue.path.includes("/items/0/dependentSchemas"))).toBe(true);
+      expect(issues.some(issue => issue.path.includes("/contentSchema/dependentSchemas"))).toBe(true);
+      expect(issues.some(issue => issue.code === "schema-invalid")).toBe(false);
+    }
+  });
+
 });

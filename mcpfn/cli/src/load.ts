@@ -123,5 +123,11 @@ export async function loadClientProfileContracts(
   if (!Array.isArray(options.profiles) || options.profiles.length === 0) {
     throw new Error("Client profile contract config must define profiles");
   }
+  if (options.maxReportBytes !== undefined && (!Number.isSafeInteger(options.maxReportBytes) || options.maxReportBytes < 2049)) {
+    throw new Error("Client profile maxReportBytes must be an integer of at least 2049");
+  }
+  if (options.allowSideEffects !== undefined && typeof options.allowSideEffects !== "boolean") {
+    throw new Error("Client profile allowSideEffects must be a boolean");
+  }
   return options as RunMcpFnClientProfileContractsOptions;
 }

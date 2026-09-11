@@ -38,7 +38,7 @@ version, endpoint, and timestamp evidence.
 | MCP3-AC-03 | Visibility, projection, enrichment, and canonical validation share one production request lifecycle. | core list/call integration tests |
 | MCP3-AC-04 | Canonical required server-owned fields can be omitted from the visible schema and restored only from trusted context. | projected lookup fixture |
 | MCP3-AC-05 | Forged server-owned arguments, missing trusted context, and asymmetric projection/enrichment fail before handlers. | negative core and suite fixtures |
-| MCP3-AC-06 | Schema portability validation is recursive and dialect-aware. | draft-07 and 2020-12 portability vectors |
+| MCP3-AC-06 | Schema portability validation is recursive and dialect-aware. | draft-07, 2019-09, and 2020-12 portability vectors |
 | MCP3-AC-07 | Explicit minimal-valid and captured-failure fixtures use the production target/session engine. | client-profile contract suite |
 | MCP3-AC-08 | Unknown root properties retain instance path, schema path, keyword, and exact rejected property without values. | structured Ajv diagnostic tests |
 | MCP3-AC-09 | Unmatched generic clients retain the canonical catalog and call behavior. | generic fallback core and suite cases |

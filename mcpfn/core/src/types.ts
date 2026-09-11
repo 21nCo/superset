@@ -72,6 +72,8 @@ export type McpFnToolLifecycleStage =
 
 export interface McpFnToolLifecycleObserver {
   onStage?(stage: McpFnToolLifecycleStage): void;
+  /** Task results can be validated after createTask has returned. */
+  onTaskOutput?(outcome: "succeeded" | "failed", error?: unknown): void | Promise<void>;
 }
 
 export interface McpFnTaskHandler<TContext = undefined> {

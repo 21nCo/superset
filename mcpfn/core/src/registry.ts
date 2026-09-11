@@ -986,12 +986,18 @@ export class McpFnRegistry<TContext = undefined> {
             taskId: string,
             status: "completed" | "failed",
             result: CallToolResult,
-          ) =>
-            target.storeTaskResult(
-              taskId,
-              status,
-              this.finalizeResult(registered, result),
-            );
+          ) => {
+            observer.onStage?.("output-validation");
+            let validated: CallToolResult;
+            try {
+              validated = this.finalizeResult(registered, result);
+            } catch (error) {
+              await observer.onTaskOutput?.("failed", error);
+              throw error;
+            }
+            await observer.onTaskOutput?.("succeeded");
+            return target.storeTaskResult(taskId, status, validated);
+          };
         }
         const value = Reflect.get(target, property, receiver) as unknown;
         return typeof value === "function" ? value.bind(target) : value;

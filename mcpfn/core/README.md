@@ -172,3 +172,14 @@ Task support is declared with `execution.taskSupport` and a `taskHandler`; a tas
 `createWebStandardHandler()` accepts the official SDK `HandleRequestOptions`, including validated `authInfo`. Use `@mcpfn/auth` to publish OAuth protected-resource metadata and produce that trusted value. In stateless mode, McpFn creates and disposes an isolated SDK server and transport for every request. Attach protocol instrumentation with `configureRequestServer`; it receives the live isolated server before transport connection and runs once per request, or once per session initialization attempt. Because configuration precedes SDK request validation, a rejected attempt can invoke the hook without retaining a session. Supply a cryptographically secure `sessionIdGenerator` when the server uses sampling, elicitation, or another server-to-client request that must be correlated across HTTP requests; session-enabled handlers retain their transport across the session.
 
 See the [architecture](https://github.com/21nCo/super-functions/blob/main/mcpfn/ARCHITECTURE.md), [testing guide](https://github.com/21nCo/super-functions/blob/main/mcpfn/TESTING.md), and runnable [calculator example](https://github.com/21nCo/super-functions/blob/main/mcpfn/examples/calculator-server.ts).
+
+Profile hooks that consume initialization metadata require a sessionful HTTP
+handler (`sessionIdGenerator`). Stateless handlers accept only profiles explicitly
+marked `requiresReportedClient: false`; their hooks must depend solely on verified
+identity and request context. Model-owned property schemas retain their canonical
+types and constraints. Projection may hide server-owned required fields, but does
+not replace the canonical validator.
+
+Structural diagnostics retain exact unknown property names and instance paths;
+consumer report sinks must apply an aggregate size cap (the testing suite defaults
+to one MiB) rather than silently shortening property names.

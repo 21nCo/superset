@@ -168,7 +168,7 @@ function assertProfileReference(id: string, version: string): void {
     ["id", id],
     ["version", version],
   ] as const) {
-    if (!value || value.length > 128 || !/^[A-Za-z0-9._/-]+$/.test(value)) {
+    if (typeof value !== "string" || !value || value.length > 128 || !/^[A-Za-z0-9._/-]+$/.test(value)) {
       throw new Error(
         `Client profile ${label} must be a non-empty stable identifier`,
       );
@@ -333,7 +333,7 @@ function walkSchema(
       walkSchema(child, `${path}/${mapKeyword}/${pointerSegment(name)}`, visit);
     }
   }
-  for (const arrayKeyword of ["allOf", "anyOf", "oneOf", "prefixItems"]) {
+  for (const arrayKeyword of ["allOf", "anyOf", "oneOf", "prefixItems", "items"]) {
     const entries = schema[arrayKeyword];
     if (!Array.isArray(entries)) continue;
     entries.forEach((child, index) =>
@@ -344,6 +344,7 @@ function walkSchema(
     "additionalItems",
     "additionalProperties",
     "contains",
+    "contentSchema",
     "else",
     "if",
     "items",
@@ -444,6 +445,7 @@ function fixtureFailure(
   fixture: McpFnClientProfileFixture,
 ): string | undefined {
   const expected = fixture.expect;
+  if (fixture.source === "captured-failure" && !result.isError) return "Captured failure did not reproduce an error";
   if (!expected)
     return result.isError ? "Tool returned isError=true" : undefined;
   if (
@@ -460,7 +462,7 @@ function fixtureFailure(
     return "Structured content did not match the fixture expectation";
   const error = extractError(result);
   if (expected.errorCode !== undefined && error?.code !== expected.errorCode) {
-    return `Expected error code ${expected.errorCode}, received ${String(error?.code)}`;
+    return "Error code did not match the declared expectation";
   }
   const details =
     error?.details && typeof error.details === "object"
@@ -597,7 +599,7 @@ async function runProfileCase(
             ...base,
             status: "failed",
             code: "fixture-call-failed",
-            error: boundedError(error),
+            error: "Tool invocation failed; argument values and exception text are omitted",
           });
         }
       }
@@ -610,7 +612,8 @@ async function runProfileCase(
         result.snapshotMatches === false;
       result = {
         ...result,
-        phase: failed || incomplete ? "fixtures" : undefined,
+        phase: result.snapshotMatches === false || result.portability.some(({ severity }) => severity === "error")
+          ? "catalog" : failed || incomplete ? "fixtures" : undefined,
         status: incomplete ? "incomplete" : "complete",
         ok: !failed && !incomplete,
         ...(result.snapshotMatches === false
@@ -629,8 +632,8 @@ async function runProfileCase(
         result = {
           ...result,
           ok: false,
-          phase: "close",
-          error: boundedError(error),
+          phase: result.phase ?? "close",
+          error: result.error ? `${result.error}; target cleanup failed`.slice(0, 512) : "Target cleanup failed",
         };
       }
     }
@@ -662,7 +665,12 @@ export async function runMcpFnClientProfileContracts(
     if (profile.expectedSnapshot)
       validateMcpFnClientProfileSnapshot(profile.expectedSnapshot);
     for (const fixture of profile.fixtures ?? []) {
-      if (!fixture.name || !fixture.tool || !fixture.sideEffect) {
+      if (fixture.source === "captured-failure" && (!fixture.expect || fixture.expect.isError === false ||
+          !(fixture.expect.isError === true || fixture.expect.errorCode || fixture.expect.lifecycleStage ||
+            (fixture.expect.validationIssue && Object.keys(fixture.expect.validationIssue).length)))) {
+        throw new Error(`Captured-failure fixture ${fixture.name} requires meaningful error expectations`);
+      }
+      if (!fixture.name || !fixture.tool || !["read-only", "idempotent", "non-idempotent"].includes(fixture.sideEffect)) {
         throw new Error(`Client profile ${key} contains an invalid fixture`);
       }
     }

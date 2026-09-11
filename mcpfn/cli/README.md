@@ -34,7 +34,7 @@ default one-MiB scenario report cap.
 `diff-profiles` reports added, removed, and modified advertised tools; removals
 exit `1`, and `--fail-on-behavioral` also fails modified tool contracts.
 `test-profiles` loads a module that exports
-`RunMcpFnClientProfileContractsOptions`, opens an independent production
+a default options object typed as `RunMcpFnClientProfileContractsOptions`, opens an independent production
 target/session for each generic or authenticated profile case, validates schema
 portability and reviewed snapshots, and executes explicit fixtures. Mutating
 fixtures require `--allow-side-effects`. The report never includes fixture

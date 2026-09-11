@@ -37,6 +37,8 @@ export interface McpFnClientProfileCallInput<TContext>
 export interface McpFnClientProfile<TContext = undefined> {
   id: string;
   version: string;
+  /** Defaults to true. Set false only when hooks do not use initialization metadata. */
+  requiresReportedClient?: boolean;
   /** Selection is deliberately restricted to verified identity. */
   matches(identity: McpFnVerifiedClientIdentity): boolean | Promise<boolean>;
   projectCatalog?(
@@ -100,7 +102,7 @@ function assertProfileMetadata(profile: McpFnClientProfile<unknown>): void {
     ["id", profile.id],
     ["version", profile.version],
   ] as const) {
-    if (!value || value.length > 128 || !/^[A-Za-z0-9._/-]+$/.test(value)) {
+    if (typeof value !== "string" || !value || value.length > 128 || !/^[A-Za-z0-9._/-]+$/.test(value)) {
       throw new McpFnClientProfileError(
         "MCPFN_INVALID_CLIENT_PROFILE",
         `Client profile ${label} must be a non-empty stable identifier`,
@@ -114,7 +116,18 @@ export function validateMcpFnClientProfiles<TContext>(
 ): void {
   const ids = new Set<string>();
   for (const profile of options.profiles) {
+    if (!profile || typeof profile !== "object" || typeof profile.matches !== "function") {
+      throw new McpFnClientProfileError("MCPFN_INVALID_CLIENT_PROFILE", "Profiles require metadata and a matcher");
+    }
     assertProfileMetadata(profile as McpFnClientProfile<unknown>);
+    const ownership = profile.serverOwnedArguments;
+    if (ownership !== undefined && (!ownership || typeof ownership !== "object" || Array.isArray(ownership) ||
+        ![Object.prototype, null].includes(Object.getPrototypeOf(ownership)) ||
+        Object.entries(ownership).some(([tool, names]) => !tool || !Array.isArray(names) ||
+          names.some((name) => typeof name !== "string" || !name || ["__proto__", "constructor", "prototype"].includes(name)) ||
+          new Set(names).size !== names.length))) {
+      throw new McpFnClientProfileError("MCPFN_INVALID_CLIENT_PROFILE", "Server-owned arguments must map tools to unique root property names");
+    }
     const key = `${profile.id}@${profile.version}`;
     if (ids.has(key)) {
       throw new McpFnClientProfileError(
@@ -147,7 +160,7 @@ export async function resolveMcpFnClientProfile<TContext>(
     extra: input.extra,
   });
   if (!verifiedIdentity) return { ...input, verifiedIdentity };
-  if (!verifiedIdentity.subject || verifiedIdentity.subject.length > 256) {
+  if (typeof verifiedIdentity.subject !== "string" || !verifiedIdentity.subject || verifiedIdentity.subject.length > 256) {
     throw new McpFnClientProfileError(
       "MCPFN_INVALID_VERIFIED_IDENTITY",
       "Verified client identity must contain a bounded subject",
@@ -177,7 +190,8 @@ function assertProjectedCatalog(
   const known = new Map(knownTools.map((tool) => [tool.name, tool]));
   const seen = new Set<string>();
   for (const tool of projectedTools) {
-    if (!tool || typeof tool !== "object" || typeof tool.name !== "string") {
+    if (!tool || typeof tool !== "object" || typeof tool.name !== "string" ||
+        !tool.inputSchema || typeof tool.inputSchema !== "object" || Array.isArray(tool.inputSchema) || tool.inputSchema.type !== "object") {
       throw new McpFnClientProfileError(
         "MCPFN_INVALID_PROJECTED_CATALOG",
         "Projected catalogs may contain only MCP tool definitions",
@@ -214,10 +228,12 @@ function assertProjectedCatalog(
     if (!canonical.has(toolName)) continue;
     const visibleTool = projectedTools.find((tool) => tool.name === toolName);
     if (!visibleTool) continue;
-    const canonicalProperties = canonicalTool.inputSchema.properties ?? {};
-    const canonicalRequired = new Set(canonicalTool.inputSchema.required ?? []);
-    const visibleProperties = visibleTool.inputSchema.properties ?? {};
-    const visibleRequired = new Set(visibleTool.inputSchema.required ?? []);
+    const canonicalShape = rootShape(canonicalTool.inputSchema);
+    const visibleShape = rootShape(visibleTool.inputSchema);
+    const canonicalProperties = canonicalShape.properties;
+    const canonicalRequired = canonicalShape.required;
+    const visibleProperties = visibleShape.properties;
+    const visibleRequired = visibleShape.required;
     for (const name of new Set(ownedNames)) {
       if (
         !Object.hasOwn(canonicalProperties, name) ||
@@ -241,12 +257,22 @@ function assertProjectedCatalog(
 
   for (const visibleTool of projectedTools) {
     const canonicalTool = canonical.get(visibleTool.name)!;
-    const visibleRequired = new Set(visibleTool.inputSchema.required ?? []);
-    const visibleProperties = visibleTool.inputSchema.properties ?? {};
+    const canonicalShape = rootShape(canonicalTool.inputSchema);
+    const visibleShape = rootShape(visibleTool.inputSchema);
+    const visibleRequired = visibleShape.required;
+    const visibleProperties = visibleShape.properties;
     const owned = new Set(
       profile.serverOwnedArguments?.[visibleTool.name] ?? [],
     );
-    for (const required of canonicalTool.inputSchema.required ?? []) {
+    for (const [name, schema] of Object.entries(visibleProperties)) {
+      if (!Object.hasOwn(canonicalShape.properties, name) || canonicalJson(schema) !== canonicalJson(canonicalShape.properties[name])) {
+        throw new McpFnClientProfileError("MCPFN_PROFILE_ASYMMETRIC", `Projected model-owned property ${visibleTool.name}.${name} must retain its canonical schema`);
+      }
+    }
+    if ([...visibleRequired].some((name) => !canonicalShape.required.has(name))) {
+      throw new McpFnClientProfileError("MCPFN_PROFILE_ASYMMETRIC", "Projected catalogs cannot add required model-owned fields");
+    }
+    for (const required of canonicalShape.required) {
       if (owned.has(required)) continue;
       if (
         !visibleRequired.has(required) ||
@@ -268,12 +294,11 @@ export async function buildMcpFnEffectiveCatalog<TContext>(input: {
   knownTools?: McpFnListedTool[];
   resolved: McpFnResolvedClientProfile<TContext>;
 }): Promise<{ tools: McpFnListedTool[]; changes: McpFnCatalogChange[] }> {
-  const canonicalTools = structuredClone(input.canonicalTools).sort(
-    (left, right) => compareCodeUnits(left.name, right.name),
-  );
+  const canonicalTools = structuredClone(input.canonicalTools);
   const knownTools = structuredClone(input.knownTools ?? input.canonicalTools);
   const profile = input.resolved.profile;
   if (!profile) return { tools: canonicalTools, changes: [] };
+  assertTrustedProfileIdentity(input.resolved);
   const projected = profile.projectCatalog
     ? await profile.projectCatalog({
         context: input.resolved.context,
@@ -289,15 +314,13 @@ export async function buildMcpFnEffectiveCatalog<TContext>(input: {
       `Client profile ${profile.id} did not return a tool array`,
     );
   }
-  const tools = structuredClone(projected).sort((left, right) =>
-    compareCodeUnits(left.name, right.name),
-  );
   assertProjectedCatalog(
     canonicalTools,
     knownTools,
-    tools,
+    projected,
     profile as McpFnClientProfile<unknown>,
   );
+  const tools = structuredClone(projected).sort((left, right) => compareCodeUnits(left.name, right.name));
   const projectedByName = new Map(tools.map((tool) => [tool.name, tool]));
   const changes: McpFnCatalogChange[] = [];
   for (const canonical of canonicalTools) {
@@ -340,6 +363,7 @@ export async function enrichMcpFnClientProfileCall<TContext>(input: {
   const original = objectArguments(input.arguments ?? {});
   const profile = input.resolved.profile;
   if (!profile) return original;
+  assertTrustedProfileIdentity(input.resolved);
   const owned = new Set(profile.serverOwnedArguments?.[input.tool.name] ?? []);
   for (const name of owned) {
     if (Object.hasOwn(original, name)) {
@@ -393,4 +417,43 @@ export async function enrichMcpFnClientProfileCall<TContext>(input: {
     }
   }
   return enriched;
+}
+
+function assertTrustedProfileIdentity<T>(resolved: McpFnResolvedClientProfile<T>): void {
+  if (typeof resolved.verifiedIdentity?.subject !== "string" || !resolved.verifiedIdentity.subject) {
+    throw new McpFnClientProfileError("MCPFN_INVALID_VERIFIED_IDENTITY", "A resolved profile requires a verified identity");
+  }
+}
+
+/** Resolve only root object composition; never traverse argument values. */
+function rootShape(root: Record<string, unknown>): { properties: Record<string, unknown>; required: Set<string> } {
+  const properties: Record<string, unknown> = Object.create(null);
+  const required = new Set<string>();
+  const seen = new Set<unknown>();
+  const visit = (value: unknown) => {
+    if (!value || typeof value !== "object" || Array.isArray(value) || seen.has(value)) return;
+    seen.add(value);
+    const schema = value as Record<string, unknown>;
+    if (typeof schema.$ref === "string") {
+      if (!schema.$ref.startsWith("#/")) throw new McpFnClientProfileError("MCPFN_INVALID_PROJECTED_CATALOG", "Profile root references must be local JSON pointers");
+      let target: unknown = root;
+      for (const part of schema.$ref.slice(2).split("/")) {
+        const key = part.replace(/~1/g, "/").replace(/~0/g, "~");
+        target = target && typeof target === "object" && Object.hasOwn(target, key) ? (target as Record<string, unknown>)[key] : undefined;
+      }
+      if (!target) throw new McpFnClientProfileError("MCPFN_INVALID_PROJECTED_CATALOG", "Unresolved root schema reference");
+      visit(target);
+    }
+    if (schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties)) {
+      for (const [name, child] of Object.entries(schema.properties)) {
+        if (Object.hasOwn(properties, name) && canonicalJson(properties[name]) !== canonicalJson(child)) {
+          properties[name] = { allOf: [properties[name], child] };
+        } else properties[name] = child;
+      }
+    }
+    if (Array.isArray(schema.required)) for (const name of schema.required) if (typeof name === "string") required.add(name);
+    if (Array.isArray(schema.allOf)) for (const child of schema.allOf) visit(child);
+  };
+  visit(root);
+  return { properties, required };
 }

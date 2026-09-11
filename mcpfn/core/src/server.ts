@@ -42,7 +42,7 @@ import {
   type McpFnClientProfilesOptions,
   type McpFnResolvedClientProfile,
 } from "./client-profiles.js";
-import { errorResult, McpFnError } from "./errors.js";
+import { errorResult, McpFnError, McpFnClientProfileError, McpFnValidationError, McpFnOutputValidationError } from "./errors.js";
 import { assertMcpAppContracts } from "./apps.js";
 import { createManifest, type CreateManifestOptions } from "./manifest.js";
 import type { McpFnRegistry } from "./registry.js";
@@ -319,6 +319,7 @@ export class McpFnServer<TContext = undefined> {
           let resolved: McpFnResolvedClientProfile<TContext> | undefined;
           let currentStage: McpFnClientProfileLifecycleStage =
             "profile-resolution";
+          let taskOutputReported = false;
           try {
             resolved = await this.resolveProfile(context, extra);
             currentStage = "catalog-projection";
@@ -375,6 +376,16 @@ export class McpFnServer<TContext = undefined> {
             });
             const completedStages = new Set<McpFnClientProfileLifecycleStage>();
             const observer = {
+              onTaskOutput: async (outcome: "succeeded" | "failed") => {
+                taskOutputReported = true;
+                completedStages.delete("output-validation");
+                await this.emitProfileEvidence({
+                  stage: "output-validation", outcome,
+                  profile: this.profileReference(resolved),
+                  tool: request.params.name,
+                  ...(outcome === "failed" ? { code: "MCPFN_INVALID_OUTPUT" } : {}),
+                });
+              },
               onStage: (
                 stage: "input-validation" | "handler" | "output-validation",
               ) => {
@@ -413,7 +424,6 @@ export class McpFnServer<TContext = undefined> {
             );
             return result;
           } catch (error) {
-            if (error instanceof McpError) throw error;
             const profile = this.profileReference(resolved);
             const details =
               error instanceof McpFnError &&
@@ -422,10 +432,10 @@ export class McpFnServer<TContext = undefined> {
               !Array.isArray(error.details)
                 ? (error.details as Record<string, unknown>)
                 : {};
-            const issues = Array.isArray(details.issues)
+            const issues = (error instanceof McpFnValidationError || error instanceof McpFnOutputValidationError) && ["input-validation", "output-validation"].includes(currentStage) && Array.isArray(details.issues)
               ? (details.issues as McpFnClientProfileEvidence["issues"])
               : undefined;
-            await this.emitProfileEvidence({
+            if (!((currentStage as McpFnClientProfileLifecycleStage) === "output-validation" && taskOutputReported) && !["profile-resolution", "catalog-projection"].includes(currentStage)) await this.emitProfileEvidence({
               stage: currentStage,
               outcome: "failed",
               profile,
@@ -434,6 +444,7 @@ export class McpFnServer<TContext = undefined> {
                 error instanceof McpFnError ? error.code : "MCPFN_TOOL_ERROR",
               ...(issues ? { issues } : {}),
             });
+            if (error instanceof McpError) throw error;
             const lifecycleError =
               error instanceof McpFnError
                 ? new McpFnError(error.code, error.message, {
@@ -712,6 +723,9 @@ export class McpFnServer<TContext = undefined> {
   > {
     const { configureRequestServer, ...transportOptions } = options;
     if (!transportOptions.sessionIdGenerator) {
+      if (this.clientProfiles?.profiles.some((profile) => profile.requiresReportedClient !== false)) {
+        throw new McpFnClientProfileError("MCPFN_PROFILE_REQUIRES_SESSION", "Client profiles require sessionIdGenerator to retain initialize metadata; stateless-independent profiles must declare requiresReportedClient: false");
+      }
       return async (request: Request, handleOptions?: HandleRequestOptions) => {
         const requestServer = new McpFnServer(this.serverOptions);
         const transport = new WebStandardStreamableHTTPServerTransport(
