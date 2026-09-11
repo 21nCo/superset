@@ -24,3 +24,20 @@ it('renders public components and schema controls with working tabs', async () =
   expect(style).not.toContain('.uifn-button{');
   expect(style).toContain('fonts.googleapis.com');
 });
+
+it('portals the positioner together with its select content', async () => {
+  const React = await import('react');
+  const { createRoot } = await import('react-dom/client');
+  const { SelectRoot, SelectPositioner, SelectContent } = await import('@uifn/components-react/select');
+  const host = document.createElement('div');
+  const portal = document.createElement('div');
+  document.body.append(host, portal);
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(React.createElement(SelectRoot, {},
+      React.createElement(SelectPositioner, { container: portal }, React.createElement(SelectContent, { forceMount: true }, 'Popup')))));
+    const positioner = portal.querySelector('[data-uifn-part="positioner"]');
+    expect(positioner?.querySelector('[data-uifn-part="content"]')?.textContent).toBe('Popup');
+    expect(host.querySelector('[data-uifn-part="positioner"]')).toBeNull();
+  } finally { await act(async () => root.unmount()); host.remove(); portal.remove(); }
+});

@@ -39,6 +39,9 @@ it('renders equivalent public components from package and source scaffolds', asy
   const { mkdtempSync, rmSync, readFileSync, symlinkSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { initProject } = await import('../../registry/src/preset/project');
+  const { createServer } = await import('vite');
+  const { aliases } = await import('../aliases');
+  const vite = await createServer({ configFile: false, define: { __UIFN_DEV_TRACE__: 'false' }, resolve: { alias: aliases }, server: { middlewareMode: true, watch: null }, appType: 'custom' });
   const { createElement } = await import('react');
   const { renderToStaticMarkup } = await import('react-dom/server');
   const parent = mkdtempSync(path.join(tmpdir(), 'uifn-public-parity-'));
@@ -51,10 +54,10 @@ it('renders equivalent public components from package and source scaffolds', asy
       const source = readFileSync(path.join(rootDir, 'src/App.tsx'), 'utf8');
       expect(source).not.toContain('dangerouslySetInnerHTML');
       expect(source).toContain(installMode === 'source' ? '../components/uifn/react/button' : '@uifn/components-react/button');
-      const { App } = await import(/* @vite-ignore */ path.join(rootDir, 'src/App.tsx'));
+      const { App } = await vite.ssrLoadModule(path.join(rootDir, 'src/App.tsx'));
       html.push(renderToStaticMarkup(createElement(App)));
     }
     expect(html[0]).toContain('data-uifn-component="button"');
     expect(html[0]).toEqual(html[1]);
-  } finally { rmSync(parent, { recursive: true, force: true }); }
+  } finally { await vite.close(); rmSync(parent, { recursive: true, force: true }); }
 });

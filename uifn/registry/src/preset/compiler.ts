@@ -164,16 +164,40 @@ function px(value: number): string {
   return `${Math.max(0, value)}px`;
 }
 
-function contrastOn(lightness: number, chroma: number, hue: number): string {
+function linearRgb(lightness: number, chroma: number, hue: number): number[] {
   const angle = hue * Math.PI / 180;
   const a = chroma * Math.cos(angle), b = chroma * Math.sin(angle);
   const l = (lightness + 0.3963377774 * a + 0.2158037573 * b) ** 3;
   const m = (lightness - 0.1055613458 * a - 0.0638541728 * b) ** 3;
   const s = (lightness - 0.0894841775 * a - 1.291485548 * b) ** 3;
-  const clip = (value: number) => Math.max(0, Math.min(1, value));
-  const luminance = 0.2126 * clip(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s)
-    + 0.7152 * clip(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s)
-    + 0.0722 * clip(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s);
+  return [4.0767416621*l - 3.3077115913*m + 0.2309699292*s,
+    -1.2684380046*l + 2.6097574011*m - 0.3413193965*s,
+    -0.0041960863*l - 0.7034186147*m + 1.707614701*s];
+}
+
+// Reduce chroma at fixed OKLCH lightness/hue, then emit that exact sRGB color.
+// Foreground contrast therefore uses the rendered color, without depending on
+// a browser's out-of-gamut mapping algorithm.
+function mappedRgb(lightness: number, chroma: number, hue: number): number[] {
+  let low = 0, high = chroma;
+  const inGamut = (rgb: number[]) => rgb.every(value => value >= 0 && value <= 1);
+  if (inGamut(linearRgb(lightness, chroma, hue))) return linearRgb(lightness, chroma, hue);
+  for (let step = 0; step < 24; step++) {
+    const mid = (low + high) / 2;
+    if (inGamut(linearRgb(lightness, mid, hue))) low = mid; else high = mid;
+  }
+  return linearRgb(lightness, low, hue).map(value => Math.max(0, Math.min(1, value)));
+}
+
+function solidColor(lightness: number, chroma: number, hue: number): string {
+  const encoded = mappedRgb(lightness, chroma, hue).map(value =>
+    ((value <= 0.0031308 ? 12.92 * value : 1.055 * value ** (1 / 2.4) - 0.055) * 255).toFixed(6));
+  return `rgb(${encoded.join(' ')})`;
+}
+
+function contrastOn(lightness: number, chroma: number, hue: number): string {
+  const [r, g, b] = mappedRgb(lightness, chroma, hue);
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
   return (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05) ? '#000000' : '#ffffff';
 }
 
@@ -186,7 +210,7 @@ function colorVars(preset: UIFnPresetV1, mode: 'light' | 'dark'): Record<string,
   const accentChroma = high ? Math.max(chroma, 0.16) : 0.18 + shift.chroma;
   const textPrimary = mode === 'dark' ? oklch(high ? 0.98 : 0.95, Math.min(chroma, 0.012), hue) : oklch(high ? 0.12 : 0.2, Math.min(chroma, 0.024), hue);
   const canvas = mode === 'dark' ? oklch(high ? 0.08 : 0.15, Math.min(chroma, 0.02), hue) : oklch(high ? 1 : 0.98, Math.min(chroma, 0.014), hue);
-  const accentSolid = mode === 'dark' ? oklch(high ? 0.78 : 0.68, accentChroma, accentHue) : oklch(high ? 0.46 : 0.55, accentChroma, accentHue);
+  const accentSolid = solidColor(mode === 'dark' ? (high ? 0.78 : 0.68) : (high ? 0.46 : 0.55), accentChroma, accentHue);
   const radius = RADIUS_BASE[preset.radius];
   const radiusShift = shift.radius;
   return {
@@ -209,13 +233,13 @@ function colorVars(preset: UIFnPresetV1, mode: 'light' | 'dark'): Record<string,
     '--uifn-color-accent-solid': accentSolid,
     '--uifn-color-accent-subtle': mode === 'dark' ? oklch(0.24, 0.05, accentHue) : oklch(0.93, 0.05, accentHue),
     '--uifn-color-accent-contrast': contrastOn(mode === 'dark' ? (high ? 0.78 : 0.68) : (high ? 0.46 : 0.55), accentChroma, accentHue),
-    '--uifn-color-danger-solid': mode === 'dark' ? 'oklch(68% 0.19 25)' : 'oklch(50% 0.19 25)',
+    '--uifn-color-danger-solid': solidColor(mode === 'dark' ? 0.68 : 0.5, 0.19, 25),
     '--uifn-color-danger-subtle': mode === 'dark' ? 'oklch(24% 0.05 25)' : 'oklch(94% 0.04 25)',
     '--uifn-color-danger-contrast': contrastOn(mode === 'dark' ? 0.68 : 0.5, 0.19, 25),
-    '--uifn-color-warning-solid': mode === 'dark' ? 'oklch(76% 0.16 80)' : 'oklch(64% 0.16 80)',
+    '--uifn-color-warning-solid': solidColor(mode === 'dark' ? 0.76 : 0.64, 0.16, 80),
     '--uifn-color-warning-subtle': mode === 'dark' ? 'oklch(24% 0.06 80)' : 'oklch(94% 0.05 80)',
     '--uifn-color-warning-contrast': contrastOn(mode === 'dark' ? 0.76 : 0.64, 0.16, 80),
-    '--uifn-color-success-solid': mode === 'dark' ? 'oklch(68% 0.14 145)' : 'oklch(48% 0.14 145)',
+    '--uifn-color-success-solid': solidColor(mode === 'dark' ? 0.68 : 0.48, 0.14, 145),
     '--uifn-color-success-subtle': mode === 'dark' ? 'oklch(24% 0.05 145)' : 'oklch(93% 0.04 145)',
     '--uifn-color-success-contrast': contrastOn(mode === 'dark' ? 0.68 : 0.48, 0.14, 145),
     '--uifn-radius-sm': px(Math.max(0, radius.sm + radiusShift)),
@@ -270,7 +294,7 @@ function frameworkPackages(preset: UIFnPresetV1): Array<{ name: string; version:
   return [
     { name: '@uifn/components-react', version: '0.0.1', relationship: 'runtime' },
     { name: '@uifn/components', version: '0.0.1', relationship: 'runtime' },
-    { name: '@uifn/react', version: '0.0.1', relationship: 'runtime' },
+    { name: '@uifn/react', version: '0.0.3', relationship: 'runtime' },
     { name: '@uifn/recipes', version: '0.0.1', relationship: 'runtime' },
     { name: '@uifn/theme', version: '0.0.1', relationship: 'runtime' },
     { name: 'react', version: '18.3.1', relationship: 'peer' },

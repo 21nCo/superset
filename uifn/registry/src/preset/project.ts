@@ -206,7 +206,10 @@ export function readProjectPreset(rootDir: string): { ok: true; state: PresetPro
       throw new UIFnPresetError('UIFN_PRESET_INVALID_JSON', 'Invalid managed preset state.');
     }
     const preset = normalizePreset(parsed.preset);
-    const code = typeof parsed.code === 'string' ? parsed.code : encodePreset(preset);
+    const code = encodePreset(preset);
+    if (typeof parsed.code !== 'string' || parsed.code !== code) {
+      throw new UIFnPresetError('UIFN_PRESET_INVALID_JSON', 'Managed preset code must match the canonical preset.');
+    }
     return { ok: true, state: { schemaVersion: 1, code, preset, template: parsed.template ?? 'react-vite', files: parsed.files ?? {} } };
   } catch (cause) {
     if (cause instanceof UIFnPresetError) return presetFailure(cause.code, cause.message, cause.details);

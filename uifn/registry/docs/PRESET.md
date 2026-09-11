@@ -60,7 +60,7 @@ V1 decoders must remain available for the life of schema version 1. Adding a fie
 Apply requires valid managed preset state. Existing files without a recorded base
 hash, and locally edited managed files, are conflicts. Partial apply retains all
 untouched hashes and merges only the selected theme or font axes. Theme includes
-style, color, chart, radius, density and menu tokens; font includes body and heading.
+style, color, theme contrast, chart, radius, density and menu tokens; font includes body and heading.
 A source-mode dry run lists the complete trusted registry plan without creating the
 project directory. Failed initialization removes only directories it created that
 are empty after rollback.

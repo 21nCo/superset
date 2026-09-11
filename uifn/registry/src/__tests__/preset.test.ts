@@ -88,3 +88,20 @@ describe('UIFnPresetV1 contract', () => {
   });
 
 });
+
+it('computes contrast from the emitted in-gamut sRGB solid', () => {
+  for (const baseColor of PRESET_AXES.baseColor) {
+    const plan = compilePreset(normalizePreset({ style: 'atlas', baseColor }));
+    for (const vars of [plan.theme.lightVars, plan.theme.darkVars]) {
+      for (const kind of ['accent', 'danger', 'warning', 'success']) {
+        const channels = vars[`--uifn-color-${kind}-solid`].match(/[0-9.]+/g)!.map(Number);
+        expect(channels.every(value => value >= 0 && value <= 255)).toBe(true);
+        const [r,g,b] = channels.map(value => { const s = value/255; return s <= .04045 ? s/12.92 : ((s+.055)/1.055)**2.4; });
+        const luminance = .2126*r+.7152*g+.0722*b;
+        const black = (luminance+.05)/.05, white = 1.05/(luminance+.05);
+        expect(vars[`--uifn-color-${kind}-contrast`]).toBe(black >= white ? '#000000' : '#ffffff');
+        expect(Math.max(black, white)).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  }
+});

@@ -191,3 +191,15 @@ describe('preset CLI and project workflows', () => {
   });
 
 });
+
+it.each([undefined, "broken", encodePreset({ style: "atlas" })])('rejects inconsistent managed codes: %s', (code) => {
+  const rootDir = mkdtempSync(path.join(os.tmpdir(), 'uifn-state-code-'));
+  try {
+    expect(initProject({ rootDir, preset: encodePreset({}) }).ok).toBe(true);
+    const statePath = path.join(rootDir, '.uifn/preset.json');
+    const state = JSON.parse(readFileSync(statePath, 'utf8'));
+    state.code = code;
+    writeFileSync(statePath, JSON.stringify(state));
+    expect(readProjectPreset(rootDir).ok).toBe(false);
+  } finally { rmSync(rootDir, { recursive: true, force: true }); }
+});

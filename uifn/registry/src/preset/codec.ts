@@ -70,7 +70,7 @@ function assertAxisValue<K extends PresetAxis>(axis: K, value: unknown): (typeof
 
 export function normalizePreset(input: UIFnPresetInput | UIFnPresetV1 = {}): UIFnPresetV1 {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new UIFnPresetError('UIFN_PRESET_INVALID_JSON', 'Preset must be an object.');
-  if (input && typeof input === 'object') {
+  {
     for (const key of Object.keys(input)) {
       if (key === 'version') continue;
       if (!PRESET_FIELD_ORDER.includes(key as PresetAxis)) {
