@@ -12,7 +12,7 @@ import json
 import secrets
 import time
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple, TypeGuard, cast
 from urllib.parse import unquote, urlparse
@@ -549,7 +549,8 @@ async def _load_active_placement(
             or not placement.region_id.strip()
             or type(placement.epoch) is not int or placement.epoch < 1):
         raise PlacementDirectoryUnavailableError("Invalid authoritative placement record")
-    return placement
+    region_id = placement.region_id.strip()
+    return placement if region_id == placement.region_id else replace(placement, region_id=region_id)
 
 
 def _payload_from_context(context: PlacementBoundAuthContext, keyring: RoutingKeyring) -> Dict[str, Any]:
