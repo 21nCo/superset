@@ -321,6 +321,13 @@ export function validateRecordKeys(
     if (key === "id") continue;
     
     if (!fields.has(key)) {
+      if (mode === "write" && index.fieldsByResource.get(resourceName)?.has(key)) {
+        return vErr(
+          "DFQL_INVALID",
+          `Field is read-only: ${key} on ${resourceName}`,
+          `${basePath}.${key}`,
+        );
+      }
       return vErr(
         "DFQL_UNKNOWN_FIELD",
         `Unknown field: ${key} on ${resourceName}`,

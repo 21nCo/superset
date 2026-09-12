@@ -3,7 +3,12 @@
  */
 
 import type { DatafnSchema } from "../../core-types.js";
-import { coerceDateFieldsToEpoch, normalizeRelationFkRecord, resolveCapabilities } from "@datafn/core";
+import {
+  coerceDateFieldsToEpoch,
+  findSystemFieldWrite,
+  normalizeRelationFkRecord,
+  resolveCapabilities,
+} from "@datafn/core";
 import type { Adapter } from "@superfunctions/db";
 import {
   isRetryableMutationResult,
@@ -392,6 +397,21 @@ export async function executePush(
     targetDb: Adapter,
   ): Promise<ExecuteMutationResult> {
     const resolvedCapabilities = resolveCapabilitiesForResource(schema, mut.resource);
+    if (
+      (mut.operation === "insert" || mut.operation === "merge" || mut.operation === "replace") &&
+      typeof mut.record === "object" &&
+      mut.record !== null
+    ) {
+      const systemField = findSystemFieldWrite(schema.relations, mut.resource, mut.record);
+      if (systemField) {
+        return {
+          ok: false,
+          code: "DFQL_INVALID",
+          message: `Field is read-only: ${systemField} on ${mut.resource}`,
+          path: `record.${systemField}`,
+        };
+      }
+    }
     switch (mut.operation) {
       case "insert": {
         const coercedData = applyDateCoercion(schema, mut.resource, mut.record || {}, logger);

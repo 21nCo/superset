@@ -62,6 +62,13 @@ export const INTERNAL_TABLE_SCHEMAS: Record<string, InternalColumnDef[]> = {
   __datafn_permission_directory_outbox: PERMISSION_DIRECTORY_OUTBOX_COLUMNS,
 };
 
+export function listNamespacedInternalTables(): string[] {
+  return Object.entries(INTERNAL_TABLE_SCHEMAS)
+    .filter(([, columns]) => columns.some((column) => column.name === "namespace"))
+    .map(([name]) => name)
+    .sort();
+}
+
 export async function ensureInternalTable(
   adapter: Adapter,
   tableName: string,

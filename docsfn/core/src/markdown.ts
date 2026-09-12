@@ -373,6 +373,10 @@ function parseTabsBlock(input: {
       });
     }
 
+    if (tabs.some(tab => tab.value === value)) {
+      throw createMdxCompileError({ message: `duplicate tab value: ${value}`, sourcePath: input.sourcePath });
+    }
+
     const inlineContentMatch = line.match(
       /<\s*(DocsTab|Tab)\b[^>]*>([\s\S]*?)<\s*\/\s*(DocsTab|Tab)\s*>/
     );

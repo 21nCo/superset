@@ -44,11 +44,6 @@ services/persistence/src/**/*.js
 
 
 *.pem
-# Conduct
-_conduct/logs/
-_conduct/*.db
-_conduct/*.db-*
-
 
 .cursor/
 .factory/

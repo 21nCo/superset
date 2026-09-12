@@ -40,6 +40,7 @@ export function VersionSwitcher({
   const current = resolvedVersions.find((version) => version.slug === resolvedCurrentVersion);
 
   const navigateToVersion = (versionSlug: string) => {
+    if (surface?.versionLinks !== undefined && !surface.versionLinks[versionSlug]) return;
     if (onVersionChange) {
       onVersionChange(versionSlug);
       return;
@@ -74,7 +75,7 @@ export function VersionSwitcher({
   }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu items={resolvedVersions.map(version => ({ id: version.slug, label: version.label, disabled: surface?.versionLinks !== undefined && !surface.versionLinks[version.slug] }))}>
       <DropdownMenuTrigger className={`docsfn-version-switcher-trigger ${className || ""}`}>
         <span className="docsfn-version-label">{current?.label || resolvedCurrentVersion}</span>
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">

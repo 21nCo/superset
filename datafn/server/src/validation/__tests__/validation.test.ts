@@ -1215,3 +1215,88 @@ describe("FIX-SEC-008: Query prototype pollution validation", () => {
     expect(body.ok).toBe(true);
   });
 });
+
+// ─── Date field min/max bounds ───────────────────────────────────────
+
+describe("Date field bounds validation", () => {
+  const boundsSchema = {
+    resources: [
+      {
+        name: "event",
+        version: 1,
+        idPrefix: "event:",
+        fields: [
+          { name: "label", type: "string" as const, required: true },
+          {
+            name: "startsAt",
+            type: "date" as const,
+            required: true,
+            min: Date.parse("2026-01-01T00:00:00.000Z"),
+            max: Date.parse("2026-12-31T23:59:59.999Z"),
+          },
+        ],
+      },
+    ],
+    relations: [],
+  };
+
+  async function pushMutation(record: Record<string, unknown>) {
+    const db = memoryAdapter();
+    await db.initialize();
+    const server = await createDatafnServer({
+      allowUnknownResources: true,
+      schema: boundsSchema,
+      database: db,
+    });
+    try {
+      const res = await server.router.handle(
+        new Request("http://localhost/datafn/mutation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            resource: "event",
+            version: "1",
+            clientId: "client-1",
+            mutationId: "mut-date-bounds",
+            operation: "insert",
+            id: "event:1",
+            record,
+          }),
+        }),
+      );
+      return { status: res.status, body: await readJson(res) };
+    } finally {
+      await server.close();
+    }
+  }
+
+  it("rejects a date before min", async () => {
+    const { status, body } = await pushMutation({
+      label: "Too early",
+      startsAt: "2025-12-31T23:59:59.999Z",
+    });
+    expect(status).toBe(400);
+    expect(body.ok).toBe(false);
+    expect(body.error.code).toBe("DFQL_INVALID");
+    expect(body.error.message).toContain("startsAt");
+  });
+
+  it("rejects an epoch date after max", async () => {
+    const { status, body } = await pushMutation({
+      label: "Too late",
+      startsAt: Date.parse("2027-01-01T00:00:00.000Z"),
+    });
+    expect(status).toBe(400);
+    expect(body.ok).toBe(false);
+    expect(body.error.code).toBe("DFQL_INVALID");
+  });
+
+  it("accepts a date within bounds", async () => {
+    const { status, body } = await pushMutation({
+      label: "In range",
+      startsAt: "2026-06-15T12:00:00.000Z",
+    });
+    expect(status).toBe(200);
+    expect(body.ok).toBe(true);
+  });
+});

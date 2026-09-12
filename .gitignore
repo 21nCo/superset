@@ -83,8 +83,6 @@ __pycache__/
 .cache/
 *.bundled_*.mjs
 
-_conduct/.meta
-
 .agent
 .venv
 

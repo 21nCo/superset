@@ -11,7 +11,9 @@ DataFn follows [semver](https://semver.org/): until 1.0 minor versions may inclu
 
 ## Unreleased
 
-- (placeholder for in-development changes)
+**New**
+
+- Versioned namespace storage contract: `DATAFN_NAMESPACE_STORAGE_MANIFEST` in `@datafn/core` and `resolveNamespaceStoragePlan` / `inspectPostgresNamespaceStorage` / `drainNamespaceStorage` in `@datafn/server`. This is the supported integration point for tenant copy, checksum, cleanup, write fencing, outbox drain, backup, and physical-ownership checks.
 
 ## 0.3.0
 

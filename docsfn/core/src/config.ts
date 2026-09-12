@@ -72,12 +72,16 @@ const docsTopNavItemSchema: z.ZodType<any> = z.lazy(() =>
   })
 );
 
+function isLocalRoute(value: string): boolean {
+  return /^\/(?!\/)[^?#\\\u0000-\u0020]*$/.test(value);
+}
+
 const absoluteRouteSchema = (pathLabel: string) =>
   z
     .string()
     .optional()
     .refine(
-      (value) => value === undefined || value.startsWith("/"),
+      (value) => value === undefined || isLocalRoute(value),
       `${pathLabel} must start with '/'`
     );
 
@@ -87,7 +91,7 @@ const datedCollectionConfigSchema = z.object({
   routeBase: z
     .string()
     .min(1, "collections.*.routeBase is required")
-    .refine((value) => value.startsWith("/"), "collections.*.routeBase must start with '/'"),
+    .refine((value) => isLocalRoute(value), "collections.*.routeBase must start with '/'"),
   feedPath: absoluteRouteSchema("collections.*.feedPath"),
   label: z.string().min(1).optional(),
   scope: z.string().min(1).optional(),
@@ -103,7 +107,7 @@ const docsConfigSchema = z.object({
     basePath: z
       .string()
       .optional()
-      .refine((value) => value === undefined || value.startsWith("/"), "site.basePath must start with '/'"),
+      .refine((value) => value === undefined || isLocalRoute(value), "site.basePath must start with '/'"),
     canonicalUrl: z.string().url("site.canonicalUrl must be a valid URL").optional(),
     defaultLocale: z.string().min(1).optional(),
     showFooter: z.boolean().optional(),
@@ -373,7 +377,7 @@ async function loadFreshConfigGraph(configPath: string): Promise<unknown> {
         end: number;
         target: string;
         require: boolean;
-        suffix?: string;
+        stripEnd?: number;
       }>;
     }
   >();
@@ -420,7 +424,7 @@ async function loadFreshConfigGraph(configPath: string): Promise<unknown> {
         end: number;
         target: string;
         require: boolean;
-        suffix?: string;
+        stripEnd?: number;
       }>,
     };
     modules.set(file, record);
@@ -475,11 +479,13 @@ async function loadFreshConfigGraph(configPath: string): Promise<unknown> {
       }
       if (!["", ".js", ".mjs", ".ts", ".cjs", ".json"].includes(extname(target)))
         continue;
-      let suffix: string | undefined;
+      let stripEnd: number | undefined;
       if (extname(target) === ".json" && !isRequire) {
+        // JSON dependencies become CommonJS wrappers, so neither static nor
+        // dynamic imports need runtime-specific JSON import attributes.
         const parent = literal.parent;
-        if ((ts.isImportDeclaration(parent) || ts.isExportDeclaration(parent)) && !parent.attributes) suffix = ' with { type: "json" }';
-        if (ts.isCallExpression(parent) && parent.arguments.length === 1) suffix = ', { with: { type: "json" } }';
+        if ((ts.isImportDeclaration(parent) || ts.isExportDeclaration(parent)) && parent.attributes) stripEnd = parent.attributes.end;
+        if (ts.isCallExpression(parent) && parent.arguments.length > 1) stripEnd = parent.arguments[parent.arguments.length - 1].end;
       }
       // Record before reading so a missing dependency can be watched and repaired.
       record.imports.push({
@@ -487,7 +493,7 @@ async function loadFreshConfigGraph(configPath: string): Promise<unknown> {
         end: literal.end,
         target,
         require: isRequire,
-        suffix,
+        stripEnd,
       });
       await visit(target);
     }
@@ -518,14 +524,14 @@ async function loadFreshConfigGraph(configPath: string): Promise<unknown> {
       file,
       join(
         dirname(file),
-        `.docsfn.${version}.${loadNonce}.${createHash("sha256").update(file).digest("hex").slice(0, 16)}.${modules.get(file)!.json ? "json" : modules.get(file)!.commonjs ? "cjs" : "mjs"}`,
+        `.docsfn.${version}.${loadNonce}.${createHash("sha256").update(file).digest("hex").slice(0, 16)}.${modules.get(file)!.json || modules.get(file)!.commonjs ? "cjs" : "mjs"}`,
       ),
     ]),
   );
   const written: string[] = [];
   try {
     for (const [file, module] of modules) {
-      let source = module.source;
+      let source = module.json ? `module.exports = JSON.parse(${JSON.stringify(module.source)});\n` : module.source;
       for (const entry of [...module.imports].sort(
         (a, b) => b.start - a.start,
       )) {
@@ -536,7 +542,7 @@ async function loadFreshConfigGraph(configPath: string): Promise<unknown> {
               ? outputPaths.get(entry.target)!
               : pathToFileURL(outputPaths.get(entry.target)!).href,
           ) +
-          (entry.suffix ?? "") + source.slice(entry.end);
+          source.slice(entry.stripEnd ?? entry.end);
       }
       const output = outputPaths.get(file)!;
       await writeFile(output, source, { encoding: "utf8", mode: 0o600 });

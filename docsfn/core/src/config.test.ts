@@ -496,7 +496,7 @@ it.each(['theme', 'theme/index.js', 'theme/index.ts'])('reloads exact extensionl
   await writeFile(join(cwd, relative), 'export const title = "After";');
   expect((await loadDocsConfig({ cwd })).site.title).toBe('After');
 });
-it.each(['import values from "./values.json";', 'const { default: values } = await import("./values.json");', 'import values from "./values.json" with { type: "json" };'])('loads and refreshes ESM JSON config imports: %s', async statement => {
+it.each(['import values from "./values.json";', 'const { default: values } = await import("./values.json");', 'import values from "./values.json" with { type: "json" };', 'import values from "./values.json" assert { type: "json" };', 'const { default: values } = await import("./values.json", { with: { type: "json" } });'])('loads and refreshes ESM JSON config imports: %s', async statement => {
   const cwd = await createTempDir();
   await writeFile(join(cwd, 'values.json'), '{"title":"Before"}');
   await writeFile(join(cwd, 'docsfn.config.mjs'), `${statement} export default { schemaVersion: 1, site: { title: values.title }, content: { root: '.' } };`);
@@ -514,4 +514,13 @@ it.each(['theme', 'theme/index.js'])('reloads CommonJS exact and directory modul
   expect((await loadDocsConfig({ cwd, configPath: 'docsfn.config.cjs' })).site.title).toBe('Before');
   await writeFile(join(cwd, relative), 'module.exports = "After";');
   expect((await loadDocsConfig({ cwd, configPath: 'docsfn.config.cjs' })).site.title).toBe('After');
+});
+
+it.each(['//outside.example', '/docs?x=1', '/docs#anchor', '/\\outside'])('rejects nonlocal route configuration %s', async route => {
+  const cwd = await createTempDir();
+  const base = { schemaVersion: 1, site: { title: 'Routes', basePath: '/docs' }, content: { root: cwd, docsDir: 'content/docs' } };
+  for (const extra of [{ site: { ...base.site, basePath: route } }, { blog: { routeBase: route } }, { blog: { feedPath: route } }, { collections: { posts: { dir: 'posts', routeBase: route } } }]) {
+    await writeFile(join(cwd, 'docsfn.config.mjs'), serializeConfig({ ...base, ...extra }));
+    await expect(loadDocsConfig({ cwd })).rejects.toThrow();
+  }
 });

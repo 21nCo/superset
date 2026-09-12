@@ -381,9 +381,9 @@ describe("OpenAPI normalization", () => {
   });
 });
 
-it('resolves reusable path items and preserves OpenAPI 3.1 reference overrides', () => {
+it.each(['3.1.0', '3.2.0'])('resolves reusable path items and preserves OpenAPI %s reference overrides', openapi => {
   const reference = buildOpenApiReference({ sourceId: 'api:refs', sourcePath: 'refs.json', fallbackTitle: 'Refs', body: JSON.stringify({
-    openapi: '3.1.0', info: { title: 'Refs', version: '1' }, paths: { '/pets': { $ref: '#/components/pathItems/Pets' } },
+    openapi, info: { title: 'Refs', version: '1' }, paths: { '/pets': { $ref: '#/components/pathItems/Pets' } },
     components: {
       pathItems: { Pets: { post: { requestBody: { $ref: '#/components/requestBodies/Input', description: 'Local input' }, responses: { '200': { $ref: '#/components/responses/Ok', description: 'Local response' } } } } },
       requestBodies: { Input: { description: 'Shared input', content: { 'application/json': {} } } },

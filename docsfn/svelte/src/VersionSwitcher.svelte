@@ -35,6 +35,7 @@
   $: current = resolvedVersions.find((version) => version.slug === resolvedCurrentVersion);
 
   function handleChange(versionSlug: string) {
+    if (surface?.versionLinks !== undefined && !surface.versionLinks[versionSlug]) return;
     if (onVersionChange) {
       onVersionChange(versionSlug);
       return;
@@ -66,7 +67,7 @@
 </script>
 
 {#if resolvedVersions.length > 1 && resolvedCurrentVersion}
-  <DropdownMenu>
+  <DropdownMenu items={resolvedVersions.map(version => ({ id: version.slug, label: version.label, disabled: surface?.versionLinks !== undefined && !surface.versionLinks[version.slug] }))}>
     <DropdownMenuTrigger class="docsfn-version-switcher-trigger">
       <span class="docsfn-version-label">{current?.label || resolvedCurrentVersion}</span>
       <svg

@@ -23,12 +23,20 @@ import type {
 } from "./capabilities.js";
 import type { DatafnEnvelope } from "./errors.js";
 import { ok, err } from "./errors.js";
+import { validateFieldValue } from "./validate.js";
+import { toBoundsEpochMs } from "./date.js";
+import { isDatafnE2eeEnvelope } from "./e2ee.js";
 import {
   CAPABILITY_FIELD_DEFS,
   getCapabilityFields,
   getRelationCapabilityFieldNames,
   resolveCapabilities,
 } from "./capabilities.js";
+import {
+  ANCESTOR_INACTIVE_FIELD,
+  ANCESTOR_INACTIVE_FIELD_DEF,
+  getAncestorInactiveResources,
+} from "./system-fields.js";
 
 const SIMPLE_CAPABILITIES: ReadonlySet<SimpleCapability> = new Set([
   "timestamps",
@@ -239,6 +247,7 @@ export function validateSchema(schema: unknown): DatafnEnvelope<DatafnSchema> {
   const resourceNames = new Set<string>();
   const normalizedIdPrefixes = new Map<string, string>();
   const normalizedResources: DatafnResourceSchema[] = [];
+  const ancestorInactiveResources = getAncestorInactiveResources(s.relations);
 
   for (const resource of s.resources) {
     if (
@@ -383,6 +392,83 @@ export function validateSchema(schema: unknown): DatafnEnvelope<DatafnSchema> {
           { path: `resources.${r.name}.fields.${f.name}.required` }
         );
       }
+      if (normalizedType === "date") {
+        // Date bounds are absolute epoch milliseconds: they must be finite,
+        // ordered, and any non-null default must lie within them, otherwise a
+        // replace/insert that applies the default would bypass mutation-time
+        // bounds enforcement.
+        const min = f.min;
+        const max = f.max;
+        if (
+          min !== undefined &&
+          (typeof min !== "number" || !Number.isFinite(min))
+        ) {
+          return err(
+            "SCHEMA_INVALID",
+            `Invalid schema: date field "${f.name}" min must be finite epoch milliseconds`,
+            { path: `resources.${r.name}.fields.${f.name}.min` },
+          );
+        }
+        if (
+          max !== undefined &&
+          (typeof max !== "number" || !Number.isFinite(max))
+        ) {
+          return err(
+            "SCHEMA_INVALID",
+            `Invalid schema: date field "${f.name}" max must be finite epoch milliseconds`,
+            { path: `resources.${r.name}.fields.${f.name}.max` },
+          );
+        }
+        if (
+          typeof min === "number" &&
+          typeof max === "number" &&
+          min > max
+        ) {
+          return err(
+            "SCHEMA_INVALID",
+            `Invalid schema: date field "${f.name}" min must not exceed max`,
+            { path: `resources.${r.name}.fields.${f.name}.min` },
+          );
+        }
+        if (
+          f.default !== undefined &&
+          f.default !== null &&
+          (min !== undefined || max !== undefined)
+        ) {
+          const defaultEpoch = toBoundsEpochMs(f.default);
+          // Reject defaults that do not parse as dates (e.g. "not-a-date" or
+          // a plain object): replace/merge-create apply defaults without
+          // mutation-time bounds checks, so an unparseable default would be
+          // persisted as-is. Opaque e2ee envelopes stay exempt.
+          if (
+            (!Number.isFinite(defaultEpoch) ||
+              !validateFieldValue("date", f.default, false).ok) &&
+            !isDatafnE2eeEnvelope(f.default)
+          ) {
+            return err(
+              "SCHEMA_INVALID",
+              `Invalid schema: date field "${f.name}" default must be a valid date`,
+              { path: `resources.${r.name}.fields.${f.name}.default` },
+            );
+          }
+          if (Number.isFinite(defaultEpoch)) {
+            if (typeof min === "number" && defaultEpoch < min) {
+              return err(
+                "SCHEMA_INVALID",
+                `Invalid schema: date field "${f.name}" default is before its min bound`,
+                { path: `resources.${r.name}.fields.${f.name}.default` },
+              );
+            }
+            if (typeof max === "number" && defaultEpoch > max) {
+              return err(
+                "SCHEMA_INVALID",
+                `Invalid schema: date field "${f.name}" default is after its max bound`,
+                { path: `resources.${r.name}.fields.${f.name}.default` },
+              );
+            }
+          }
+        }
+      }
       fieldNames.add(f.name);
       normalizedFields.push({
         ...(f as Omit<DatafnFieldSchema, "type" | "required">),
@@ -417,6 +503,16 @@ export function validateSchema(schema: unknown): DatafnEnvelope<DatafnSchema> {
     }
 
     const injectedFields = getCapabilityFields(resolvedCapabilities);
+    if (ancestorInactiveResources.has(r.name)) {
+      if (fieldNames.has(ANCESTOR_INACTIVE_FIELD)) {
+        return err(
+          "SYSTEM_FIELD_COLLISION",
+          `Field "${ANCESTOR_INACTIVE_FIELD}" on resource "${r.name}" is a DataFn system field maintained by relation.inheritsInactive and must not be declared`,
+          { path: `resources.${r.name}.fields.${ANCESTOR_INACTIVE_FIELD}` },
+        );
+      }
+      injectedFields.push({ ...ANCESTOR_INACTIVE_FIELD_DEF });
+    }
     for (const injectedField of injectedFields) {
       fieldNames.add(injectedField.name);
     }
@@ -671,21 +767,6 @@ export function validateSchema(schema: unknown): DatafnEnvelope<DatafnSchema> {
     if (fromRefError) return fromRefError;
     const toRefError = validateRelationRef(normalizedTo.result, "to");
     if (toRefError) return toRefError;
-    if (r.inheritsInactive === true) {
-      const dependentResources = r.type === "many-one"
-        ? (Array.isArray(normalizedFrom.result) ? normalizedFrom.result : [normalizedFrom.result])
-        : (Array.isArray(normalizedTo.result) ? normalizedTo.result : [normalizedTo.result]);
-      for (const name of dependentResources) {
-        const dependentResource = normalizedResources.find((resource) => resource.name === name);
-        if (!dependentResource?.fields.some((field) => field.name === "isAncestorInactive")) {
-          return err(
-            "SCHEMA_INVALID",
-            `Invalid schema: relation.inheritsInactive requires resource "${name}" to define isAncestorInactive`,
-            { path: "relations.inheritsInactive" },
-          );
-        }
-      }
-    }
 
     if (r.joinTable !== undefined && typeof r.joinTable !== "string") {
       return err("SCHEMA_INVALID", "Invalid schema: relation.joinTable must be string", {

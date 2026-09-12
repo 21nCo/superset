@@ -460,3 +460,7 @@ describe("shared component heading anchors and form URL policy", () => {
     expect(() => compileMarkdown({ source })).not.toThrow();
   });
 });
+
+it('rejects duplicate tab values before producing renderer artifacts', () => {
+  expect(() => compileMarkdown({ sourcePath: 'tabs.mdx', source: '<DocsTabs>\n<DocsTab value="same">First</DocsTab>\n<DocsTab value="same">Second</DocsTab>\n</DocsTabs>' })).toThrow(/duplicate tab value/);
+});

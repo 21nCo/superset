@@ -300,7 +300,7 @@ function resolveLocalReference(
   const visited = new Set<string>();
   const overrides: Record<string, string> = {};
   while (typeof toObject(resolved).$ref === "string") {
-    if (typeof document.openapi === "string" && document.openapi.startsWith("3.1.")) {
+    if (typeof document.openapi === "string" && Number(document.openapi.split(".")[1]) >= 1) {
       for (const key of ["summary", "description"]) {
         if (!Object.hasOwn(overrides, key) && typeof toObject(resolved)[key] === "string") overrides[key] = toObject(resolved)[key] as string;
       }
