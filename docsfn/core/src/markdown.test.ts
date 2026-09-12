@@ -464,3 +464,9 @@ describe("shared component heading anchors and form URL policy", () => {
 it('rejects duplicate tab values before producing renderer artifacts', () => {
   expect(() => compileMarkdown({ sourcePath: 'tabs.mdx', source: '<DocsTabs>\n<DocsTab value="same">First</DocsTab>\n<DocsTab value="same">Second</DocsTab>\n</DocsTabs>' })).toThrow(/duplicate tab value/);
 });
+
+it.each([["./other.md?view=1#part", "/docs/other?view=1#part"], ["./guide/index.mdx", "/docs/guide/"], ["./getting-started/", "/docs/getting-started/"]])("resolves source links from manifest root IDs: %s", (href, expected) => {
+  const compiled = compileMarkdown({ source: `[Link](${href})`, sourcePath: "docs:index.md" });
+  const resolved = resolveMarkdownRelativeLinks({ compiled, route: "/docs", sourcePath: "docs:index.md" });
+  expect(resolved.blocks[0]).toMatchObject({ html: `<a href="${expected}">Link</a>` });
+});

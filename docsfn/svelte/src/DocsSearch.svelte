@@ -28,7 +28,7 @@
   ) => DocsSearchRuntime = createDocsSearchRuntime;
   export let placeholder = "Search docs...";
   export let initialScope: SearchScopeFilter = "all";
-  export let scopes: SearchScopeFilter[] = ["all", "docs", "api", "blog", "changelog"];
+  export let scopes: SearchScopeFilter[] | undefined = undefined;
   export let scopeLabels: Record<string, string> = {
     all: "All",
     docs: "Docs",
@@ -54,6 +54,8 @@
   let inputRef: HTMLInputElement;
   let runtime: DocsSearchRuntime | null = null;
   let requestVersion = 0;
+  let runtimeVersion = 0;
+  let loadedScopes: DocsSearchScope[] | undefined;
 
   function normalizeScopes(input: SearchScopeFilter[]): SearchScopeFilter[] {
     const seen = new Set<SearchScopeFilter>();
@@ -104,14 +106,26 @@
     }
   }
 
-  $: supportedScopes = normalizeScopes(scopes);
-  $: if (!supportedScopes.includes(scope)) {
+  $: artifactScopes = (searchArtifact ?? searchIndex)?.scopes ?? loadedScopes;
+  $: supportedScopes = normalizeScopes((scopes?.length ? scopes : ["all", ...(artifactScopes ?? [])])
+    .filter(item => item === "all" || !artifactScopes || artifactScopes.includes(item)));
+  $: if (!supportedScopes.includes(scope) && !(loadSearchArtifact && artifactScopes === undefined)) {
     scope = supportedScopes[0] ?? "all";
   }
-  $: runtime = createSearchRuntime({
-    artifact: searchArtifact ?? searchIndex,
-    loadArtifact: loadSearchArtifact,
-  });
+  $: {
+    const version = ++runtimeVersion;
+    const artifact = searchArtifact ?? searchIndex;
+    const loader = loadSearchArtifact;
+    loadedScopes = undefined;
+    runtime = createSearchRuntime({
+      artifact,
+      loadArtifact: loader ? async () => {
+        const loaded = await loader();
+        if (version === runtimeVersion) loadedScopes = loaded.scopes;
+        return loaded;
+      } : undefined,
+    });
+  }
 
   async function runQuery(
     activeRuntime: DocsSearchRuntime | null,

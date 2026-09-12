@@ -131,3 +131,18 @@ describe("DocsSearch scope UI", () => {
     expect(result.getAttribute("data-href")).toBe("/changelog/docsfn-v0-1-0?embed=1");
   });
 });
+
+it("derives filters from an explicit search artifact", () => {
+  render(DocsSearch, { props: { searchArtifact: { scopes: ["docs"] } as any, createSearchRuntime: () => searchRuntime } });
+  expect(screen.getByRole("button", { name: "Docs" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "API" })).toBeNull();
+});
+it("updates filters after loading a search artifact", async () => {
+  render(DocsSearch, { props: {
+    loadSearchArtifact: async () => ({ scopes: ["docs"] } as any),
+    createSearchRuntime: input => ({ ...searchRuntime, query: async () => { await input.loadArtifact!(); return []; } }),
+  } });
+  await fireEvent.input(screen.getByLabelText("Search query"), { target: { value: "query" } });
+  await waitFor(() => expect(screen.getByRole("button", { name: "Docs" })).toBeTruthy());
+  expect(screen.queryByRole("button", { name: "API" })).toBeNull();
+});

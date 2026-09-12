@@ -16,11 +16,11 @@ The release gate and `migration-check.mjs` treat these as the phase-00 proof-rou
 | Proof id | App | Surface | Route pattern | Route files |
 | --- | --- | --- | --- | --- |
 | `next-api` | `next-docs-site` | `api` | `/docs/api/{...slug}` | `app/docs/[[...slug]]/page.tsx` |
-| `next-blog` | `next-docs-site` | `blog` | `/blog/{slug}` | `app/blog/[slug]/page.tsx` |
+| `next-blog` | `next-docs-site` | `blog` | `/blog/{...slug}` | `app/blog/[...slug]/page.tsx` |
 | `next-docs` | `next-docs-site` | `docs` | `/docs/{...slug}` | `app/docs/[[...slug]]/page.tsx` |
 | `next-embedded` | `next-docs-site` | `embedded` | `/embedded/{...slug}` | `app/embedded/[[...slug]]/page.tsx` |
 | `sveltekit-api` | `sveltekit-docs-site` | `api` | `/docs/api/{...slug}` | `src/routes/docs/[...slug]/+page.ts`, `src/routes/docs/[...slug]/+page.svelte` |
-| `sveltekit-blog` | `sveltekit-docs-site` | `blog` | `/blog/{slug}` | `src/routes/blog/[slug]/+page.ts`, `src/routes/blog/[slug]/+page.svelte` |
+| `sveltekit-blog` | `sveltekit-docs-site` | `blog` | `/blog/{...slug}` | `src/routes/blog/[...slug]/+page.server.ts`, `src/routes/blog/[...slug]/+page.svelte` |
 | `sveltekit-docs` | `sveltekit-docs-site` | `docs` | `/docs/{...slug}` | `src/routes/docs/[...slug]/+page.ts`, `src/routes/docs/[...slug]/+page.svelte` |
 | `sveltekit-embedded` | `sveltekit-docs-site` | `embedded` | `/embedded/{...slug}` | `src/routes/embedded/[...slug]/+page.ts`, `src/routes/embedded/[...slug]/+page.svelte` |
 

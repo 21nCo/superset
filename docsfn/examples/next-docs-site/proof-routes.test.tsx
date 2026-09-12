@@ -139,7 +139,7 @@ describe("Next proof routes", () => {
 
     expect(nextRoutes).toEqual([
       "next-api:api:/docs/api/{...slug}",
-      "next-blog:blog:/blog/{slug}",
+      "next-blog:blog:/blog/{...slug}",
       "next-docs:docs:/docs/{...slug}",
       "next-embedded:embedded:/embedded/{...slug}",
     ]);

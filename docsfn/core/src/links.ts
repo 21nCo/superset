@@ -185,7 +185,8 @@ function resolveHref(href: string, baseRoute: string, preserveBasePath = false):
   try {
     const basePath = preserveBasePath || baseRoute === "/" ? baseRoute : `${baseRoute}/`;
     const resolved = new URL(href, `https://docs.local${basePath}`);
-    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+    const pathname = resolved.pathname.replace(/\/index\.mdx?$/i, "/").replace(/\.mdx?$/i, "");
+    return `${pathname}${resolved.search}${resolved.hash}`;
   } catch {
     return href;
   }
@@ -198,7 +199,7 @@ function resolveBaseRoute(
 ): string {
   const normalizedRoute = normalizeAbsolutePath(route);
 
-  if (isIndexRoute || (sourcePath && /(?:^|\/)index\.mdx?$/i.test(sourcePath))) {
+  if (isIndexRoute || (sourcePath && /(?:^|[/:])index\.mdx?$/i.test(sourcePath))) {
     return normalizedRoute;
   }
 

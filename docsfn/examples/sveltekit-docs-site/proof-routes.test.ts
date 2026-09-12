@@ -164,7 +164,7 @@ describe("SvelteKit proof routes", () => {
 
     expect(svelteRoutes).toEqual([
       "sveltekit-api:api:/docs/api/{...slug}",
-      "sveltekit-blog:blog:/blog/{slug}",
+      "sveltekit-blog:blog:/blog/{...slug}",
       "sveltekit-docs:docs:/docs/{...slug}",
       "sveltekit-embedded:embedded:/embedded/{...slug}",
     ]);
