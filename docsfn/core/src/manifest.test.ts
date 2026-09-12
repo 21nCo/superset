@@ -770,3 +770,10 @@ it('keeps collision reservations out of the public content route map', async () 
   expect(manifest.routes[manifest.blog!.feedPath]).toBeUndefined();
   for (const id of Object.values(manifest.routes)) expect(manifest.pages[id] ?? manifest.posts[id] ?? manifest.apis[id]).toBeDefined();
 });
+
+it.each(['page', 'surface'])('rejects embedded %s URLs claimed by content', async kind => {
+  const provider = new InMemorySourceProvider(['guide.mdx', `embedded/${kind}/guide.mdx`].map(relativePath => ({
+    id: createSourceEntryId('docs', relativePath), collection: 'docs' as const, relativePath, entryType: 'content' as const, frontmatter: { title: 'Guide' }, body: '# Guide',
+  })));
+  await expect(buildManifest(provider, createConfig())).rejects.toMatchObject({ code: 'DOCS_ROUTE_CONFLICT' });
+});

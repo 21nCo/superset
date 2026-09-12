@@ -619,6 +619,7 @@ async function runDevCommand(
 
   const watcher = chokidar.watch(watchTargets, {
     ignoreInitial: true,
+    ignored: (pathname) => /^\.docsfn\..+\.(?:mjs|cjs)$/.test(path.basename(pathname)),
   });
   let activeWatchTargets = new Set(watchTargets);
 

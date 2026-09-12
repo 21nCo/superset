@@ -11,8 +11,8 @@ import {
 import { FsContentProvider } from "@docsfn/provider-fs";
 import DocsPage from "./src/routes/docs/[...slug]/+page.svelte";
 import { load as loadDocsPage } from "./src/routes/docs/[...slug]/+page.server";
-import BlogPage from "./src/routes/blog/[slug]/+page.svelte";
-import { load as loadBlogPage } from "./src/routes/blog/[slug]/+page.server";
+import BlogPage from "./src/routes/blog/[...slug]/+page.svelte";
+import { load as loadBlogPage } from "./src/routes/blog/[...slug]/+page.server";
 import EmbeddedDocsPage from "./src/routes/embedded/[...slug]/+page.svelte";
 import { load as loadEmbeddedPage } from "./src/routes/embedded/[...slug]/+page.server";
 import proofRoutes from "../proof-routes.json";

@@ -20,7 +20,7 @@
       "surface": "blog",
       "routePattern": "/blog/{slug}",
       "routeFiles": [
-        "docsfn/examples/next-docs-site/app/blog/[slug]/page.tsx"
+        "docsfn/examples/next-docs-site/app/blog/[...slug]/page.tsx"
       ],
       "requiredMarkers": [
         "data-docsfn-blog-post",
@@ -74,8 +74,8 @@
       "surface": "blog",
       "routePattern": "/blog/{slug}",
       "routeFiles": [
-        "docsfn/examples/sveltekit-docs-site/src/routes/blog/[slug]/+page.server.ts",
-        "docsfn/examples/sveltekit-docs-site/src/routes/blog/[slug]/+page.svelte"
+        "docsfn/examples/sveltekit-docs-site/src/routes/blog/[...slug]/+page.server.ts",
+        "docsfn/examples/sveltekit-docs-site/src/routes/blog/[...slug]/+page.svelte"
       ],
       "requiredMarkers": [
         "data-docsfn-blog-post",

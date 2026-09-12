@@ -401,19 +401,27 @@ export async function buildManifest(
 
   const embeddedPageRoutePrefix = `${basePath}/embedded/page`.replace(/\/{2,}/g, "/");
   const embeddedSurfaceRoutePrefix = `${basePath}/embedded/surface`.replace(/\/{2,}/g, "/");
+  const embeddedRoutes = new Map(routes);
   const embeddedPages: NonNullable<DocsManifest["embedded"]>["pages"] = Object.fromEntries(
     normalized.pages
       .filter((page) => page.collection === "docs")
       .map((page) => {
         const slug = page.slug.length > 0 ? page.slug : "index";
         const routeSuffix = slug.replace(/^\/+/, "");
+        const pageRoute = `${embeddedPageRoutePrefix}/${routeSuffix}`.replace(/\/{2,}/g, "/");
+        const surfaceRoute = `${embeddedSurfaceRoutePrefix}/${routeSuffix}`.replace(/\/{2,}/g, "/");
+        for (const [kind, route] of [["page", pageRoute], ["surface", surfaceRoute]]) {
+          const sourceId = `embedded:${kind}:${page.id}`;
+          assertRouteAvailability({ routes: embeddedRoutes, path: route, sourceId });
+          embeddedRoutes.set(route, sourceId);
+        }
         return [
           page.id,
           {
             pageId: page.id,
             sourcePath: page.path,
-            pageRoute: `${embeddedPageRoutePrefix}/${routeSuffix}`.replace(/\/{2,}/g, "/"),
-            surfaceRoute: `${embeddedSurfaceRoutePrefix}/${routeSuffix}`.replace(/\/{2,}/g, "/"),
+            pageRoute,
+            surfaceRoute,
             title: page.title,
             tocCount: page.headings.filter((heading) => heading.level > 1).length,
           },

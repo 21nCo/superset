@@ -168,7 +168,7 @@ describe("Next proof routes", () => {
   it("renders blog proof routes through DocsContent for the searchfn fixture", async () => {
     const html = await renderFixtureRoute({
       fixtureRoot: "../../test-fixtures/repo/searchfn-docs",
-      load: () => import("./app/blog/[slug]/page.tsx"),
+      load: () => import("./app/blog/[...slug]/page.tsx"),
       render: async (module: { default: (props: { params: Promise<{ slug: string }> }) => Promise<React.ReactElement> }) =>
         module.default({
           params: Promise.resolve({
