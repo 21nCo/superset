@@ -95,6 +95,7 @@ function sanitizePathLikeValue(value: string): string {
     }
 
     parsed.search = nextParams.toString();
+    parsed.hash = "";
     const normalizedPath = `${parsed.pathname}${parsed.search}${parsed.hash}`;
 
     if (value.startsWith("http://") || value.startsWith("https://")) {

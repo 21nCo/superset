@@ -344,24 +344,23 @@ describe("OpenAPI normalization", () => {
     );
   });
 
-it("resolves local parameter references and emits single-slash root routes", () => {
-  const reference = buildOpenApiReference({ sourceId: "api:x.json", sourcePath: "x.json", fallbackTitle: "X", basePath: "/", body: JSON.stringify({ openapi: "3.0.3", info: { title: "X", version: "1" }, components: { parameters: { Id: { name: "id", in: "path", required: true, schema: { type: "string" } } } }, paths: { "/items/{id}": { parameters: [{ $ref: "#/components/parameters/Id" }], get: { responses: {} } } } }) });
-  expect(reference.routes.overview).toBe("/api/x");
-  expect(reference.operations[0].parameters[0]).toMatchObject({ name: "id", in: "path", required: true, schemaType: "string" });
-});
-it("rejects explicit operation IDs that collide with generated IDs", () => {
-  expect(() => createReference({ sourceId: "api:x.json", sourcePath: "x.json", body: JSON.stringify({ openapi: "3.0.3", info: { title: "X", version: "1" }, paths: { "/a": { get: { responses: {} } }, "/b": { get: { operationId: "get:/a", responses: {} } } } }) })).toThrow(/duplicate operationId/);
-});
+  it("resolves local parameter references and emits single-slash root routes", () => {
+    const reference = buildOpenApiReference({ sourceId: "api:x.json", sourcePath: "x.json", fallbackTitle: "X", basePath: "/", body: JSON.stringify({ openapi: "3.0.3", info: { title: "X", version: "1" }, components: { parameters: { Id: { name: "id", in: "path", required: true, schema: { type: "string" } } } }, paths: { "/items/{id}": { parameters: [{ $ref: "#/components/parameters/Id" }], get: { responses: {} } } } }) });
+    expect(reference.routes.overview).toBe("/api/x");
+    expect(reference.operations[0].parameters[0]).toMatchObject({ name: "id", in: "path", required: true, schemaType: "string" });
+  });
+  it("rejects explicit operation IDs that collide with generated IDs", () => {
+    expect(() => createReference({ sourceId: "api:x.json", sourcePath: "x.json", body: JSON.stringify({ openapi: "3.0.3", info: { title: "X", version: "1" }, paths: { "/a": { get: { responses: {} } }, "/b": { get: { operationId: "get:/a", responses: {} } } } }) })).toThrow(/duplicate operationId/);
+  });
 
-it('decodes percent-encoded local parameter references', () => {
-  const spec = JSON.parse(createJsonSpec());
-  spec.components = { parameters: { 'id param': { name: 'id', in: 'query', schema: { type: 'string' } } } };
-  spec.paths['/search'].get.parameters = [{ $ref: '#/components/parameters/id%20param' }];
-  expect(createReference({ sourceId: 'api:x.json', sourcePath: 'x.json', body: JSON.stringify(spec) }).operations[0].parameters[0].name).toBe('id');
-  spec.paths['/search'].get.parameters[0].$ref = '#/components/parameters/%ZZ';
-  expect(() => createReference({ sourceId: 'api:x.json', sourcePath: 'x.json', body: JSON.stringify(spec) })).toThrow(/malformed local reference/);
-});
-
+  it('decodes percent-encoded local parameter references', () => {
+    const spec = JSON.parse(createJsonSpec());
+    spec.components = { parameters: { 'id param': { name: 'id', in: 'query', schema: { type: 'string' } } } };
+    spec.paths['/search'].get.parameters = [{ $ref: '#/components/parameters/id%20param' }];
+    expect(createReference({ sourceId: 'api:x.json', sourcePath: 'x.json', body: JSON.stringify(spec) }).operations[0].parameters[0].name).toBe('id');
+    spec.paths['/search'].get.parameters[0].$ref = '#/components/parameters/%ZZ';
+    expect(() => createReference({ sourceId: 'api:x.json', sourcePath: 'x.json', body: JSON.stringify(spec) })).toThrow(/malformed local reference/);
+  });
 
   it("resolves reusable request bodies and responses", () => {
     const reference = buildOpenApiReference({ sourceId: "api:reusable", sourcePath: "reusable.json", fallbackTitle: "Reusable", body: JSON.stringify({
@@ -380,4 +379,18 @@ it('decodes percent-encoded local parameter references', () => {
       components: { parameters: { "bad~2key": { name: "q", in: "query" } } },
     }) })).toThrow(/malformed local reference/);
   });
+});
+
+it('resolves reusable path items and preserves OpenAPI 3.1 reference overrides', () => {
+  const reference = buildOpenApiReference({ sourceId: 'api:refs', sourcePath: 'refs.json', fallbackTitle: 'Refs', body: JSON.stringify({
+    openapi: '3.1.0', info: { title: 'Refs', version: '1' }, paths: { '/pets': { $ref: '#/components/pathItems/Pets' } },
+    components: {
+      pathItems: { Pets: { post: { requestBody: { $ref: '#/components/requestBodies/Input', description: 'Local input' }, responses: { '200': { $ref: '#/components/responses/Ok', description: 'Local response' } } } } },
+      requestBodies: { Input: { description: 'Shared input', content: { 'application/json': {} } } },
+      responses: { Ok: { description: 'Shared response' } },
+    },
+  }) });
+  expect(reference.operations).toHaveLength(1);
+  expect(reference.operations[0].requestBody?.description).toBe('Local input');
+  expect(reference.operations[0].responses[0].description).toBe('Local response');
 });

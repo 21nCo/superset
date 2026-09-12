@@ -4,13 +4,17 @@ export function mapHtmlAttributes(
   transform: (name: string, value: string, raw: string) => string,
 ): string {
   let output = "", cursor = 0;
+  const commentEnd = /--!?>/g;
   while (cursor < source.length) {
     const start = source.indexOf("<", cursor);
     if (start < 0) return output + source.slice(cursor);
     output += source.slice(cursor, start);
     if (source.startsWith("<!--", start)) {
-      const end = source.indexOf("-->", start + 4);
-      cursor = end < 0 ? source.length : end + 3;
+      // HTML closes abrupt empty comments as well as the comment-end-bang form.
+      const abrupt = source.startsWith("<!-->", start) ? 5 : source.startsWith("<!--->", start) ? 6 : 0;
+      commentEnd.lastIndex = start + 4;
+      const end = abrupt ? null : commentEnd.exec(source);
+      cursor = abrupt ? start + abrupt : end ? commentEnd.lastIndex : source.length;
       output += source.slice(start, cursor);
       continue;
     }

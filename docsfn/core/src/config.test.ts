@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, unlink, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, unlink, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -485,4 +485,33 @@ it("records missing extensionless dependency candidates and recovers when create
   expect(getDocsConfigDependencies(join(cwd, "docsfn.config.ts"))).toContain(join(cwd, "missing.ts"));
   await writeFile(join(cwd, "missing.ts"), 'export const title = "Recovered";');
   expect((await loadDocsConfig({ cwd })).site.title).toBe("Recovered");
+});
+
+it.each(['theme', 'theme/index.js', 'theme/index.ts'])('reloads exact extensionless and directory dependencies: %s', async relative => {
+  const cwd = await createTempDir();
+  if (relative.includes('/')) await mkdir(join(cwd, 'theme'));
+  await writeFile(join(cwd, relative), 'export const title = "Before";');
+  await writeFile(join(cwd, 'docsfn.config.ts'), `import { title } from './theme'; export default { schemaVersion: 1, site: { title }, content: { root: '.' } };`);
+  expect((await loadDocsConfig({ cwd })).site.title).toBe('Before');
+  await writeFile(join(cwd, relative), 'export const title = "After";');
+  expect((await loadDocsConfig({ cwd })).site.title).toBe('After');
+});
+it.each(['import values from "./values.json";', 'const { default: values } = await import("./values.json");', 'import values from "./values.json" with { type: "json" };'])('loads and refreshes ESM JSON config imports: %s', async statement => {
+  const cwd = await createTempDir();
+  await writeFile(join(cwd, 'values.json'), '{"title":"Before"}');
+  await writeFile(join(cwd, 'docsfn.config.mjs'), `${statement} export default { schemaVersion: 1, site: { title: values.title }, content: { root: '.' } };`);
+  expect((await loadDocsConfig({ cwd })).site.title).toBe('Before');
+  await writeFile(join(cwd, 'values.json'), '{"title":"After"}');
+  expect((await loadDocsConfig({ cwd })).site.title).toBe('After');
+  expect((await readdir(cwd)).some(file => file.startsWith('.docsfn.'))).toBe(false);
+});
+
+it.each(['theme', 'theme/index.js'])('reloads CommonJS exact and directory modules: %s', async relative => {
+  const cwd = await createTempDir();
+  if (relative.includes('/')) await mkdir(join(cwd, 'theme'));
+  await writeFile(join(cwd, relative), 'module.exports = "Before";');
+  await writeFile(join(cwd, 'docsfn.config.cjs'), `const title = require('./theme'); module.exports = { schemaVersion: 1, site: { title }, content: { root: '.' } };`);
+  expect((await loadDocsConfig({ cwd, configPath: 'docsfn.config.cjs' })).site.title).toBe('Before');
+  await writeFile(join(cwd, relative), 'module.exports = "After";');
+  expect((await loadDocsConfig({ cwd, configPath: 'docsfn.config.cjs' })).site.title).toBe('After');
 });

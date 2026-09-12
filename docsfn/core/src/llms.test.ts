@@ -81,6 +81,8 @@ describe("buildLlmsTxt", () => {
             spec: {
               paths: {
                 "/things": {
+                  servers: [{ url: "https://example.com" }],
+                  "x-extension": { summary: "Not an operation" },
                   get: { summary: "List things" },
                   post: { summary: "Create thing" },
                 },
@@ -94,6 +96,9 @@ describe("buildLlmsTxt", () => {
     expect(text).toContain("## API Reference");
     expect(text).toContain("- GET /things — List things");
     expect(text).toContain("- POST /things — Create thing");
+    expect(text).not.toContain("SERVERS /things");
+    expect(text).not.toContain("X-EXTENSION /things");
+    expect(buildLlmsFullTxt(manifest)).not.toContain("SERVERS /things");
   });
 
   it("omits blog when includeBlog is false", () => {

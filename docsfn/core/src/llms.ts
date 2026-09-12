@@ -151,7 +151,7 @@ function summarizeOpenApiSpec(api: ApiReference): string[] {
   for (const [pathName, methodsRaw] of Object.entries(paths)) {
     if (!methodsRaw || typeof methodsRaw !== "object") continue;
     for (const [method, operationRaw] of Object.entries(methodsRaw as Record<string, unknown>)) {
-      if (method === "parameters") continue;
+      if (!["get", "put", "post", "delete", "options", "head", "patch", "trace"].includes(method)) continue;
       const operation = operationRaw as
         | { summary?: string; operationId?: string; description?: string }
         | undefined;

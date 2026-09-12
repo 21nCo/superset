@@ -260,3 +260,8 @@ describe("security", () => {
 it.each(['| X |\n| --- |\n| <svg/onload=alert(1)> |', '<a href="java&#x09;script:alert(1)">click</a>', '<a href="java&#10;script:alert(1)">click</a>'])("rejects browser executable HTML: %s", (source) => {
   expect(() => assertCompiledContentTrusted({ source })).toThrow();
 });
+
+it.each(['<!-->', '<!--->', '<!-- comment --!>'])('rejects executable attributes after browser-terminated comments: %s', prefix => {
+  expect(() => assertCompiledContentTrusted({ source: `${prefix}<img src=x onerror=alert(1)>` })).toThrow();
+  expect(() => assertCompiledContentTrusted({ source: `${prefix}<a href="javascript:alert(1)">go</a>` })).toThrow();
+});

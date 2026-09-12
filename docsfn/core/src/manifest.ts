@@ -267,6 +267,7 @@ export async function buildManifest(
   }
 
   const datedCollections: NonNullable<DocsManifest["collections"]> = {};
+  const collectionSurfacePaths = new Set<string>();
   const sortedDatedCollectionIds = [...postsByCollection.keys()].sort((left, right) =>
     left.localeCompare(right, "en", { sensitivity: "variant", numeric: true })
   );
@@ -295,6 +296,7 @@ export async function buildManifest(
       const sourceId = `collection:${collectionId}:${path}`;
       assertRouteAvailability({ routes, path, sourceId });
       routes.set(path, sourceId);
+      collectionSurfacePaths.add(path);
     }
 
     datedCollections[collectionId] = {
@@ -454,7 +456,7 @@ export async function buildManifest(
       pages: embeddedPages,
     },
     routes: Object.fromEntries(
-      [...routes.entries()].sort(([left], [right]) =>
+      [...routes.entries()].filter(([path]) => !collectionSurfacePaths.has(path)).sort(([left], [right]) =>
         left.localeCompare(right, "en", { sensitivity: "variant", numeric: true })
       )
     ),

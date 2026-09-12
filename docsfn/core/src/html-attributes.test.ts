@@ -16,3 +16,11 @@ it("skips complete and unterminated HTML comments", () => {
   expect(mapHtmlAttributes('<!-- <a onclick="demo()"> -->', drop)).toBe('<!-- <a onclick="demo()"> -->');
   expect(mapHtmlAttributes('<!-- <a onclick="demo()">', drop)).toBe('<!-- <a onclick="demo()">');
 });
+
+it.each(['<!-->', '<!--->', '<!-- --!>'])('sanitizes attributes after abruptly terminated comments %s', prefix => {
+  expect(mapHtmlAttributes(prefix + '<img onerror="attack()">', (name, _value, raw) => name.startsWith('on') ? '' : raw)).toBe(prefix + '<img>');
+});
+it('scans many ordinary comments without repeatedly searching the remaining suffix', () => {
+  const source = '<!-- safe -->'.repeat(50000);
+  expect(mapHtmlAttributes(source, (_name, _value, raw) => raw)).toBe(source);
+});

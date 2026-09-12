@@ -298,7 +298,13 @@ function resolveLocalReference(
 ): unknown {
   let resolved = value;
   const visited = new Set<string>();
+  const overrides: Record<string, string> = {};
   while (typeof toObject(resolved).$ref === "string") {
+    if (typeof document.openapi === "string" && document.openapi.startsWith("3.1.")) {
+      for (const key of ["summary", "description"]) {
+        if (!Object.hasOwn(overrides, key) && typeof toObject(resolved)[key] === "string") overrides[key] = toObject(resolved)[key] as string;
+      }
+    }
     const reference = toObject(resolved).$ref as string;
     if (!reference.startsWith("#/") || visited.has(reference)) {
       throw createOpenApiParseError({
@@ -328,7 +334,7 @@ function resolveLocalReference(
       });
     }
   }
-  return resolved;
+  return Object.keys(overrides).length ? { ...toObject(resolved), ...overrides } : resolved;
 }
 
 function normalizeParameter(value: unknown): CanonicalOpenApiParameter {
@@ -572,7 +578,7 @@ export function normalizeOpenApiReference(
 
   const paths = toObject(parsed.paths);
   for (const pathKey of Object.keys(paths).sort(compareStrings)) {
-    const pathItem = paths[pathKey];
+    const pathItem = resolveLocalReference(paths[pathKey], parsed, input);
     if (typeof pathItem !== "object" || pathItem === null || Array.isArray(pathItem)) {
       throw createOpenApiParseError({
         message: `OpenAPI source ${input.sourcePath} has malformed path operations at ${pathKey}`,

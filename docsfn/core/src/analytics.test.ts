@@ -128,3 +128,7 @@ describe("analytics", () => {
     ]);
   });
 });
+
+it('drops complete URL fragments without changing stable identifiers', () => {
+  expect(sanitizeDocsAnalyticsEvent({ name: 'docs.external_click', timestamp: '2026-03-20T00:00:00Z', route: '/docs#access_token=opaque', targetUrl: 'https://example.com/#opaque', version: 'v1', sidebarId: 'default' })).toMatchObject({ route: '/docs', targetUrl: 'https://example.com/', version: 'v1', sidebarId: 'default' });
+});

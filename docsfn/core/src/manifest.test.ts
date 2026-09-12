@@ -762,3 +762,11 @@ describe("global dated-collection surface conflicts", () => {
     await expect(buildManifest(new InMemorySourceProvider([]), createConfig({ collections: { changelog: { routeBase: "/docs/blog" } } }))).rejects.toMatchObject({ code: "DOCS_ROUTE_CONFLICT" });
   });
 });
+
+it('keeps collision reservations out of the public content route map', async () => {
+  const provider = new InMemorySourceProvider([{ id: createSourceEntryId('blog', 'release.mdx'), collection: 'blog', relativePath: 'release.mdx', entryType: 'content', frontmatter: { title: 'Release', date: '2026-01-01', tags: ['news'] }, body: 'Release' }]);
+  const manifest = await buildManifest(provider, createConfig());
+  expect(manifest.routes[manifest.blog!.listRoute]).toBeUndefined();
+  expect(manifest.routes[manifest.blog!.feedPath]).toBeUndefined();
+  for (const id of Object.values(manifest.routes)) expect(manifest.pages[id] ?? manifest.posts[id] ?? manifest.apis[id]).toBeDefined();
+});

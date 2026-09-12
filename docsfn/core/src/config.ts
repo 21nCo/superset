@@ -373,6 +373,7 @@ async function loadFreshConfigGraph(configPath: string): Promise<unknown> {
         end: number;
         target: string;
         require: boolean;
+        suffix?: string;
       }>;
     }
   >();
@@ -407,7 +408,7 @@ async function loadFreshConfigGraph(configPath: string): Promise<unknown> {
     );
     const commonjs =
       extname(file) === ".cjs" ||
-      (!ts.isExternalModule(ast) && (extname(file) === ".js"
+      (!ts.isExternalModule(ast) && (["", ".js"].includes(extname(file))
         ? await isCommonJsScope(file)
         : /\b(?:module\.exports|exports\.)/.test(source)));
     const record = {
@@ -419,6 +420,7 @@ async function loadFreshConfigGraph(configPath: string): Promise<unknown> {
         end: number;
         target: string;
         require: boolean;
+        suffix?: string;
       }>,
     };
     modules.set(file, record);
@@ -459,26 +461,33 @@ async function loadFreshConfigGraph(configPath: string): Promise<unknown> {
       if (!literal.text.startsWith(".")) continue;
       let target = resolve(dirname(file), literal.text);
       if (!extname(target)) {
-        const unresolved = target;
-        for (const extension of [".ts", ".js", ".mjs", ".cjs", ".json"]) {
-          if (await fileExists(target + extension)) {
-            target += extension;
-            break;
-          }
+        const extensions = [".ts", ".js", ".mjs", ".cjs", ".json"];
+        const candidates = [target, ...extensions.map(extension => target + extension), ...extensions.map(extension => join(target, `index${extension}`))];
+        let found: string | undefined;
+        for (const candidate of candidates) {
+          if (await stat(candidate).then(info => info.isFile(), () => false)) { found = candidate; break; }
         }
-        if (target === unresolved) {
-          for (const extension of ["", ".ts", ".js", ".mjs", ".cjs", ".json"]) unresolvedDependencies.add(unresolved + extension);
+        if (!found) {
+          for (const candidate of candidates) unresolvedDependencies.add(candidate);
           throw new Error("configuration dependency does not exist");
         }
+        target = found;
       }
-      if (![".js", ".mjs", ".ts", ".cjs", ".json"].includes(extname(target)))
+      if (!["", ".js", ".mjs", ".ts", ".cjs", ".json"].includes(extname(target)))
         continue;
+      let suffix: string | undefined;
+      if (extname(target) === ".json" && !isRequire) {
+        const parent = literal.parent;
+        if ((ts.isImportDeclaration(parent) || ts.isExportDeclaration(parent)) && !parent.attributes) suffix = ' with { type: "json" }';
+        if (ts.isCallExpression(parent) && parent.arguments.length === 1) suffix = ', { with: { type: "json" } }';
+      }
       // Record before reading so a missing dependency can be watched and repaired.
       record.imports.push({
         start: literal.getStart(ast),
         end: literal.end,
         target,
         require: isRequire,
+        suffix,
       });
       await visit(target);
     }
@@ -527,7 +536,7 @@ async function loadFreshConfigGraph(configPath: string): Promise<unknown> {
               ? outputPaths.get(entry.target)!
               : pathToFileURL(outputPaths.get(entry.target)!).href,
           ) +
-          source.slice(entry.end);
+          (entry.suffix ?? "") + source.slice(entry.end);
       }
       const output = outputPaths.get(file)!;
       await writeFile(output, source, { encoding: "utf8", mode: 0o600 });
