@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -202,4 +202,20 @@ it.each([undefined, "broken", encodePreset({ style: "atlas" })])('rejects incons
     writeFileSync(statePath, JSON.stringify(state));
     expect(readProjectPreset(rootDir).ok).toBe(false);
   } finally { rmSync(rootDir, { recursive: true, force: true }); }
+});
+
+it('applies the same symlink containment checks during dry-run', async () => {
+  await withProject(async parent => {
+    const rootDir = path.join(parent, 'app');
+    const outside = path.join(parent, 'outside.css');
+    const code = encodePreset({ installMode: 'package' });
+    expect(initProject({ rootDir, preset: code }).ok).toBe(true);
+    const theme = path.join(rootDir, 'src/uifn-theme.css');
+    writeFileSync(outside, readFileSync(theme));
+    rmSync(theme); symlinkSync(outside, theme);
+    for (const dryRun of [true, false]) {
+      const result = applyPreset({ rootDir, preset: code, dryRun });
+      expect(result).toMatchObject({ ok: false, error: { code: 'UIFN_REGISTRY_SYMLINK_ESCAPE' } });
+    }
+  });
 });

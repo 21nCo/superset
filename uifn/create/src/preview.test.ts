@@ -62,3 +62,20 @@ it('rejects a container supplied on content inside its positioner', async () => 
     expect(host.textContent).toContain('Pass container to Positioner');
   } finally { await act(async () => root.unmount()); host.remove(); }
 });
+
+it('keeps automatic portals inside the root iframe document', async () => {
+  const React = await import('react');
+  const { createRoot } = await import('react-dom/client');
+  const { SelectRoot, SelectPositioner, SelectContent } = await import('@uifn/components-react/select');
+  const frame = document.createElement('iframe'); document.body.append(frame);
+  const owner = frame.contentDocument!;
+  const host = owner.createElement('div'); owner.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(React.createElement(SelectRoot, {}, React.createElement(SelectPositioner, {}, React.createElement(SelectContent, { forceMount: true }, 'Iframe popup')))));
+    const popup = owner.body.querySelector('[data-uifn-part="positioner"]');
+    expect(popup?.textContent).toBe('Iframe popup');
+    expect(popup?.parentElement).toBe(owner.body);
+    expect(document.body.textContent).not.toContain('Iframe popup');
+  } finally { await act(async () => root.unmount()); frame.remove(); }
+});

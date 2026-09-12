@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync } from 'nod
 import path from 'node:path';
 import { planInstall } from '../plan';
 import { checksumContent } from '../lockfile';
-import { commitTransaction, type TransactionChange } from '../transaction';
+import { assertContainedPath, commitTransaction, type TransactionChange } from '../transaction';
 import { decodePreset, encodePreset, normalizePreset } from './codec';
 import { assertApprovedInit, compilePreset, type PresetCompilePlan } from './compiler';
 import { fixtureCss } from './fixtures';
@@ -165,7 +165,7 @@ function planFileChanges(rootDir: string, files: Record<string, string>): { chan
   const summary: Array<{ path: string; operation: 'create' | 'update' | 'unchanged' }> = [];
   const tracked = readManagedHashes(rootDir);
   for (const [relativePath, contents] of Object.entries(files)) {
-    const absolute = path.join(rootDir, relativePath);
+    const absolute = assertContainedPath(rootDir, relativePath);
     if (!existsSync(absolute)) {
       summary.push({ path: relativePath, operation: 'create' });
       changes.push({ path: relativePath, operation: 'create', contents });
@@ -232,7 +232,7 @@ function mutate(options: PresetMutationOptions, mode: 'init' | 'apply'): PresetM
   try {
     let preset = resolveInput(options);
     const rootDir = path.resolve(options.rootDir);
-    const hasState = existsSync(path.join(rootDir, PRESET_STATE_PATH));
+    const hasState = existsSync(assertContainedPath(rootDir, PRESET_STATE_PATH));
     let previous: PresetProjectState | undefined;
     if (mode === 'apply' || hasState) {
       const resolved = readProjectPreset(rootDir);
@@ -304,7 +304,8 @@ function mutate(options: PresetMutationOptions, mode: 'init' | 'apply'): PresetM
     };
   } catch (cause) {
     if (cause instanceof UIFnPresetError) return flag(cause.code, cause.message, cause.details);
-    return flag('UIFN_REGISTRY_CLI_ERROR', cause instanceof Error ? cause.message : String(cause));
+    const code = cause instanceof Error && 'code' in cause && typeof cause.code === 'string' && cause.code.startsWith('UIFN_') ? cause.code : 'UIFN_REGISTRY_CLI_ERROR';
+    return { ...flag(code, cause instanceof Error ? cause.message : String(cause)), dryRun: Boolean(options.dryRun) };
   } finally {
     if (!succeeded) for (const directory of createdDirectories) {
       try { rmdirSync(directory); } catch { /* Preserve nonempty directories after incomplete rollback. */ }

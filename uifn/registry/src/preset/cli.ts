@@ -58,9 +58,10 @@ export function runPresetCommand(options: {
       const preset = decodePreset(code);
       const url = presetShareUrl(preset);
       if (!options.dryRun) {
-        const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'rundll32.exe' : 'xdg-open';
-        const args = process.platform === 'win32' ? ['url.dll,FileProtocolHandler', url] : [url];
+        const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'powershell.exe' : 'xdg-open';
+        const args = process.platform === 'win32' ? ['-NoProfile', '-NonInteractive', '-Command', `Start-Process -FilePath '${url.replaceAll("'", "''")}' -ErrorAction Stop`] : [url];
         const launched = spawnSync(command, args, { stdio: 'ignore', timeout: 10_000 });
+        if (launched.error && 'code' in launched.error && launched.error.code === 'ETIMEDOUT') throw new UIFnPresetError('UIFN_PRESET_OPEN_UNKNOWN', 'Browser launch timed out; the editor may already be open. Use the returned URL if needed.', { url });
         if (launched.error || launched.status !== 0) throw new UIFnPresetError('UIFN_PRESET_OPEN_FAILED', 'Could not open the Create editor. Open the returned URL in your browser.', { url });
       }
       return { ok: true, code: encodePreset(preset), url, preset, opened: !options.dryRun, dryRun: options.dryRun };
@@ -87,6 +88,7 @@ export function runInitCommand(options: {
   const code = typeof options.flags.preset === 'string' ? options.flags.preset : '';
   if (!code) return { ok: false, dryRun: options.dryRun, written: [], unchanged: [], error: { code: 'UIFN_PRESET_USAGE', message: 'Usage: uifn init --preset <code> [--dir <path>] [--template react-vite] [--dry-run]' } };
   if (options.flags.dir !== undefined && (typeof options.flags.dir !== 'string' || !options.flags.dir.trim())) return { ok: false, dryRun: options.dryRun, written: [], unchanged: [], error: { code: 'UIFN_PRESET_USAGE', message: '--dir requires a path.' } };
+  if (options.flags.template !== undefined && (typeof options.flags.template !== 'string' || !options.flags.template.trim())) return { ok: false, dryRun: options.dryRun, written: [], unchanged: [], error: { code: 'UIFN_PRESET_USAGE', message: '--template requires a template name.' } };
   const rootDir = typeof options.flags.dir === 'string' ? path.resolve(options.rootDir, options.flags.dir) : options.rootDir;
   return initProject({
     rootDir,

@@ -721,6 +721,7 @@ export function ReactPrimitivePart({
   const bridge = React.useContext(definition.context);
   const positionerOwner = React.useContext(PositionerOwner);
   if (!bridge) throw new TypeError(`${definition.name}.${part} MUST be rendered inside ${definition.name}.Root.`);
+  React.useSyncExternalStore(bridge.subscribeElements, bridge.getElementVersion, () => 0);
   React.useSyncExternalStore(bridge.subscribe, bridge.getSnapshot, bridge.getServerSnapshot);
   const { asChild, render, children, value, forceMount, container, ...userProps } = props as ReactPrimitivePartProps<unknown, ElementName, boolean> & AnyRecord;
   if (many && value === undefined) {
@@ -760,7 +761,12 @@ export function ReactPrimitivePart({
   const automaticPortal = AUTOMATIC_PORTAL_PRIMITIVES.has(definition.name) &&
     (part === 'positioner' || (part === 'content' && positionerOwner !== bridge));
   const subtree = part === 'positioner' ? <PositionerOwner.Provider value={bridge}>{rendered}</PositionerOwner.Provider> : rendered;
-  return part === 'portal' || automaticPortal ? <Portal container={container}>{subtree}</Portal> : subtree;
+  if (part === 'portal' || automaticPortal) {
+    const ownerBody = bridge.getElement(definition.rootPart)?.ownerDocument.body;
+    if (container === undefined && !ownerBody) return null;
+    return <Portal container={container === undefined ? ownerBody : container}>{subtree}</Portal>;
+  }
+  return subtree;
 }
 
 export function useReactPrimitive<TInputs extends object>(
