@@ -463,7 +463,8 @@ function parsePullPayload(
     const joins = resolveJoinStoreResources(schema?.relations ?? []);
     for (const key of Object.keys(payload.cursors)) {
       if (key === "__datafn_actor_feed__") continue;
-      if (DISALLOWED_KEYS.has(key)) return invalid(`Disallowed key: ${key}`, "cursors");
+      // Cursor keys are resource names, not protocol fields. Object.keys and
+      // Map/Set storage preserve own keys without assigning object prototypes.
       const endpoints = joins.get(key);
       // Preserve a real resource even if its name collides with a join key.
       const resources = endpoints ? [...endpoints, ...(schema?.resources.some(resource => resource.name === key) ? [key] : [])] : [key];

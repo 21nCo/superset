@@ -456,3 +456,9 @@ it("rejects mixed global and resource pull cursors before authorization", () => 
   const result = extractStructuralResourceSelectors("pull", { cursor: "0", cursors: { allowed: "0" } });
   expect(result.ok).toBe(false);
 });
+
+it.each(["constructor", "prototype", "__proto__"])("retains own cursor resource key %s", name => {
+  const payload = JSON.parse(`{"cursors":{"${name}":"0"}}`);
+  const result = extractStructuralResourceSelectors("pull", payload);
+  expect(result.ok && result.result.selectors).toEqual([name]);
+});
