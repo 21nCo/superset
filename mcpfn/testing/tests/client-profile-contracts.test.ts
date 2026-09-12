@@ -389,3 +389,16 @@ describe("client profile compatibility contracts", () => {
   });
 
 });
+
+
+it("fails the catalog phase for duplicate tool names and produces no snapshot", async () => {
+  const { McpFnTestClient } = await import("../src/client.js");
+  const list = vi.spyOn(McpFnTestClient.prototype, "listTools").mockResolvedValue([projectedTool(), projectedTool()]);
+  try {
+    expect(() => createMcpFnClientProfileSnapshot({ id: "duplicate", version: "1" }, [projectedTool(), projectedTool()])).toThrow(/duplicate tool names/);
+    const report = await runMcpFnClientProfileContracts({ profiles: [{ id: "duplicate", version: "1", target: targetFor({}).target }] });
+    expect(report.ok).toBe(false);
+    expect(report.profiles[0]).toMatchObject({ phase: "catalog", ok: false });
+    expect(report.profiles[0].snapshot).toBeUndefined();
+  } finally { list.mockRestore(); }
+});

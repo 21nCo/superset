@@ -260,8 +260,8 @@ function assertProjectedCatalog(
     const canonicalShape = rootShape(canonicalTool.inputSchema);
     const visibleShape = rootShape(visibleTool.inputSchema);
     if (canonicalJson(canonicalShape.constraints) !== canonicalJson(visibleShape.constraints) ||
-        canonicalJson(canonicalTool.outputSchema ?? null) !== canonicalJson(visibleTool.outputSchema ?? null) ||
-        canonicalTool.execution?.taskSupport !== visibleTool.execution?.taskSupport) {
+        canonicalJson(canonicalTool.outputSchema) !== canonicalJson(visibleTool.outputSchema) ||
+        (canonicalTool.execution?.taskSupport ?? "forbidden") !== (visibleTool.execution?.taskSupport ?? "forbidden")) {
       throw new McpFnClientProfileError("MCPFN_PROFILE_ASYMMETRIC", "Projected tools must preserve root constraints, output schemas and task support");
     }
     const visibleRequired = visibleShape.required;

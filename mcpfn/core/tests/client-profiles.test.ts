@@ -491,3 +491,22 @@ describe("projected contract boundaries", () => {
     expect(stored).toHaveBeenCalledWith("task:1", "failed", expect.objectContaining({ isError: true }));
   });
 });
+
+
+describe("optional projected tool metadata", () => {
+  it.each([false, true])("treats forbidden task support as the default (%s)", async (explicit) => {
+    const { buildMcpFnEffectiveCatalog } = await import("../src/client-profiles.js");
+    const tool = { name: "test", inputSchema: { type: "object" as const }, ...(explicit ? { execution: { taskSupport: "forbidden" as const } } : {}) };
+    await expect(buildMcpFnEffectiveCatalog({ canonicalTools: [tool], resolved: {
+      context: undefined, extra: {} as any, reportedClient: {}, verifiedIdentity: { subject: "trusted" },
+      profile: { id: "test", version: "1", matches: () => true, projectCatalog: ({ tools }) => tools.map(({ execution, ...entry }) => ({ ...entry, ...(!explicit ? { execution: { taskSupport: "forbidden" as const } } : {}) })) },
+    } })).resolves.toBeDefined();
+  });
+  it("rejects a null projected output schema when the canonical schema is absent", async () => {
+    const { buildMcpFnEffectiveCatalog } = await import("../src/client-profiles.js");
+    await expect(buildMcpFnEffectiveCatalog({ canonicalTools: [{ name: "test", inputSchema: { type: "object" } }], resolved: {
+      context: undefined, extra: {} as any, reportedClient: {}, verifiedIdentity: { subject: "trusted" },
+      profile: { id: "test", version: "1", matches: () => true, projectCatalog: ({ tools }) => tools.map((tool) => ({ ...tool, outputSchema: null as any })) },
+    } })).rejects.toThrow(/preserve root constraints/);
+  });
+});

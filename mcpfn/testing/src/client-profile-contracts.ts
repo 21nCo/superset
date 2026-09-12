@@ -186,6 +186,9 @@ export function createMcpFnClientProfileSnapshot(
     .sort((left, right) =>
       left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
     );
+  if (normalized.some((tool, index) => index > 0 && tool.name === normalized[index - 1].name)) {
+    throw new Error("Effective catalog contains duplicate tool names");
+  }
   return {
     formatVersion: 1,
     kind: "mcpfn.client-profile-snapshot",
