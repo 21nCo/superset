@@ -228,8 +228,9 @@ function assertProjectedCatalog(
     if (!canonical.has(toolName)) continue;
     const visibleTool = projectedTools.find((tool) => tool.name === toolName);
     if (!visibleTool) continue;
-    const canonicalShape = rootShape(canonicalTool.inputSchema);
-    const visibleShape = rootShape(visibleTool.inputSchema);
+    const ownedFields = new Set(profile.serverOwnedArguments?.[visibleTool.name] ?? []);
+    const canonicalShape = rootShape(canonicalTool.inputSchema, ownedFields);
+    const visibleShape = rootShape(visibleTool.inputSchema, ownedFields);
     const canonicalProperties = canonicalShape.properties;
     const canonicalRequired = canonicalShape.required;
     const visibleProperties = visibleShape.properties;
@@ -257,13 +258,9 @@ function assertProjectedCatalog(
 
   for (const visibleTool of projectedTools) {
     const canonicalTool = canonical.get(visibleTool.name)!;
-    const canonicalShape = rootShape(canonicalTool.inputSchema);
-    const visibleShape = rootShape(visibleTool.inputSchema);
-    if (canonicalJson(canonicalShape.constraints) !== canonicalJson(visibleShape.constraints) ||
-        canonicalJson(canonicalTool.outputSchema) !== canonicalJson(visibleTool.outputSchema) ||
-        taskSupport(canonicalTool) !== taskSupport(visibleTool)) {
-      throw new McpFnClientProfileError("MCPFN_PROFILE_ASYMMETRIC", "Projected tools must preserve root constraints, output schemas and task support");
-    }
+    const ownedFields = new Set(profile.serverOwnedArguments?.[visibleTool.name] ?? []);
+    const canonicalShape = rootShape(canonicalTool.inputSchema, ownedFields);
+    const visibleShape = rootShape(visibleTool.inputSchema, ownedFields);
     const visibleRequired = visibleShape.required;
     const visibleProperties = visibleShape.properties;
     const owned = new Set(
@@ -302,6 +299,12 @@ function assertProjectedCatalog(
         );
       }
     }
+    if (canonicalJson(canonicalShape.constraints) !== canonicalJson(visibleShape.constraints) ||
+        canonicalJson(canonicalTool.outputSchema) !== canonicalJson(visibleTool.outputSchema) ||
+        taskSupport(canonicalTool) !== taskSupport(visibleTool)) {
+      throw new McpFnClientProfileError("MCPFN_PROFILE_ASYMMETRIC", "Projected tools must preserve root constraints, output schemas and task support");
+    }
+
   }
 }
 
@@ -452,49 +455,62 @@ function taskSupport(tool: McpFnListedTool): string {
 }
 
 /** Resolve only root object composition; never traverse argument values. */
-function rootShape(root: Record<string, unknown>): { properties: Record<string, unknown>; required: Set<string>; constraints: string[]; ownershipSensitive: boolean } {
+function rootShape(root: Record<string, unknown>, owned = new Set<string>()): { properties: Record<string, unknown>; required: Set<string>; constraints: string[]; ownershipSensitive: boolean } {
   const properties: Record<string, unknown> = Object.create(null);
   const required = new Set<string>();
   const constraints = new Set<string>();
   let ownershipSensitive = false;
   const seen = new Set<unknown>();
-  // Compare the schemas actually referenced by a property, not just pointer strings.
-  const resolveProperty = (value: unknown, refs = new Set<string>()): unknown => {
+  // A fragment is relative to its nearest schema resource, including nested $id roots.
+  const resources = new WeakMap<object, Record<string, unknown>>();
+  const index = (value: unknown, resource: Record<string, unknown>) => {
+    if (!value || typeof value !== "object" || resources.has(value)) return;
+    if (!Array.isArray(value) && typeof (value as Record<string, unknown>).$id === "string") resource = value as Record<string, unknown>;
+    resources.set(value, resource);
+    for (const child of Object.values(value)) index(child, resource);
+  };
+  index(root, root);
+  const referenceTarget = (schema: Record<string, unknown>): unknown => {
+    let pointer: string;
+    try { pointer = decodeURIComponent((schema.$ref as string).slice(1)); }
+    catch { throw new McpFnClientProfileError("MCPFN_INVALID_PROJECTED_CATALOG", "Invalid schema reference encoding"); }
+    let target: unknown = resources.get(schema) ?? root;
+    for (const part of pointer === "" ? [] : pointer.slice(1).split("/")) {
+      const key = part.replace(/~1/g, "/").replace(/~0/g, "~");
+      target = target && typeof target === "object" && Object.hasOwn(target, key) ? (target as Record<string, unknown>)[key] : undefined;
+    }
+    if (target === undefined) throw new McpFnClientProfileError("MCPFN_INVALID_PROJECTED_CATALOG", "Unresolved schema reference");
+    return target;
+  };
+  // Compare referenced schemas as well as pointer strings. Track resource targets
+  // rather than fragment text: identical fragments can name different resources.
+  const resolveProperty = (value: unknown, refs = new Set<unknown>()): unknown => {
     if (Array.isArray(value)) return value.map(child => resolveProperty(child, refs));
     if (!value || typeof value !== "object") return value;
     const schema = value as Record<string, unknown>;
     const result = Object.fromEntries(Object.entries(schema).map(([key, child]) => [key, resolveProperty(child, refs)]));
     if (typeof schema.$ref === "string" && (schema.$ref === "#" || schema.$ref.startsWith("#/"))) {
-      if (refs.has(schema.$ref)) return result; // Cycle edge; its target was already expanded on this path.
-      let target: unknown = root;
-      for (const part of schema.$ref === "#" ? [] : schema.$ref.slice(2).split("/")) {
-        const key = part.replace(/~1/g, "/").replace(/~0/g, "~");
-        target = target && typeof target === "object" && Object.hasOwn(target, key) ? (target as Record<string, unknown>)[key] : undefined;
-      }
-      if (target === undefined) throw new McpFnClientProfileError("MCPFN_INVALID_PROJECTED_CATALOG", "Unresolved property schema reference");
-      result.$ref = resolveProperty(target, new Set([...refs, schema.$ref]));
+      const target = referenceTarget(schema);
+      if (!refs.has(target)) result.$ref = resolveProperty(target, new Set([...refs, target]));
     }
     return result;
   };
-  const visit = (value: unknown) => {
+  const visit = (value: unknown, path = "root") => {
     if (!value || typeof value !== "object" || Array.isArray(value) || seen.has(value)) return;
     seen.add(value);
     const schema = value as Record<string, unknown>;
+    const branchProperties = schema.properties && typeof schema.properties === "object" ? Object.keys(schema.properties).filter(name => !owned.has(name)).sort(compareCodeUnits) : [];
+    const branchRequired = Array.isArray(schema.required) ? schema.required.filter(name => typeof name === "string" && !owned.has(name)).sort(compareCodeUnits) : [];
+    constraints.add(canonicalJson({ path, properties: branchProperties, required: branchRequired }));
     for (const [key, value] of Object.entries(schema)) {
       if (["dependencies", "dependentRequired", "dependentSchemas", "if", "then", "else", "anyOf", "oneOf", "not", "const", "enum", "minProperties", "maxProperties", "unevaluatedProperties"].includes(key)) ownershipSensitive = true;
       if (!["properties", "required", "allOf", "$ref", "$defs", "definitions", "title", "description", "$comment", "examples"].includes(key)) {
-        constraints.add(canonicalJson({ [key]: resolveProperty(value) }));
+        constraints.add(canonicalJson({ path, [key]: resolveProperty(value) }));
       }
     }
     if (typeof schema.$ref === "string") {
       if (schema.$ref !== "#" && !schema.$ref.startsWith("#/")) throw new McpFnClientProfileError("MCPFN_INVALID_PROJECTED_CATALOG", "Profile root references must be local JSON pointers");
-      let target: unknown = root;
-      for (const part of schema.$ref === "#" ? [] : schema.$ref.slice(2).split("/")) {
-        const key = part.replace(/~1/g, "/").replace(/~0/g, "~");
-        target = target && typeof target === "object" && Object.hasOwn(target, key) ? (target as Record<string, unknown>)[key] : undefined;
-      }
-      if (!target) throw new McpFnClientProfileError("MCPFN_INVALID_PROJECTED_CATALOG", "Unresolved root schema reference");
-      visit(target);
+      visit(referenceTarget(schema), `${path}/$ref`);
     }
     if (schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties)) {
       for (const [name, child] of Object.entries(schema.properties)) {
@@ -505,7 +521,7 @@ function rootShape(root: Record<string, unknown>): { properties: Record<string, 
       }
     }
     if (Array.isArray(schema.required)) for (const name of schema.required) if (typeof name === "string") required.add(name);
-    if (Array.isArray(schema.allOf)) for (const child of schema.allOf) visit(child);
+    if (Array.isArray(schema.allOf)) schema.allOf.forEach((child, index) => visit(child, `${path}/allOf/${index}`));
   };
   visit(root);
   return { properties, required, constraints: [...constraints].sort(compareCodeUnits), ownershipSensitive };

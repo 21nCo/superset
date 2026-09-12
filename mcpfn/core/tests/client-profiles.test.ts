@@ -532,6 +532,21 @@ describe("reference and ownership projection safety", () => {
     await expect(project({ type: "object", $ref: "#/$defs/input", $defs: { input: canonical } },
       { type: "object", $ref: "#/$defs/input", $defs: { input: visible } })).resolves.toBeDefined();
   });
+  it("preserves allOf constraint ownership", async () => {
+    const branches = [{ properties: { a: { type: "string" } }, additionalProperties: false }, { properties: { b: { type: "string" } } }];
+    await expect(project({ ...canonical, allOf: branches }, { ...visible, allOf: [
+      { properties: branches[0].properties }, { ...branches[1], additionalProperties: false },
+    ] })).rejects.toThrow(/preserve root constraints/);
+  });
+  it("resolves percent-encoded definition names", async () => {
+    await expect(project({ type: "object", $ref: "#/$defs/first%20name", $defs: { "first name": canonical } },
+      { type: "object", $ref: "#/$defs/first%20name", $defs: { "first name": visible } })).resolves.toBeDefined();
+  });
+  it("keeps recursive fragments inside their embedded resource", async () => {
+    const child = { $id: "https://example.test/child", type: "object", properties: { next: { $ref: "#" } } };
+    await expect(project({ ...canonical, properties: { ...canonical.properties, child } },
+      { ...visible, properties: { ...visible.properties, child } })).resolves.toBeDefined();
+  });
   it("rejects a changed referenced model-owned property", async () => {
     await expect(project({ ...canonical, properties: { ...canonical.properties, query: { $ref: "#/$defs/query" } }, $defs: { query: { type: "string" } } },
       { ...visible, properties: { query: { $ref: "#/$defs/query" } }, $defs: { query: { type: "number" } } })).rejects.toThrow(/canonical schema/);
