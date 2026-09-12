@@ -75,7 +75,7 @@ The context is frozen and contains:
 
 | Claim | Meaning |
 | --- | --- |
-| `subject` | HMAC-derived opaque user subject. Stable for the AuthFn user id. |
+| `subject` | HMAC-derived opaque user subject. Stable for the same AuthFn user id and subject-secret bytes. |
 | `homeRegion` | Authoritative placement region. |
 | `placementEpoch` | Placement fence. Downstream grants should copy this. |
 | `issuer` | Canonical AuthFn public authority. |
@@ -119,6 +119,30 @@ remote = create_placement_context_verifier(
 )
 verified = remote.verify_signed(issued["assertion"])
 ```
+
+## Opaque subject lifecycle
+
+Provision the **same `subjectSecret` / `subject_secret` bytes in every regional issuer**
+for one canonical authority, including a newly provisioned destination region.
+For the same user id, moving placement or advancing its epoch must keep this secret
+unchanged; the subject then remains stable. Different regional secrets identify the
+same user differently and must not be used for a rolling regional deployment.
+
+Treat the subject secret as identity infrastructure, separate from assertion signing
+keys. Rotating the signing `keyring` does not change subjects. Rotating the subject
+secret changes `subject`, `sessionBinding`, and `sessionVersion` for existing records.
+There is no subject-key id, automatic aliasing, or dual-secret lookup in this API.
+Before replacing it, use a trusted migration to compute old/new subjects from the
+same internal user ids, migrate or alias downstream user-home/namespace mappings,
+and coordinate the switch across all issuers and consumers. Never create replacement
+product users solely because a newly derived subject is unknown. Retain any required
+old aliases until all old context and downstream tickets have expired, then remove
+the old mapping/key according to the consumer's migration plan. Emergency rotation
+may intentionally invalidate sessions/tickets; it still requires identity migration.
+
+Consumers should key persisted mappings by canonical issuer and opaque subject.
+Authority normalization compatibility is covered by explicit TypeScript/Python
+fixtures; it is not a claim of exhaustive parity for every Unicode hostname.
 
 ## Session revocation semantics
 

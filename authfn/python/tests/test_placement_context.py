@@ -988,3 +988,16 @@ async def _setup(
         config=config,
         directory=resolved_directory,
     )
+
+
+@pytest.mark.parametrize("codepoint", range(0x0898, 0x08A0))
+def test_whatwg_arabic_initial_marks_match_node(codepoint: int) -> None:
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node is required for the differential authority fixture")
+    authority = "https://" + chr(codepoint) + ".example"
+    expected = subprocess.check_output([node, "-e", "process.stdout.write(new URL(process.argv[1]).origin)", authority], text=True)
+    assert _normalize_authority(authority) == expected
+    assert _normalize_authority(expected) == expected

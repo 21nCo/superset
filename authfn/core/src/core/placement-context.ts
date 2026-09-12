@@ -58,7 +58,12 @@ export interface AuthFnPlacementContextIssuerOptions {
   config: AuthFnRuntimeConfig;
   /** Region owning config.database. Inferred only from a configured gateway cell. */
   regionId?: string;
-  /** HMAC secret used to derive the opaque subject and session binding. */
+  /**
+   * Shared identity HMAC secret: every regional issuer for an authority must use
+   * identical bytes. Keep stable across placement moves. Rotation changes subjects,
+   * session bindings and versions; migrate downstream identity mappings first.
+   * Independent from the rotatable assertion-signing keyring.
+   */
   subjectSecret: string | Uint8Array;
   /** Audiences this issuer may mint context for. */
   audiences: readonly string[];

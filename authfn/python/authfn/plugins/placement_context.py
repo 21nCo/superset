@@ -845,7 +845,11 @@ def _enforce_idna_after_hyphen_or_length_exception(label: str) -> None:
     # VerifyDnsLength are false. idna.encode reports the hyphen first, so
     # re-run the remaining checks before the raw-punycode fallback.
     idna.check_nfc(label)
-    idna.check_initial_combiner(label)
+    # Node/ICU accepts these Arabic marks at the start of a WHATWG host even
+    # though Python's general-category based IDNA check rejects them. Keep this
+    # compatibility exception narrow; NFC, joiner and BiDi checks still apply.
+    if not label or not 0x0898 <= ord(label[0]) <= 0x089F:
+        idna.check_initial_combiner(label)
     classes = idnadata.codepoint_classes
     for pos, char in enumerate(label):
         code = ord(char)

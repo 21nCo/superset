@@ -829,3 +829,20 @@ function cookieHeaderFromSetCookies(setCookies: string[]): string {
     .map((cookie) => cookie.slice(0, cookie.indexOf(';')))
     .join('; ');
 }
+
+
+it('keeps identity claims stable for shared issuer keys and changes them on identity-key rotation', async () => {
+  const original = await setupIssuer();
+  const make = (subjectSecret: string) => createAuthFnPlacementContextIssuer({
+    config: original.config, regionId: 'us-east-1', subjectSecret, audiences: ['nucleum-datafn'],
+    publicAuthority: 'https://account.example.com', placementDirectory: original.directory,
+    identityKeyForUserId: id => `person:${id}`,
+  });
+  const first = await original.issuer.derive(original.request);
+  const shared = await make(SUBJECT_SECRET).derive(original.request);
+  const rotated = await make('a-different-subject-key-at-least-32-bytes').derive(original.request);
+  for (const claim of ['subject', 'sessionBinding', 'sessionVersion'] as const) {
+    expect(shared[claim]).toBe(first[claim]);
+    expect(rotated[claim]).not.toBe(first[claim]);
+  }
+});
