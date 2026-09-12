@@ -9,6 +9,11 @@ import { resolveAuthoritativeAncestorInactive } from "./ancestor-state.js";
 
 const DEFAULT_BATCH_SIZE = 500;
 
+/** Locale-independent ordering so persisted cursors resume identically on any host. */
+function compareCodePoints(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 /** Resumable position within a namespace sweep. */
 export interface AncestorInactiveCursor {
   resource: string;
@@ -39,7 +44,7 @@ export interface RecomputeAncestorInactiveResult {
  * `isAncestorInactive` field for `schema`.
  */
 export function ancestorInactiveResources(schema: DatafnSchema): string[] {
-  return [...getAncestorInactiveResources(schema.relations)].sort((a, b) => a.localeCompare(b));
+  return [...getAncestorInactiveResources(schema.relations)].sort(compareCodePoints);
 }
 
 /**
