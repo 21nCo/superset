@@ -77,6 +77,30 @@ export { validateSchema, isNamespaced, resolveRelationCapabilities } from "./sch
 // Re-export namespace helper
 export { ns } from "./ns.js";
 
+// Re-export namespace storage contract
+export {
+  DATAFN_NAMESPACE_STORAGE_MANIFEST,
+  DATAFN_NAMESPACE_STORAGE_MANIFEST_VERSION,
+  DATAFN_NAMESPACE_STORAGE_SCHEMA_VERSION,
+  NAMESPACE_SELECTOR_KINDS,
+  NAMESPACE_STORAGE_LOGICAL_ROLES,
+  NAMESPACE_STORAGE_OPERATIONS,
+  NAMESPACE_STORAGE_PRESENCE,
+  assertSupportedNamespaceStorageVersions,
+  listNamespaceStorageLogicalRoles,
+  namespaceStorageManifestEntry,
+  namespaceStorageParticipates,
+} from "./namespace-storage.js";
+export type {
+  DatafnNamespaceStorageManifest,
+  NamespaceSelectorKind,
+  NamespaceStorageLogicalRole,
+  NamespaceStorageManifestEntry,
+  NamespaceStorageOperation,
+  NamespaceStorageOwnership,
+  NamespaceStoragePresence,
+} from "./namespace-storage.js";
+
 // Re-export DFQL normalization
 export { normalizeDfql, dfqlKey } from "./normalize.js";
 

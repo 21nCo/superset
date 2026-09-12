@@ -30,7 +30,12 @@ type DatafnErrorCode =
   | "NOT_FOUND"
   | "CONFLICT"
   | "INTERNAL"
-  | "TRANSPORT_ERROR";
+  | "TRANSPORT_ERROR"
+  | "DATAFN_NAMESPACE_STORAGE_UNSUPPORTED"
+  | "DATAFN_NAMESPACE_STORAGE_VERSION_MISMATCH"
+  | "DATAFN_NAMESPACE_STORAGE_INCOMPLETE"
+  | "DATAFN_NAMESPACE_STORAGE_UNKNOWN"
+  | "DATAFN_NAMESPACE_STORAGE_INVALID";
 ```
 
 | Code | Description |
@@ -55,6 +60,11 @@ type DatafnErrorCode =
 | `CONFLICT` | Conflict (e.g., duplicate ID). |
 | `INTERNAL` | Unexpected server error. |
 | `TRANSPORT_ERROR` | Network/transport layer error. |
+| `DATAFN_NAMESPACE_STORAGE_UNSUPPORTED` | Namespace storage plans are unavailable for this adapter/schema. |
+| `DATAFN_NAMESPACE_STORAGE_VERSION_MISMATCH` | Unsupported storage manifest or schema version. |
+| `DATAFN_NAMESPACE_STORAGE_INCOMPLETE` | Required namespace storage or selector column is missing. |
+| `DATAFN_NAMESPACE_STORAGE_UNKNOWN` | Installed DataFn namespace storage is not in the supported contract. |
+| `DATAFN_NAMESPACE_STORAGE_INVALID` | Invalid identifier or colliding application storage entry. |
 
 ## DatafnError
 

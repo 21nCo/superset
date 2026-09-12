@@ -115,6 +115,29 @@ export {
   readDatafnCloudflarePlacementLocation,
   selectDatafnPlacementRegion,
 } from "./placement-policy.js";
+export {
+  DatafnNamespaceStorageError,
+  POSTGRES_NAMESPACE_STORAGE_CATALOG_SQL,
+  POSTGRES_NAMESPACE_STORAGE_INDEX_SQL,
+  assertInternalNamespaceStorageMetadataComplete,
+  composeNamespaceStoragePlan,
+  drainNamespaceStorage,
+  inspectPostgresNamespaceStorage,
+  namespacedInternalTableRoles,
+  quotePostgresIdentifier,
+  resolveNamespaceStoragePlan,
+  selectNamespaceStorageEntries,
+} from "./namespace-storage.js";
+export type {
+  ApplicationNamespaceStorageEntry,
+  DatafnNamespaceStorageErrorCode,
+  NamespaceStorageCatalog,
+  NamespaceStorageCatalogRelation,
+  NamespaceStorageEntry,
+  NamespaceStoragePlan,
+  PostgresNamespaceStorageQuery,
+} from "./namespace-storage.js";
+export { drainNamespacePermissionDirectoryOutbox } from "./execution/mutation/permission-directory-outbox.js";
 
 // Re-export SearchProvider for consumer use
 export type { SearchProvider } from "./search-provider.js";

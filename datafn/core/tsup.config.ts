@@ -8,6 +8,7 @@ export default defineConfig({
     "src/errors.ts",
     "src/relations.ts",
     "src/sort.ts",
+    "src/namespace-storage.ts",
   ],
   format: ["esm", "cjs"],
   dts: true,
