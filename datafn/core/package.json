@@ -37,6 +37,11 @@
       "types": "./dist/sort.d.ts",
       "import": "./dist/sort.js",
       "require": "./dist/sort.cjs"
+    },
+    "./namespace-storage": {
+      "types": "./dist/namespace-storage.d.ts",
+      "import": "./dist/namespace-storage.js",
+      "require": "./dist/namespace-storage.cjs"
     }
   },
   "files": [

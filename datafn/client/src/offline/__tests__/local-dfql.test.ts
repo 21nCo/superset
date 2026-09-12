@@ -41,7 +41,6 @@ const schema: DatafnSchema = {
         { name: "parentId", type: "string", required: false },
         { name: "parentPath", type: "string", required: false },
         { name: "isArchived", type: "boolean", required: false },
-        { name: "isAncestorInactive", type: "boolean", required: false },
       ],
     },
   ],

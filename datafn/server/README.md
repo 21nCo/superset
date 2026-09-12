@@ -807,3 +807,23 @@ export {
 ## License
 
 MIT
+
+## Repairing inherited inactivity
+
+`recomputeAncestorInactive` scans a bounded batch in one namespace; resume with
+`nextCursor`. `recomputeAncestorInactiveAll` repeats scans until a verification
+sweep finds no changes or skipped compare-and-set writes. Check `converged`;
+`updated: 0` alone is not proof of completion. `skipped` counts concurrent-write
+conflicts. Dry runs count mismatches without writing.
+
+Repair derives values from ancestor archive/trash state and relation links,
+never from stored `isAncestorInactive` flags. Cycles, missing/malformed parents,
+and traversal-limit violations throw explicit errors. `batchSize`, `maxSweeps`
+and `maxGraphNodes` must be positive safe integers; `maxGraphNodes` defaults to
+10,000 visited nodes per repaired row. A failed batch can be replayed safely;
+earlier completed writes are idempotent.
+
+Run repair with ancestor/link mutations quiesced. The compare-and-set protects
+each derived field from a concurrent propagation write; it does not provide an
+atomic snapshot across all ancestor records. Resume and verify after concurrent
+activity settles before relying on repaired values for a consumer migration.

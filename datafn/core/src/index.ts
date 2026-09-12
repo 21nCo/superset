@@ -26,6 +26,22 @@ export type {
 // Re-export defineSchema helper
 export { defineSchema } from "./types.js";
 
+// Re-export const-safe field builders
+export { field } from "./field.js";
+export type {
+  DatafnArrayFieldOptions,
+  DatafnBooleanFieldOptions,
+  DatafnBuiltField,
+  DatafnDateFieldOptions,
+  DatafnFieldOptionsByType,
+  DatafnFileFieldOptions,
+  DatafnJsonFieldOptions,
+  DatafnJsonValue,
+  DatafnNumberFieldOptions,
+  DatafnObjectFieldOptions,
+  DatafnStringFieldOptions,
+} from "./field.js";
+
 // Re-export capability types and helpers
 export type {
   SimpleCapability,
@@ -43,6 +59,14 @@ export {
   getRelationCapabilityFieldNames,
 } from "./capabilities.js";
 
+export {
+  ANCESTOR_INACTIVE_FIELD,
+  ANCESTOR_INACTIVE_FIELD_DEF,
+  getAncestorInactiveResources,
+  resourceRequiresAncestorInactive,
+  findSystemFieldWrite,
+} from "./system-fields.js";
+
 // Re-export error types and helpers
 export type { DatafnErrorCode, DatafnError, DatafnEnvelope } from "./errors.js";
 export { DATAFN_ERROR_CODES, isDatafnErrorCode, ok, err } from "./errors.js";
@@ -52,6 +76,30 @@ export { validateSchema, isNamespaced, resolveRelationCapabilities } from "./sch
 
 // Re-export namespace helper
 export { ns } from "./ns.js";
+
+// Re-export namespace storage contract
+export {
+  DATAFN_NAMESPACE_STORAGE_MANIFEST,
+  DATAFN_NAMESPACE_STORAGE_MANIFEST_VERSION,
+  DATAFN_NAMESPACE_STORAGE_SCHEMA_VERSION,
+  NAMESPACE_SELECTOR_KINDS,
+  NAMESPACE_STORAGE_LOGICAL_ROLES,
+  NAMESPACE_STORAGE_OPERATIONS,
+  NAMESPACE_STORAGE_PRESENCE,
+  assertSupportedNamespaceStorageVersions,
+  listNamespaceStorageLogicalRoles,
+  namespaceStorageManifestEntry,
+  namespaceStorageParticipates,
+} from "./namespace-storage.js";
+export type {
+  DatafnNamespaceStorageManifest,
+  NamespaceSelectorKind,
+  NamespaceStorageLogicalRole,
+  NamespaceStorageManifestEntry,
+  NamespaceStorageOperation,
+  NamespaceStorageOwnership,
+  NamespaceStoragePresence,
+} from "./namespace-storage.js";
 
 // Re-export DFQL normalization
 export { normalizeDfql, dfqlKey } from "./normalize.js";
@@ -158,6 +206,9 @@ export {
   normalizeRelationPayload,
 } from "./relations.js";
 
+// Re-export record read-path normalization
+export { stripNullsForNonNullableFields } from "./records.js";
+
 // Re-export aggregation utilities
 export { calculateAggregation } from "./aggregate.js";
 
@@ -218,6 +269,8 @@ export {
   fromEpochMs,
   coerceDateFieldsToEpoch,
   parseDateFieldsToDate,
+  toBoundsEpochMs,
+  formatBoundEpochMs,
 } from "./date.js";
 
 // Re-export validation primitives

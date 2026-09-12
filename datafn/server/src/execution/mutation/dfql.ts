@@ -45,7 +45,7 @@ export interface RelationOperation {
 
 /**
  * Build a full record for replace operation
- * Clears unspecified fields to defaults/null, preserves system fields
+ * Clears unspecified fields to their default or null, and preserves system fields
  */
 export function buildReplaceRecord(
   schema: DatafnSchema,
@@ -99,20 +99,36 @@ export function buildReplaceRecord(
       continue;
     }
 
+    // Readonly fields are rejected by write validation, so clients cannot
+    // supply them in a replacement. Carry the stored value forward instead
+    // of clearing it to null/default. A key already present in newRecord is
+    // server-injected (e.g. injectCapabilityFieldsOnUpdate sets updatedAt),
+    // so it wins.
+    if (field.readonly) {
+      result[key] = Object.prototype.hasOwnProperty.call(newRecord, key)
+        ? newRecord[key]
+        : existingRecord[key];
+      continue;
+    }
+
     // Normal fields
     if (Object.prototype.hasOwnProperty.call(newRecord, key)) {
       result[key] = newRecord[key];
     } else {
-      // Not provided: set to default or null
+      // Not provided: reset to the default, otherwise clear with null. Null is
+      // the only clear every supported adapter persists (Drizzle and Prisma
+      // ignore undefined) and the only one that survives JSON change tracking;
+      // read paths normalize it back to undefined for non-nullable fields.
       result[key] = field.default !== undefined ? field.default : null;
     }
 
     // Validation: Required check
-    // If required and value is null/undefined (and not a generated field like id)
+    // If required, undefined is always missing and null is missing unless allowed.
     // Note: boolean false or number 0 are valid.
     if (
       field.required &&
-      (result[key] === null || result[key] === undefined)
+      (result[key] === undefined ||
+        (result[key] === null && !field.nullable))
     ) {
       return {
         ok: false,

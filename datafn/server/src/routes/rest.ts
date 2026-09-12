@@ -15,7 +15,7 @@ import type { DatafnLogger } from "../logger.js";
  * URL-decodes the segment and rejects if it contains '..', null bytes, or encoded '/'.
  * Returns the decoded segment or throws an error object.
  */
-function sanitizePathSegment(segment: string): { ok: true; value: string } | { ok: false } {
+export function sanitizePathSegment(segment: string): { ok: true; value: string } | { ok: false } {
   let decoded: string;
   try {
     decoded = decodeURIComponent(segment);

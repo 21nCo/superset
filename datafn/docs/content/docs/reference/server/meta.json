@@ -1,4 +1,4 @@
 {
   "title": "@datafn/server",
-  "pages": ["config", "routes", "middleware", "execution", "websocket"]
+  "pages": ["config", "routes", "middleware", "execution", "websocket", "namespace-storage"]
 }

@@ -3,6 +3,9 @@ import { createEditor, Transaction } from "@mdfn/core";
 import { createMarkdownProjector } from "@mdfn/markdown";
 import { createCollaborationSession, Y } from "./index";
 
+/** Vitest default is 10s; applying >1 MiB Y updates exceeds that on GHA (~27s observed). */
+const LARGE_COLLAB_UPDATE_TEST_TIMEOUT_MS = 30_000;
+
 describe("collaboration", () => {
   it("exchanges offline updates and projects them through the controller", async () => {
     const projector = createMarkdownProjector();
@@ -160,7 +163,8 @@ describe("collaboration", () => {
     const baseline = session.encodeStateVector();
     const peer = new Y.Doc();
     Y.applyUpdate(peer, session.encodeUpdate());
-    const largeMarkdown = Array.from({ length: 1_025 }, () => "x".repeat(1_024)).join("\n\n");
+    const chunk = "x".repeat(262_144);
+    const largeMarkdown = Array.from({ length: 4 }, () => chunk).join("\n\n");
     peer.getText("markdown").insert(0, largeMarkdown);
     const update = Y.encodeStateAsUpdate(peer, baseline);
     expect(update.byteLength).toBeGreaterThan(1024 * 1024);
@@ -168,7 +172,7 @@ describe("collaboration", () => {
     await expect(session.applyUpdate(update, "peer")).resolves.toBeUndefined();
     expect(controller.getState().markdown).toBe(largeMarkdown);
     session.destroy(); controller.destroy(); peer.destroy();
-  });
+  }, LARGE_COLLAB_UPDATE_TEST_TIMEOUT_MS);
 
   it("validates candidate Markdown before mutating the live Y document", async () => {
     const controller = createEditor({ markdown: "safe", projector: createMarkdownProjector({ maxBytes: 4 }) });

@@ -25,6 +25,7 @@ import {
   normalizeTemporalQuery,
   relationFkFieldForManyOne,
   relationFkFieldForOneMany,
+  stripNullsForNonNullableFields,
   TIMEZONE_CHANGE_RESOURCE_NAME,
 } from "@datafn/core";
 import type { DatafnStorageAdapter } from "../storage.js";
@@ -206,6 +207,12 @@ export async function executeLocalQuery(
     records = await storage.listRecords(resource);
   }
 
+  // Filters and sorting intentionally run against the stored representation
+  // so local results match the server (e.g. $eq: null matches the persisted
+  // NULL that a replace-clear wrote). Persisted nulls are normalized to the
+  // read contract at the result boundary below.
+  const localResourceSchema = schema.resources.find((r) => r.name === resource);
+
   // Apply filters only when not fully satisfied by the indexed path (CLI-012)
   if (query.filters && !filterFullySatisfied) {
     const normalized = normalizeFilterOps(query.filters as Record<string, unknown>);
@@ -236,6 +243,7 @@ export async function executeLocalQuery(
 
   // Select / Expansion
   if (query.select) {
+    // materializeSelect normalizes persisted nulls per record already.
     records = await materializeSelect(
       storage,
       schema,
@@ -243,6 +251,12 @@ export async function executeLocalQuery(
       records,
       query.select as string[],
       query.metadata as Record<string, unknown> | undefined,
+    );
+  } else {
+    // No select token: normalize once at the boundary so cleared non-nullable
+    // fields read as absent, same as the server's materialized output.
+    records = records.map((record) =>
+      stripNullsForNonNullableFields(record, localResourceSchema),
     );
   }
 

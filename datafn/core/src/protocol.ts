@@ -6,6 +6,9 @@
  * recursively search application records, filters, or other domain JSON.
  */
 
+import { resolveJoinStoreResources } from "./joins.js";
+import type { DatafnSchema } from "./types.js";
+
 import { err, ok, type DatafnEnvelope } from "./errors.js";
 
 export const DATAFN_REQUEST_PROTOCOL_VERSION = "1" as const;
@@ -446,14 +449,24 @@ function parseClonePayload(
 function parsePullPayload(
   payload: unknown,
   protocolVersion: DatafnRequestProtocolVersion,
+  schema?: Pick<DatafnSchema, "resources" | "relations">,
 ): DatafnEnvelope<ParsedDatafnRequest> {
   if (!isPlainObject(payload)) {
     return invalid("Invalid DFQL: expected object", "$");
   }
   const selectors = new SelectorBuilder();
   if (payload.cursors !== undefined) {
-    const added = selectors.addMapKeys(payload.cursors, "cursors", "__datafn_actor_feed__");
-    if (!added.ok) return added;
+    if (!isPlainObject(payload.cursors)) return invalid("Invalid DFQL: expected object", "cursors");
+    const joins = resolveJoinStoreResources(schema?.relations ?? []);
+    for (const key of Object.keys(payload.cursors)) {
+      if (key === "__datafn_actor_feed__") continue;
+      if (DISALLOWED_KEYS.has(key)) return invalid(`Disallowed key: ${key}`, "cursors");
+      const endpoints = joins.get(key);
+      // Preserve a real resource even if its name collides with a join key.
+      const resources = endpoints ? [...endpoints, ...(schema?.resources.some(resource => resource.name === key) ? [key] : [])] : [key];
+      const added = selectors.addAll(resources, `cursors.${key}`);
+      if (!added.ok) return added;
+    }
   }
   return ok({
     kind: "pull",
@@ -512,6 +525,7 @@ function parseObjectAction(
   action: DatafnRequestAction,
   payload: unknown,
   protocolVersion: DatafnRequestProtocolVersion,
+  schema?: Pick<DatafnSchema, "resources" | "relations">,
 ): DatafnEnvelope<ParsedDatafnRequest> {
   switch (action) {
     case "status":
@@ -532,7 +546,7 @@ function parseObjectAction(
     case "clone":
       return parseClonePayload(payload, protocolVersion);
     case "pull":
-      return parsePullPayload(payload, protocolVersion);
+      return parsePullPayload(payload, protocolVersion, schema);
     case "push":
       return parsePushPayload(payload, protocolVersion);
     case "reconcile":
@@ -555,6 +569,7 @@ function parseObjectAction(
 export function parseDatafnRequest(
   action: string,
   payload: unknown,
+  options: { schema?: Pick<DatafnSchema, "resources" | "relations"> } = {},
 ): DatafnEnvelope<ParsedDatafnRequest> {
   if (!isDatafnRequestAction(action)) {
     return err("DFQL_UNSUPPORTED", `Unsupported DataFn action: ${action}`, {
@@ -573,7 +588,7 @@ export function parseDatafnRequest(
     Array.isArray(payload) ? undefined : payload,
   );
   if (!protocolVersion.ok) return protocolVersion;
-  return parseObjectAction(action, payload, protocolVersion.result);
+  return parseObjectAction(action, payload, protocolVersion.result, options.schema);
 }
 
 /**
@@ -651,8 +666,9 @@ export function collectStructuralResourceSelectors(
 export function extractStructuralResourceSelectors(
   action: string,
   payload: unknown,
+  options: { schema?: Pick<DatafnSchema, "resources" | "relations"> } = {},
 ): DatafnEnvelope<StructuralResourceSelection> {
-  const parsed = parseDatafnRequest(action, payload);
+  const parsed = parseDatafnRequest(action, payload, options);
   if (!parsed.ok) return parsed;
   return ok(collectStructuralResourceSelectors(parsed.result));
 }

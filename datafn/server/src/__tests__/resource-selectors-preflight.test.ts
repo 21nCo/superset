@@ -116,4 +116,13 @@ describe("structural resource-selector preflight", () => {
     expect(((await response.json()) as { error?: { code: string } }).error?.code).not.toBe("DFQL_INVALID");
   });
 
+  it.each(["%2e%2e%2fetc", "tasks%2Fprivate", "tasks%00"])("rejects malformed REST resource %s before authorization", async segment => {
+    let authorized = 0;
+    const server = await createDatafnServer({ schema: { resources: [{ name: "tasks", version: 1, fields: [] }] }, rest: true, authorize: () => { authorized++; return true; } });
+    servers.push(server);
+    const response = await server.router.handle(new Request(`http://localhost/datafn/resources/${segment}`));
+    expect(response.status).toBe(400);
+    expect(authorized).toBe(0);
+  });
+
 });

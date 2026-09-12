@@ -80,3 +80,16 @@ export function enumerateJoinStoreKeys(
   }
   return keys;
 }
+
+/** Resolve logical join cursors against trusted relation metadata, never by prefix. */
+export function resolveJoinStoreResources(relations: readonly DatafnRelationSchema[]): Map<string, string[]> {
+  const resources = new Map<string, string[]>();
+  for (const rel of relations) {
+    if (rel.type !== "many-many") continue;
+    for (const from of endpointList(rel.from)) for (const to of endpointList(rel.to)) {
+      const key = getJoinStoreKey(from, getRelationKeyName(rel, to), to);
+      resources.set(key, [...new Set([...(resources.get(key) ?? []), from, to])]);
+    }
+  }
+  return resources;
+}

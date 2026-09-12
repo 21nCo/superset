@@ -11,9 +11,11 @@
   "dependencies": {
     "@sveltejs/kit": "2.69.3",
     "@uifn/components": "*",
+    "@uifn/components-svelte": "*",
     "@uifn/examples-shared": "*",
     "@uifn/patterns": "*",
     "@uifn/sf": "*",
+    "@uifn/svelte": "*",
     "svelte": "^5.46.1"
   },
   "devDependencies": {

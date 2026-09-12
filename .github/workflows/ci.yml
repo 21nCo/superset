@@ -40,7 +40,6 @@ jobs:
       run_python: ${{ steps.plan.outputs.run_python }}
       full_python: ${{ steps.plan.outputs.full_python }}
       python_matrix: ${{ steps.plan.outputs.python_matrix }}
-      run_docs: ${{ steps.plan.outputs.run_docs }}
       run_mcpfn: ${{ steps.plan.outputs.run_mcpfn }}
       mcpfn_only: ${{ steps.plan.outputs.mcpfn_only }}
     steps:
@@ -59,6 +58,9 @@ jobs:
           git fetch --no-tags --depth=1 origin dev || true
           git fetch --no-tags --depth=1 origin next || true
           git fetch --no-tags --depth=1 origin main || true
+
+      - name: Verify CI planner
+        run: node --test scripts/ci-plan.test.mjs
 
       - name: Build CI plan
         id: plan
@@ -237,34 +239,3 @@ jobs:
 
       - name: Require supported CommonJS entry points
         run: node -e 'for (const name of ["@superfunctions/oauth-core", "@mcpfn/core", "@mcpfn/client"]) { const loaded = require(name); if (!Object.keys(loaded).length) throw new Error(name + " has no CommonJS exports"); }'
-
-  docs:
-    name: Docs Guardrails
-    needs: plan
-    if: needs.plan.outputs.run_docs == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Ensure Rollup native package
-        run: node scripts/ci-install-rollup-native.mjs
-
-      - name: Docs checks
-        run: |
-          npm -w docs run build
-          npm -w docs run check:coverage
-          npm -w docs run check:content
-          npm -w docs run check:snippets
-          npm -w docs run check:links

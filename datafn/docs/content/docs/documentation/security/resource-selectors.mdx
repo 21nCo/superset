@@ -119,3 +119,12 @@ Current requests may omit `protocolVersion`; the parser stamps the parsed envelo
 - [Request authorization](/docs/documentation/security/request-authz)
 - [Multi-region gateway](/docs/documentation/multi-region-gateway)
 - [Error types](/docs/reference/core/errors)
+
+For pull requests, pass trusted application schema metadata as the third argument:
+`extractStructuralResourceSelectors("pull", payload, { schema })` (or
+`parseDatafnRequest("pull", payload, { schema })`). The parser translates known
+many-to-many join cursor keys into their endpoint resources. Without schema
+metadata, cursor names remain selectors; unknown `join_` names are never silently
+ignored. Gateways handling relational sync must supply the same schema as the
+server and authorize every returned endpoint. The server preflight supplies its
+validated schema automatically; custom authorization callbacks should also pass their trusted schema to the helper.

@@ -46,7 +46,7 @@ import {
 import { DbIdempotencyStore } from "./execution/idempotency-db.js";
 import { ChangeTrackingService } from "./execution/sync/change-tracking.js";
 import { errorResponse, errorToEnvelope } from "./http/errors.js";
-import { createRestRoutes } from "./routes/rest.js";
+import { createRestRoutes, sanitizePathSegment } from "./routes/rest.js";
 import { checkPayloadLimit, readBodyWithLimit } from "./http/middleware.js";
 import { parseJsonBody } from "./http/json.js";
 import { WebSocketManager, type WebSocketClient, type WsAuthContext } from "./ws.js";
@@ -1297,7 +1297,9 @@ export async function createDatafnServer<TContext = any>(
         if (rest) {
           let resource: string;
           try {
-            resource = decodeURIComponent(new URL(req.url).pathname.split("/")[3] ?? "");
+            const segment = sanitizePathSegment(new URL(req.url).pathname.split("/")[3] ?? "");
+            if (!segment.ok) throw new Error("Invalid path segment");
+            resource = segment.value;
           } catch {
             return completeDatafnResponse({
               action, request: req, context: enrichedCtx, payload,
@@ -1306,7 +1308,7 @@ export async function createDatafnServer<TContext = any>(
           }
           structuralPayload = { resource };
         }
-        const parsedProtocol = parseDatafnRequest(action, structuralPayload);
+        const parsedProtocol = parseDatafnRequest(action, structuralPayload, { schema: validatedSchema });
         if (!parsedProtocol.ok) {
           return completeDatafnResponse({
             action, request: req, context: enrichedCtx, payload,

@@ -68,7 +68,7 @@ describe("readme examples", () => {
     expect(readme).toContain("packages/cli");
     expect(readme).toContain("hostfn/cli");
     expect(readme).toContain("apifn/cli");
-    expect(readme).toContain("recfn/cli");
+    expect(readme).toContain("plugfn/cli");
     expect(readme).toContain("extfn/cli");
 
     expect(readme).toContain("`extfn/cli` SHOULD use:");
@@ -81,6 +81,8 @@ describe("readme examples", () => {
       "packages/cli/src/utils/config.ts",
       "hostfn/cli/src/index.ts",
       "hostfn/cli/src/utils/logger.ts",
+      "plugfn/cli/src/commands/runtime.ts",
+      "plugfn/cli/src/commands/test.ts",
     ];
 
     await Promise.all(

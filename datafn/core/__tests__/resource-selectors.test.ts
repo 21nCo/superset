@@ -420,3 +420,16 @@ describe("reserved top-level protocol keys", () => {
     });
   }
 });
+
+it("translates only trusted join cursors into endpoint selectors", () => {
+  const schema: any = { resources: [{ name: "posts" }, { name: "tags" }, { name: "join_legitimate" }], relations: [{ type: "many-many", from: "posts", to: "tags", relation: "tags" }] };
+  const payload = { cursors: { posts: "1", join_posts_tags_tags: "2", join_legitimate: "3" } };
+  const parsed = parseDatafnRequest("pull", payload, { schema });
+  expect(parsed.ok).toBe(true);
+  if (!parsed.ok) return;
+  expect(collectStructuralResourceSelectors(parsed.result).selectors).toEqual(["posts", "tags", "join_legitimate"]);
+  expect(extractStructuralResourceSelectors("pull", payload, { schema })).toEqual({ ok: true, result: { protocolVersion: "1", selectors: ["posts", "tags", "join_legitimate"] } });
+  schema.resources.push({ name: "join_posts_tags_tags" });
+  const collision = extractStructuralResourceSelectors("pull", payload, { schema });
+  expect(collision.ok && collision.result.selectors).toContain("join_posts_tags_tags");
+});

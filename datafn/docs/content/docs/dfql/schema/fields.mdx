@@ -7,12 +7,21 @@ applies_to: both
 
 ## DatafnFieldSchema
 
-Each field in a resource defines its name, type, and validation constraints. Fields are validated on both the client and server.
+Each field in a resource defines its name, type, and field metadata. Core
+mutation validation enforces field types and nullability on the server.
 
 ```typescript
 type DatafnFieldSchema = {
   name: string;
-  type: "string" | "number" | "boolean" | "date" | "object" | "array" | "file" | "json";
+  type:
+    | "string"
+    | "number"
+    | "boolean"
+    | "date"
+    | "object"
+    | "array"
+    | "file"
+    | "json";
   required: boolean;
   nullable?: boolean;
   readonly?: boolean;
@@ -31,18 +40,70 @@ type DatafnFieldSchema = {
 
 ## Field Types
 
-| Type | TypeScript | Storage | Notes |
-| --- | --- | --- | --- |
-| `string` | `string` | Text | General-purpose text values. |
-| `number` | `number` | Numeric | NaN is rejected during validation. |
-| `boolean` | `boolean` | Boolean | Strict `true`/`false` only. |
-| `date` | `string \| number` | Epoch ms | Accepts ISO 8601 strings or epoch milliseconds. Stored as epoch ms internally. |
-| `object` | `Record<string, unknown>` | JSON | Plain objects only. Arrays and null are rejected. |
-| `array` | `unknown[]` | JSON | Array values only. |
-| `file` | `string` | Text | File reference (URL or path). Validated as a string. |
-| `json` | `unknown` | JSON | Any valid JSON value: string, number, boolean, object, or array. |
+| Type      | TypeScript                | Storage  | Notes                                                                          |
+| --------- | ------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `string`  | `string`                  | Text     | General-purpose text values.                                                   |
+| `number`  | `number`                  | Numeric  | NaN is rejected during validation.                                             |
+| `boolean` | `boolean`                 | Boolean  | Strict `true`/`false` only.                                                    |
+| `date`    | `string \| number`        | Epoch ms | Accepts ISO 8601 strings or epoch milliseconds. Stored as epoch ms internally. ISO datetimes without a timezone designator are interpreted as UTC, so validation and storage resolve the same instant in any server timezone. |
+| `object`  | `Record<string, unknown>` | JSON     | Plain objects only. Arrays are rejected; `null` requires `nullable: true`.     |
+| `array`   | `unknown[]`               | JSON     | Array values only.                                                             |
+| `file`    | `string`                  | Text     | File reference (URL or path). Validated as a string.                           |
+| `json`    | `unknown`                 | JSON     | Any JSON value; `null` requires `nullable: true`.                              |
+
+## Const-safe field builders
+
+Use `field` for reusable fields and `defineSchema` for the complete schema.
+Builders return plain `DatafnFieldSchema` objects, preserve literal names and
+enum members, and emit explicit `required: false` and `nullable: false`
+defaults.
+
+```typescript
+import { defineSchema, field } from "@datafn/core";
+
+const id = field.string("id", { required: true, unique: true });
+const sharedFields = [
+  field.boolean("isStarred", { default: false }),
+  field.file("attachment"),
+];
+
+export const schema = defineSchema({
+  resources: [
+    {
+      name: "tasks",
+      version: 1,
+      fields: [
+        id,
+        field.string("status", {
+          required: true,
+          enum: ["NOT_STARTED", "IN_PROGRESS", "COMPLETED"],
+        }),
+        ...sharedFields,
+      ],
+      indices: { base: ["id", "status", "isStarred"] },
+    },
+  ],
+});
+```
+
+Requiredness controls whether the record property is present. Nullability
+independently controls whether its value includes `null`. Inline object
+literals passed directly to `defineSchema` preserve the same inference.
+Explicitly annotating a schema as `DatafnSchema` or a reusable array as
+`DatafnFieldSchema[]` widens literal information; use `satisfies` for an
+assignability check without widening, or use field builders.
+
+Builder options are specific to each field kind. Incompatible defaults, enum
+values, bounds, and misspelled options fail type checking. `name` and `type`
+are owned by the selected builder and cannot be overridden.
 
 ## Constraints
+
+Constraint metadata is preserved for adapters and generated schemas. Core
+mutation validation enforces `min`/`max` bounds for `date` fields (compared
+as epoch milliseconds) but does not currently enforce every other
+constraint, including enum membership, number bounds, and patterns. Check
+the selected storage adapter before relying on those constraints at runtime.
 
 ### required
 
@@ -150,18 +211,58 @@ const schema = defineSchema({
       version: 1,
       idPrefix: "usr",
       fields: [
-        { name: "email", type: "string", required: true, unique: true, maxLength: 255 },
-        { name: "displayName", type: "string", required: true, minLength: 1, maxLength: 100 },
-        { name: "role", type: "string", required: true, enum: ["admin", "editor", "viewer"], default: "viewer" },
-        { name: "bio", type: "string", required: false, maxLength: 2000, nullable: true },
-        { name: "loginCount", type: "number", required: true, default: 0, min: 0 },
-        { name: "emailVerified", type: "boolean", required: true, default: false },
+        {
+          name: "email",
+          type: "string",
+          required: true,
+          unique: true,
+          maxLength: 255,
+        },
+        {
+          name: "displayName",
+          type: "string",
+          required: true,
+          minLength: 1,
+          maxLength: 100,
+        },
+        {
+          name: "role",
+          type: "string",
+          required: true,
+          enum: ["admin", "editor", "viewer"],
+          default: "viewer",
+        },
+        {
+          name: "bio",
+          type: "string",
+          required: false,
+          maxLength: 2000,
+          nullable: true,
+        },
+        {
+          name: "loginCount",
+          type: "number",
+          required: true,
+          default: 0,
+          min: 0,
+        },
+        {
+          name: "emailVerified",
+          type: "boolean",
+          required: true,
+          default: false,
+        },
         { name: "lastLoginAt", type: "date", required: false, nullable: true },
         { name: "avatar", type: "file", required: false },
         { name: "preferences", type: "json", required: false },
         { name: "settings", type: "object", required: false },
         { name: "favoriteTopics", type: "array", required: false },
-        { name: "encryptedToken", type: "string", required: false, encrypt: true },
+        {
+          name: "encryptedToken",
+          type: "string",
+          required: false,
+          encrypt: true,
+        },
         { name: "localNotes", type: "string", required: false, volatile: true },
       ],
       indices: {

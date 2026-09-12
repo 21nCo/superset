@@ -1,0 +1,128 @@
+---
+title: Namespace storage contract
+description: Canonical inventory of DataFn-owned namespace tables for migration, backup, fencing, and ownership checks.
+---
+
+# Namespace storage contract
+
+DataFn owns both application resource rows and framework-internal namespace state. Tenant moves, backups, residency checks, write fences, outbox drains, and checksums must operate on that storage as one unit.
+
+Do not discover this inventory from `information_schema` or by hard-coding `__datafn_*` table names. Ask DataFn for the installed contract.
+
+## Logical manifest
+
+`@datafn/core` publishes a versioned manifest. It names stable roles (`resource`, `sync_changes`, `permission_directory_outbox`, …), selector semantics (`resource_ns` vs `internal_namespace`), and which operations each role participates in: `copy`, `verify`, `cleanup`, `fence`, `drain`, and `backup`.
+
+```ts
+import {
+  DATAFN_NAMESPACE_STORAGE_MANIFEST,
+  DATAFN_NAMESPACE_STORAGE_MANIFEST_VERSION,
+  namespaceStorageParticipates,
+} from "@datafn/core";
+
+DATAFN_NAMESPACE_STORAGE_MANIFEST.manifestVersion;
+// "1"
+
+namespaceStorageParticipates("permission_directory_outbox", "drain");
+// true — drain this role before cutover
+
+namespaceStorageParticipates("resource", "drain");
+// false — resource tables are copied and fenced, not drained
+```
+
+The manifest version is independent of the npm package version. Mixed or unknown manifest/schema versions fail explicitly.
+
+## PostgreSQL plan
+
+`@datafn/server` resolves the logical manifest against the installed database and the DataFn schema. Resource tables use `__ns`. DataFn internal ledgers use `namespace`. Sharing tables (`permissions_global`, principal memberships/hierarchy, legacy per-resource permissions) use `__ns`.
+
+```ts
+import {
+  composeNamespaceStoragePlan,
+  drainNamespaceStorage,
+  inspectPostgresNamespaceStorage,
+  resolveNamespaceStoragePlan,
+  selectNamespaceStorageEntries,
+} from "@datafn/server";
+
+const catalog = await inspectPostgresNamespaceStorage((sql) =>
+  pool.query(sql).then((result) => result.rows),
+);
+
+const plan = resolveNamespaceStoragePlan({
+  schema,
+  catalog,
+});
+
+const copy = selectNamespaceStorageEntries(plan, "copy");
+const cleanup = selectNamespaceStorageEntries(plan, "cleanup");
+const fence = selectNamespaceStorageEntries(plan, "fence");
+const drain = selectNamespaceStorageEntries(plan, "drain");
+
+for (const entry of copy) {
+  await copyNamespaceRows({
+    relation: entry.quotedRelation,
+    namespaceColumn: entry.quotedNamespaceColumn,
+    namespace,
+  });
+}
+```
+
+`inspectPostgresNamespaceStorage` runs DataFn-owned catalog SQL. Application code supplies a query callback; it must not write its own catalog heuristics.
+
+Each plan entry includes a safely quoted relation and namespace column for copy/checksum/cleanup. Prefer `logicalRole` over physical names when branching on behavior.
+
+## Drain and fence
+
+Permission-directory outbox rows participate in **drain** and **fence**. Ordinary resource and internal rows participate in copy, verify, cleanup, fence, and backup, but not drain.
+
+```ts
+await drainNamespaceStorage({
+  adapter: regionalDatabase,
+  plan,
+  namespace,
+  runtime: multiRegionRuntime,
+});
+```
+
+Request-level write fencing during a move remains `migrateDatafnNamespace` plus `fenceNamespace` on the WebSocket manager. Use `selectNamespaceStorageEntries(plan, "fence")` for physical DML fences so a new DataFn ledger cannot be omitted.
+
+Drain mutations against the outbox must remain possible after the fence is raised so a write that committed just before cutover can settle.
+
+## Application tables
+
+Compose product-owned workspace tables with the DataFn plan. DataFn does not claim those relations.
+
+```ts
+const tenantPlan = composeNamespaceStoragePlan(plan, [
+  { relation: "skills", namespaceColumn: "workspace_id", copyOrder: 10 },
+]);
+```
+
+Collision with a DataFn-owned relation fails closed.
+
+## Compatibility
+
+- The API is additive. Existing servers keep working until they call the resolver.
+- Unknown required storage that appears in the installed schema (`__datafn_*` with `namespace`, or any relation with `__ns` that DataFn owns) blocks plan creation with `DATAFN_NAMESPACE_STORAGE_UNKNOWN`.
+- Missing selector columns and missing required resource/join tables fail with `DATAFN_NAMESPACE_STORAGE_INCOMPLETE`.
+- On-demand internal tables that have not been created yet are omitted from the executable plan (they are empty).
+- Non-PostgreSQL catalogs throw `DATAFN_NAMESPACE_STORAGE_UNSUPPORTED`.
+- Rolling upgrades must negotiate manifest version `1` or refuse the operation. Do not keep a partial plan.
+
+This is the supported integration point for migration, backup, residency, and physical-ownership tooling. See also [Multi-region gateway routing](/docs/documentation/multi-region-gateway).
+
+### Installed-schema and drain guarantees
+
+Catalog inspection reads both columns and valid, non-partial PostgreSQL indexes.
+A supplied catalog must include index metadata: namespace-only table stubs are
+rejected. Plans require operational columns, canonical generated physical column
+names, and a primary row identity on `id` or `(namespace selector, id)`.
+Expression/partial/invalid indexes cannot certify that identity. Custom physical
+mappings outside these conventions fail closed instead of producing a partial plan.
+This is structural validation, not a live tenant-migration rehearsal.
+
+Namespace draining respects unexpired pre-commit and retry leases. `pending` is
+an existence indicator (0 or 1), including rows still owned by active mutations;
+never treat `processed: 0` as proof of quiescence. Fence new writes, settle active
+writers, and retry until pending is zero before copying or cleaning up storage.
