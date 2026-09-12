@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@superfunctions/db": "0.2.0",
-    "@mcpfn/testing": "0.0.4",
+    "@mcpfn/testing": "0.0.5",
     "@types/node": "^20.0.0",
     "tsup": "^8.5.0",
     "typescript": "^5.9.3",
