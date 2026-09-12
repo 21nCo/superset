@@ -454,6 +454,9 @@ function parsePullPayload(
   if (!isPlainObject(payload)) {
     return invalid("Invalid DFQL: expected object", "$");
   }
+  if (payload.cursor !== undefined && payload.cursors !== undefined) {
+    return invalid("Pull requests must use either cursor or cursors, not both", "cursor");
+  }
   const selectors = new SelectorBuilder();
   if (payload.cursors !== undefined) {
     if (!isPlainObject(payload.cursors)) return invalid("Invalid DFQL: expected object", "cursors");

@@ -451,3 +451,8 @@ it.each([
   const unknown = extractStructuralResourceSelectors("pull", { cursors: { join_other_tags_tags: "1" } }, { schema });
   expect(unknown.ok && unknown.result.selectors).toEqual(["join_other_tags_tags"]);
 });
+
+it("rejects mixed global and resource pull cursors before authorization", () => {
+  const result = extractStructuralResourceSelectors("pull", { cursor: "0", cursors: { allowed: "0" } });
+  expect(result.ok).toBe(false);
+});
