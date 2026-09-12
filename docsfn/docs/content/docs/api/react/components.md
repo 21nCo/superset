@@ -228,3 +228,7 @@ For docs or marketing surfaces that are not full **`DocsLayout`** pages: article
 | **`showToc`** | `boolean?` | Default **`true`** |
 | **`tocLabel`** | `string?` | Default **`"On this page"`** |
 | **`pageActionsSlot`** | `ReactNode?` | Forwarded to **`DocsContent`** |
+
+### VersionSwitcher path configuration
+
+`basePath` is the site mount (default `/docs`). `versionMode` accepts `path-prefix` (default) or `path-segment`. When no version-link override is available, `path-prefix` replaces the version immediately after the mount; `path-segment` replaces the trailing version segment. Navigation preserves the remaining path, trailing slash, query, and hash.

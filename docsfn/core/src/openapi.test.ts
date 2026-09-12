@@ -343,7 +343,6 @@ describe("OpenAPI normalization", () => {
       /DOCS_ROUTE_NOT_FOUND|was not generated/
     );
   });
-});
 
 it("resolves local parameter references and emits single-slash root routes", () => {
   const reference = buildOpenApiReference({ sourceId: "api:x.json", sourcePath: "x.json", fallbackTitle: "X", basePath: "/", body: JSON.stringify({ openapi: "3.0.3", info: { title: "X", version: "1" }, components: { parameters: { Id: { name: "id", in: "path", required: true, schema: { type: "string" } } } }, paths: { "/items/{id}": { parameters: [{ $ref: "#/components/parameters/Id" }], get: { responses: {} } } } }) });
@@ -360,5 +359,25 @@ it('decodes percent-encoded local parameter references', () => {
   spec.paths['/search'].get.parameters = [{ $ref: '#/components/parameters/id%20param' }];
   expect(createReference({ sourceId: 'api:x.json', sourcePath: 'x.json', body: JSON.stringify(spec) }).operations[0].parameters[0].name).toBe('id');
   spec.paths['/search'].get.parameters[0].$ref = '#/components/parameters/%ZZ';
-  expect(() => createReference({ sourceId: 'api:x.json', sourcePath: 'x.json', body: JSON.stringify(spec) })).toThrow(/malformed parameter reference/);
+  expect(() => createReference({ sourceId: 'api:x.json', sourcePath: 'x.json', body: JSON.stringify(spec) })).toThrow(/malformed local reference/);
+});
+
+
+  it("resolves reusable request bodies and responses", () => {
+    const reference = buildOpenApiReference({ sourceId: "api:reusable", sourcePath: "reusable.json", fallbackTitle: "Reusable", body: JSON.stringify({
+      openapi: "3.0.3", info: { title: "Reusable", version: "1" },
+      paths: { "/pets": { post: { requestBody: { $ref: "#/components/requestBodies/Pet" }, responses: { "201": { $ref: "#/components/responses/Created" } } } } },
+      components: { requestBodies: { Pet: { required: true, description: "Pet input", content: { "application/json": { schema: { type: "object" } } } } },
+        responses: { Created: { description: "Pet created", content: { "application/json": { example: { id: 1 } } } } } },
+    }) });
+    expect(reference.operations[0].requestBody).toMatchObject({ required: true, description: "Pet input", content: [{ mediaType: "application/json" }] });
+    expect(reference.operations[0].responses[0]).toMatchObject({ statusCode: "201", description: "Pet created", content: [{ mediaType: "application/json" }] });
+  });
+  it("rejects malformed JSON Pointer escapes even when a matching literal key exists", () => {
+    expect(() => buildOpenApiReference({ sourceId: "api:invalid", sourcePath: "invalid.json", fallbackTitle: "Invalid", body: JSON.stringify({
+      openapi: "3.0.3", info: { title: "Invalid", version: "1" },
+      paths: { "/pets": { get: { parameters: [{ $ref: "#/components/parameters/bad~2key" }], responses: {} } } },
+      components: { parameters: { "bad~2key": { name: "q", in: "query" } } },
+    }) })).toThrow(/malformed local reference/);
+  });
 });

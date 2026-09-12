@@ -749,3 +749,16 @@ describe("buildManifest", () => {
     ]);
   });
 });
+
+describe("global dated-collection surface conflicts", () => {
+  it.each(['blog/index.mdx', 'blog/rss.xml.mdx', 'blog/tags/news.mdx'])("rejects a page claiming %s", async (relativePath) => {
+    const provider = new InMemorySourceProvider([
+      { id: createSourceEntryId("docs", relativePath), collection: "docs", relativePath, entryType: "content", frontmatter: { title: "Collision" }, body: "# Collision" },
+      { id: createSourceEntryId("blog", "release.mdx"), collection: "blog", relativePath: "release.mdx", entryType: "content", frontmatter: { title: "Release", date: "2026-01-01", tags: ["news"] }, body: "Release" },
+    ]);
+    await expect(buildManifest(provider, createConfig())).rejects.toMatchObject({ code: "DOCS_ROUTE_CONFLICT" });
+  });
+  it("rejects collection surfaces that claim the same route", async () => {
+    await expect(buildManifest(new InMemorySourceProvider([]), createConfig({ collections: { changelog: { routeBase: "/docs/blog" } } }))).rejects.toMatchObject({ code: "DOCS_ROUTE_CONFLICT" });
+  });
+});

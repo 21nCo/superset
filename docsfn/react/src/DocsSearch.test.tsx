@@ -149,7 +149,6 @@ describe("DocsSearch", () => {
       "https://external.example.com/search-guide"
     );
   });
-});
 
 it('reruns a populated search when the artifact is replaced', async () => {
   const manifest = createManifest();
@@ -166,9 +165,18 @@ it('reruns a populated search when the artifact is replaced', async () => {
 });
 it('retains a valid initial scope until a lazy artifact resolves', async () => {
   const artifact = await buildSearchIndex(createManifest(), { search: { enabled: true, scopes: ['docs', 'api'] } });
-  render(<DocsSearch loadSearchArtifact={async () => artifact} initialScope="api" />);
+  render(<DocsSearch loadSearchArtifact={async () => artifact} initialScope="api" scopes={[]} />);
   act(() => window.dispatchEvent(new KeyboardEvent('keydown', { ctrlKey: true, key: 'k' })));
   fireEvent.change(await screen.findByRole('textbox', { name: 'Search query' }), { target: { value: 'search' } });
   await screen.findByText('Search API');
   expect(screen.queryByText('Search Guide')).toBeNull();
+});
+
+
+  it("derives artifact scopes when the explicit list is empty", async () => {
+    const artifact = await buildSearchIndex(createManifest(), { search: { enabled: true, scopes: ["docs", "api"] } });
+    render(<DocsSearch searchArtifact={artifact} scopes={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Search documentation" }));
+    expect(screen.getByRole("button", { name: "API" })).toBeTruthy();
+  });
 });

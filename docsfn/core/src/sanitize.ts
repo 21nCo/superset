@@ -121,7 +121,7 @@ export function findUnsafeHtml(source: string): UnsafeHtmlMatch[] {
   });
   mapHtmlAttributes(stripCodeExamples(source), (name, value, raw) => {
     if (/^on[a-z][a-z0-9]*$/.test(name)) matches.push({ category: "event-handler", match: name });
-    if (["href", "src", "xlink:href"].includes(name)) checkUrl(value);
+    if (["href", "src", "xlink:href", "action", "formaction"].includes(name)) checkUrl(value);
     return raw;
   });
 

@@ -205,7 +205,7 @@ export function selectApiReferenceRoute(
   const schema = schemas.find((item) => item.routePath === route);
   const tag = tags.find((item) => item.routePath === route);
   if (!operation && !schema && !tag) return api;
-  const title = `${api.title} — ${operation?.summary ?? operation?.id ?? schema?.name ?? tag?.name}`;
+  const title = `${api.title} — ${(operation?.summary?.trim() || operation?.id) ?? schema?.name ?? tag?.name}`;
   return {
     ...api,
     path: route,

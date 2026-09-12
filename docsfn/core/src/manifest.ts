@@ -288,6 +288,15 @@ export async function buildManifest(
       pageSize: options.blogPageSize,
     });
 
+    const surfaceRoutes = new Set([canonicalCollection.listRoute, canonicalCollection.feedPath,
+      ...Object.values(canonicalCollection.tags).map((tag) => tag.path),
+      ...canonicalCollection.archives.map((archive) => archive.path)]);
+    for (const path of surfaceRoutes) {
+      const sourceId = `collection:${collectionId}:${path}`;
+      assertRouteAvailability({ routes, path, sourceId });
+      routes.set(path, sourceId);
+    }
+
     datedCollections[collectionId] = {
       id: canonicalCollection.id,
       label: canonicalCollection.label,

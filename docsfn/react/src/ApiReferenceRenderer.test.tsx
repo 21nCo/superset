@@ -1,6 +1,7 @@
 import React from "react";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { selectApiReferenceRoute } from "@docsfn/core";
 import { ApiReferenceRenderer } from "./ApiReferenceRenderer";
 import type { ApiReference } from "@docsfn/core";
 
@@ -89,4 +90,11 @@ describe("ApiReferenceRenderer", () => {
     );
     expect(html).toContain("IndexRequest");
   });
+});
+
+it("expands the operation selected by the canonical route helper", () => {
+  const api = createApiReferenceFixture();
+  const selected = selectApiReferenceRoute(api, "/docs/api/operations/get-search");
+  expect(selected.path).toBe("/docs/api/operations/get-search");
+  expect(renderToStaticMarkup(<ApiReferenceRenderer api={selected} />)).toContain('aria-expanded="true"');
 });

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { access, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -376,6 +376,7 @@ async function loadFreshConfigGraph(configPath: string): Promise<unknown> {
       }>;
     }
   >();
+  const unresolvedDependencies = new Set<string>();
   let totalBytes = 0;
   async function visit(file: string): Promise<void> {
     if (modules.has(file)) return;
@@ -458,11 +459,16 @@ async function loadFreshConfigGraph(configPath: string): Promise<unknown> {
       if (!literal.text.startsWith(".")) continue;
       let target = resolve(dirname(file), literal.text);
       if (!extname(target)) {
+        const unresolved = target;
         for (const extension of [".ts", ".js", ".mjs", ".cjs", ".json"]) {
           if (await fileExists(target + extension)) {
             target += extension;
             break;
           }
+        }
+        if (target === unresolved) {
+          for (const extension of ["", ".ts", ".js", ".mjs", ".cjs", ".json"]) unresolvedDependencies.add(unresolved + extension);
+          throw new Error("configuration dependency does not exist");
         }
       }
       if (![".js", ".mjs", ".ts", ".cjs", ".json"].includes(extname(target)))
@@ -484,6 +490,7 @@ async function loadFreshConfigGraph(configPath: string): Promise<unknown> {
     configDependencyPaths.set(configPath, [
       ...new Set([
         ...modules.keys(),
+        ...unresolvedDependencies,
         ...[...modules.values()].flatMap((module) =>
           module.imports.map((entry) => entry.target),
         ),
@@ -496,12 +503,13 @@ async function loadFreshConfigGraph(configPath: string): Promise<unknown> {
   ))
     fingerprint.update(file).update(module.source);
   const version = fingerprint.digest("hex").slice(0, 24);
+  const loadNonce = randomUUID();
   const outputPaths = new Map(
     [...modules.keys()].map((file) => [
       file,
       join(
         dirname(file),
-        `.docsfn.${version}.${createHash("sha256").update(file).digest("hex").slice(0, 16)}.${modules.get(file)!.json ? "json" : modules.get(file)!.commonjs ? "cjs" : "mjs"}`,
+        `.docsfn.${version}.${loadNonce}.${createHash("sha256").update(file).digest("hex").slice(0, 16)}.${modules.get(file)!.json ? "json" : modules.get(file)!.commonjs ? "cjs" : "mjs"}`,
       ),
     ]),
   );

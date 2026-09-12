@@ -291,7 +291,7 @@ function normalizeMediaContent(value: unknown): CanonicalOpenApiRequestBodyMedia
     });
 }
 
-function resolveParameterReference(
+function resolveLocalReference(
   value: unknown,
   document: Record<string, unknown>,
   input: NormalizeOpenApiReferenceInput
@@ -302,7 +302,7 @@ function resolveParameterReference(
     const reference = toObject(resolved).$ref as string;
     if (!reference.startsWith("#/") || visited.has(reference)) {
       throw createOpenApiParseError({
-        message: `unsupported or cyclic parameter reference ${reference}`,
+        message: `unsupported or cyclic local reference ${reference}`,
         sourceId: input.sourceId,
         sourcePath: input.sourcePath,
       });
@@ -311,8 +311,9 @@ function resolveParameterReference(
     resolved = document;
     let pointer: string;
     try { pointer = decodeURIComponent(reference.slice(2)); }
-    catch { throw createOpenApiParseError({ message: `malformed parameter reference ${reference}`, sourceId: input.sourceId, sourcePath: input.sourcePath }); }
+    catch { throw createOpenApiParseError({ message: `malformed local reference ${reference}`, sourceId: input.sourceId, sourcePath: input.sourcePath }); }
     for (const segment of pointer.split("/")) {
+      if (/~(?![01])/.test(segment)) throw createOpenApiParseError({ message: `malformed local reference ${reference}`, sourceId: input.sourceId, sourcePath: input.sourcePath });
       const key = segment.replace(/~1/g, "/").replace(/~0/g, "~");
       const object = toObject(resolved);
       resolved = Object.prototype.hasOwnProperty.call(object, key)
@@ -321,7 +322,7 @@ function resolveParameterReference(
     }
     if (!resolved || typeof resolved !== "object" || Array.isArray(resolved)) {
       throw createOpenApiParseError({
-        message: `unresolved parameter reference ${reference}`,
+        message: `unresolved local reference ${reference}`,
         sourceId: input.sourceId,
         sourcePath: input.sourcePath,
       });
@@ -367,12 +368,12 @@ function normalizeRequestBody(value: unknown): CanonicalOpenApiRequestBody | und
   };
 }
 
-function normalizeResponses(value: unknown): CanonicalOpenApiResponse[] {
+function normalizeResponses(value: unknown, document: Record<string, unknown>, input: NormalizeOpenApiReferenceInput): CanonicalOpenApiResponse[] {
   const responses = toObject(value);
   return Object.keys(responses)
     .sort(compareStrings)
     .map((statusCode) => {
-      const response = toObject(responses[statusCode]);
+      const response = toObject(resolveLocalReference(responses[statusCode], document, input));
       return {
         statusCode,
         description:
@@ -582,7 +583,7 @@ export function normalizeOpenApiReference(
 
     const pathRecord = pathItem as Record<string, unknown>;
     const pathParameters = Array.isArray(pathRecord.parameters)
-      ? pathRecord.parameters.map((value) => normalizeParameter(resolveParameterReference(value, parsed, input)))
+      ? pathRecord.parameters.map((value) => normalizeParameter(resolveLocalReference(value, parsed, input)))
       : [];
 
     for (const method of Object.keys(pathRecord).sort(compareStrings)) {
@@ -627,7 +628,7 @@ export function normalizeOpenApiReference(
       const routePath = `${apiRootPath}/operations/${methodLower}-${operationSlug}`;
 
       const localParameters = Array.isArray(operation.parameters)
-        ? operation.parameters.map((value) => normalizeParameter(resolveParameterReference(value, parsed, input)))
+        ? operation.parameters.map((value) => normalizeParameter(resolveLocalReference(value, parsed, input)))
         : [];
       const mergedParameterMap = new Map<string, CanonicalOpenApiParameter>();
       for (const parameter of [...pathParameters, ...localParameters]) {
@@ -660,8 +661,8 @@ export function normalizeOpenApiReference(
           }
           return compareStrings(left.name, right.name);
         }),
-        requestBody: normalizeRequestBody(operation.requestBody),
-        responses: normalizeResponses(operation.responses),
+        requestBody: normalizeRequestBody(resolveLocalReference(operation.requestBody, parsed, input)),
+        responses: normalizeResponses(operation.responses, parsed, input),
         deprecated: Boolean(operation.deprecated),
       });
 

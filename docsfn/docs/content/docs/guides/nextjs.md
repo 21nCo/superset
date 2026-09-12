@@ -178,9 +178,9 @@ export default async function DocsPage({
 
   if (routeEntry.kind === "page") {
     const compiled = resolveMarkdownRelativeLinks({
-      compiled: compileReactContent({ source: routeEntry.page.body, sourcePath: routeEntry.page.id, compatPreset: config.compat?.preset ?? "none" }),
+      compiled: compileReactContent({ source: routeEntry.page.body, sourcePath: routeEntry.page.id.replace(/^[^:]+:/, ""), compatPreset: config.compat?.preset ?? "none" }),
       route: routeEntry.route,
-      sourcePath: routeEntry.page.id,
+      sourcePath: routeEntry.page.id.replace(/^[^:]+:/, ""),
     });
     return (
       <div className="docs-layout">

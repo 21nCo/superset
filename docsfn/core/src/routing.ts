@@ -130,7 +130,7 @@ function resolveVersionContext(input: {
     }
     const pathVersion = mode === "path-segment" ? logicalSegments.at(-1) : logicalSegments[0];
     if (pathVersion && validSlugs.has(pathVersion) && pathVersion !== frontmatterVersion) {
-      throw createDocsError({ code: "DOCS_VERSION_INVALID", message: `path version ${pathVersion} conflicts with frontmatter version ${frontmatterVersion}`, diagnostics: [] });
+      throw createDocsError({ code: "DOCS_VERSION_INVALID", message: `path version ${pathVersion} conflicts with frontmatter version ${frontmatterVersion}`, diagnostics: [createDiagnostic({ code: "DOCS_VERSION_INVALID", message: "Path and frontmatter versions conflict", details: { pathVersion, frontmatterVersion } })] });
     }
     requestedVersion = frontmatterVersion;
   } else if (mode === "path-segment" && logicalSegments.length > 0 && validSlugs.has(logicalSegments[logicalSegments.length - 1])) {

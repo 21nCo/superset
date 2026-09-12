@@ -47,6 +47,7 @@ interface ParseBlocksOptions {
   sourcePath?: string;
   resolvedComponents?: Set<string>;
   idPrefix?: string;
+  createHeadingSlug?: ReturnType<typeof createSlugger>;
 }
 
 function normalizeSourceSnippet(value: string): string {
@@ -109,7 +110,7 @@ function parseComponentProps(rawAttributes: string): Record<string, string | num
 function sanitizeMarkdownHtml(html: string): string {
   return mapHtmlAttributes(html, (name, value, raw) => {
     if (/^on[a-z][a-z0-9]*$/.test(name)) return "";
-    if (["href", "src", "xlink:href"].includes(name) && /^javascript:/i.test(decodeHTML(value).replace(/[\t\n\r]/g, "").trim())) return ` ${name}="#"`;
+    if (["href", "src", "xlink:href", "action", "formaction"].includes(name) && /^javascript:/i.test(decodeHTML(value).replace(/[\t\n\r]/g, "").trim())) return ` ${name}="#"`;
     return raw;
   });
 }
@@ -332,6 +333,7 @@ function parseTabsBlock(input: {
   sourcePath?: string;
   resolvedComponents?: Set<string>;
   idPrefix?: string;
+  createHeadingSlug?: ReturnType<typeof createSlugger>;
 }): { block: CompiledTabsBlock; nextIndex: number } {
   const startLine = input.lines[input.startIndex].trim();
   const startMatch = startLine.match(TABS_START_REGEX);
@@ -385,6 +387,7 @@ function parseTabsBlock(input: {
           source,
           sourcePath: input.sourcePath,
           resolvedComponents: input.resolvedComponents,
+          createHeadingSlug: input.createHeadingSlug,
           idPrefix: `${normalizeRouteLikeId(input.idPrefix ?? input.sourcePath, "inline")}-tab-${String(tabs.length + 1).padStart(2, "0")}`,
         }),
       });
@@ -423,6 +426,7 @@ function parseTabsBlock(input: {
         source,
         sourcePath: input.sourcePath,
         resolvedComponents: input.resolvedComponents,
+        createHeadingSlug: input.createHeadingSlug,
         idPrefix: `${normalizeRouteLikeId(input.idPrefix ?? input.sourcePath, "inline")}-tab-${String(tabs.length + 1).padStart(2, "0")}`,
       }),
     });
@@ -456,7 +460,7 @@ function parseTabsBlock(input: {
 function parseBlocks(input: ParseBlocksOptions): CompiledContentBlock[] {
   const lines = input.source.split(/\r?\n/);
   const blocks: CompiledContentBlock[] = [];
-  const createHeadingSlug = createSlugger();
+  const createHeadingSlug = input.createHeadingSlug ?? createSlugger();
   let mermaidCount = 0;
   let tabsBlockCount = 0;
   let componentBlockCount = 0;
@@ -539,6 +543,7 @@ function parseBlocks(input: ParseBlocksOptions): CompiledContentBlock[] {
         startIndex: index,
         sourcePath: input.sourcePath,
         resolvedComponents: input.resolvedComponents,
+        createHeadingSlug,
         idPrefix: `${normalizeRouteLikeId(input.idPrefix ?? input.sourcePath, "inline")}-tabs-${String(tabsBlockCount).padStart(2, "0")}`,
       });
       blocks.push(parsedTabs.block);
@@ -665,6 +670,7 @@ function parseBlocks(input: ParseBlocksOptions): CompiledContentBlock[] {
           source,
           sourcePath: input.sourcePath,
           resolvedComponents: input.resolvedComponents,
+          createHeadingSlug,
           idPrefix: `${normalizeRouteLikeId(input.idPrefix ?? input.sourcePath, "inline")}-component-${componentName}-${String(componentBlockCount).padStart(2, "0")}`,
         }),
       });
@@ -771,7 +777,7 @@ interface ProjectCanonicalOptions extends ParseBlocksOptions {
 function projectCanonicalBlocks(input: ProjectCanonicalOptions): CompiledContentBlock[] {
   const blocks: CompiledContentBlock[] = [];
   const renderCanonicalHtml = (node: MdfnNode): string => canonicalHtml(node, input.document.schemaVersion, input.allowRawHtml);
-  const createHeadingSlug = createSlugger();
+  const createHeadingSlug = input.createHeadingSlug ?? createSlugger();
   let mermaidCount = 0;
   const componentIslandCounts = new Map<string, number>();
   let index = 0;
@@ -791,6 +797,7 @@ function projectCanonicalBlocks(input: ProjectCanonicalOptions): CompiledContent
         source: component.raw,
         sourcePath: input.sourcePath,
         resolvedComponents: input.resolvedComponents,
+        createHeadingSlug,
         idPrefix: islandPrefix,
       }));
       index += 1;
@@ -880,6 +887,7 @@ function projectCanonicalBlocks(input: ProjectCanonicalOptions): CompiledContent
         source: sourceRaw,
         sourcePath: input.sourcePath,
         resolvedComponents: input.resolvedComponents,
+        createHeadingSlug,
         idPrefix: input.idPrefix,
       });
       if (compatibility.length === 1 && compatibility[0].type === "callout") {
@@ -977,13 +985,15 @@ export function compileMarkdown(input: CompileMarkdownInput): CompiledContentArt
       idPrefix: normalizeRouteLikeId(input.sourcePath, "inline"),
       allowRawHtml: input.allowRawHtml,
     });
-    const headings = blocks
-      .filter((block): block is Extract<CompiledContentBlock, { type: "heading" }> => block.type === "heading")
-      .map((block) => ({
-        level: block.level,
-        text: block.text,
-        slug: block.slug,
-      }));
+    const headings: Array<{ level: number; text: string; slug: string }> = [];
+    const collectHeadings = (nodes: CompiledContentBlock[]) => {
+      for (const block of nodes) {
+        if (block.type === "heading") headings.push({ level: block.level, text: block.text, slug: block.slug });
+        else if (block.type === "component" && block.children) collectHeadings(block.children);
+        else if (block.type === "tabs") for (const tab of block.tabs) collectHeadings(tab.nodes ?? []);
+      }
+    };
+    collectHeadings(blocks);
 
     if (blocks.some((block) => block.type === "tabs")) {
       componentsUsed.add("DocsTabs");

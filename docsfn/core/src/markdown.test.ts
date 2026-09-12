@@ -442,3 +442,21 @@ it('sanitizes unquoted executable URLs while preserving text and safe URL paths'
 it('does not merge independent links into a forbidden scheme', () => {
   expect(() => compileMarkdown({ source: '[one](java)[two](script:foo) <a href="/onload=value">safe</a>' })).not.toThrow();
 });
+
+describe("shared component heading anchors and form URL policy", () => {
+  it("shares heading slugs across page headings, components, and tabs", () => {
+    const compiled = compileMarkdown({ source: '# Intro\n\n<Callout>\n\n## Intro\n\n</Callout>\n\n<DocsTabs items={["One"]}>\n<DocsTab value="One">\n\n## Intro\n\n</DocsTab>\n</DocsTabs>\n\n## Intro', sourcePath: 'anchors.mdx', components: { Callout: () => null, DocsTabs: () => null, DocsTab: () => null } });
+    expect(compiled.headings.map((heading) => heading.slug)).toEqual(['intro', 'intro-1', 'intro-2', 'intro-3']);
+    expect(compiled.toc).toEqual(compiled.headings);
+  });
+  it("rejects executable form URLs unless raw HTML is allowed, then neutralizes them", () => {
+    const source = '<form action="javascript:alert(1)"><button formaction="java&#x73;cript:alert(2)">Go</button></form>';
+    expect(() => compileMarkdown({ source })).toThrow();
+    const compiled = compileMarkdown({ source, allowRawHtml: true });
+    expect(compiled.blocks[0]).toMatchObject({ html: '<form action="#"><button formaction="#">Go</button></form>\n' });
+  });
+  it("preserves commented-out event-handler examples", () => {
+    const source = '<!-- <a onclick="demo()">example</a> -->';
+    expect(() => compileMarkdown({ source })).not.toThrow();
+  });
+});

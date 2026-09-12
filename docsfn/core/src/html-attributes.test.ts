@@ -10,3 +10,9 @@ it("scans repeated unmatched tag prefixes without changing them", () => {
   const text = "<a".repeat(50_000);
   expect(mapHtmlAttributes(text, (_name, _value, raw) => raw)).toBe(text);
 });
+
+it("skips complete and unterminated HTML comments", () => {
+  const drop = () => '';
+  expect(mapHtmlAttributes('<!-- <a onclick="demo()"> -->', drop)).toBe('<!-- <a onclick="demo()"> -->');
+  expect(mapHtmlAttributes('<!-- <a onclick="demo()">', drop)).toBe('<!-- <a onclick="demo()">');
+});

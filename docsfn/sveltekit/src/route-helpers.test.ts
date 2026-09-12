@@ -347,11 +347,8 @@ it('emits every OpenAPI child route as a Next catch-all parameter', async () => 
   const spec = buildOpenApiReference({ sourceId: 'api:x.json', sourcePath: 'x.json', fallbackTitle: 'X', body: JSON.stringify({ openapi: '3.0.3', info: { title: 'X', version: '1' }, paths: { '/items': { get: { responses: {} } } } }) });
   manifest.apis = { x: { kind: 'api', id: 'x', slug: 'x', path: spec.routes.overview, title: spec.title, frontmatter: {}, spec } };
   const params = generateNextApiParams(manifest, { catchAll: true });
-  for (const api of Object.values(manifest.apis)) {
-    const paths = (api.spec as { routes: { all: string[] } }).routes.all;
-    for (const route of paths) {
-      expect(params).toContainEqual({ slug: `${api.slug}${route.slice(api.path.length)}`.split('/').filter(Boolean) });
-    }
-  }
-  expect(params.length).toBeGreaterThan(Object.keys(manifest.apis).length);
+  expect(params).toEqual([{ slug: ['x'] }, { slug: ['x', 'operations', 'get-items'] }, { slug: ['x', 'tags', 'default'] }]);
+  manifest.apis.x.slug = '';
+  expect(generateNextApiParams(manifest, { catchAll: true })).toEqual([{}, { slug: ['operations', 'get-items'] }, { slug: ['tags', 'default'] }]);
+
 });

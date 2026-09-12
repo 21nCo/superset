@@ -790,16 +790,15 @@ export function generateBlogParams(
   return generateCollectionParams("blog", manifest, options);
 }
 
-/** Parameters for a dedicated API [...slug] route (overview and all child pages). */
+/** Parameters for a dedicated API [[...slug]] route (overview and all child pages). */
 export function generateApiParams(manifest: DocsManifest, options: { catchAll?: boolean } = {}) {
   const slugs = Object.values(manifest.apis).flatMap((api) => {
     const reference = api.spec as { routes?: { all?: string[] } } | undefined;
     return (reference?.routes?.all ?? [api.path]).map((route) =>
       route === api.path ? api.slug : `${api.slug}${route.slice(api.path.length)}`);
   });
-  return [...new Set(slugs)].sort(compareStrings).map((slug) => ({
-    slug: options.catchAll ? slug.split("/").filter(Boolean) : slug,
-  }));
+  return [...new Set(slugs)].sort(compareStrings).map((slug) =>
+    options.catchAll && !slug ? {} : { slug: options.catchAll ? slug.split("/").filter(Boolean) : slug });
 }
 
 export function resolveDocsPageSurface(input: {

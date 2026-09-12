@@ -8,6 +8,12 @@ export function mapHtmlAttributes(
     const start = source.indexOf("<", cursor);
     if (start < 0) return output + source.slice(cursor);
     output += source.slice(cursor, start);
+    if (source.startsWith("<!--", start)) {
+      const end = source.indexOf("-->", start + 4);
+      cursor = end < 0 ? source.length : end + 3;
+      output += source.slice(start, cursor);
+      continue;
+    }
     let index = start + 1;
     if (!/[a-z]/i.test(source[index] ?? "")) { output += "<"; cursor = index; continue; }
     while (index < source.length && /[a-z0-9:-]/i.test(source[index])) index++;

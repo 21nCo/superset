@@ -1027,7 +1027,7 @@ function rewriteColocatedAssets(source: string, record: ContentRecord): string {
     path.relative(path.dirname(record.relativePath), ".")
   );
   const rewrite = (href: string): string => {
-    if (!href.startsWith("./") && !href.startsWith("../")) return href;
+    if (!href || /^[a-z][a-z0-9+.-]*:/i.test(href) || /^[/#?\\]/.test(href)) return href;
     const [, pathname, suffix] = href.match(/^([^?#]*)(.*)$/s)!;
     let decoded: string;
     try { decoded = decodeURIComponent(pathname); } catch { return href; }
@@ -1040,7 +1040,12 @@ function rewriteColocatedAssets(source: string, record: ContentRecord): string {
     )
       return href;
     try {
-      if (!fsSync.statSync(target).isFile()) return href;
+      if (!fsSync.lstatSync(target).isFile()) return href;
+      let parent = path.dirname(target);
+      while (parent !== docsRoot) {
+        if (fsSync.lstatSync(parent).isSymbolicLink()) return href;
+        parent = path.dirname(parent);
+      }
     } catch {
       return href;
     }
@@ -1052,7 +1057,7 @@ function rewriteColocatedAssets(source: string, record: ContentRecord): string {
       (_match, prefix, href, close) => `${prefix}${rewrite(href)}${close}`
     )
     .replace(
-      /(\b(?:src|href)=["'])(\.\.?\/[^"']+)(["'])/g,
+      /(\b(?:src|href)=["'])([^"']+)(["'])/g,
       (_match, prefix, href, close) => `${prefix}${rewrite(href)}${close}`
     );
 }

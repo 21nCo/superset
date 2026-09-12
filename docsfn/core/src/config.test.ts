@@ -2,7 +2,7 @@ import { mkdtemp, readdir, rm, unlink, utimes, writeFile } from "node:fs/promise
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
-import { isDocsConfigError, loadDocsConfig } from "./config";
+import { getDocsConfigDependencies, isDocsConfigError, loadDocsConfig } from "./config";
 
 const tempDirs: string[] = [];
 
@@ -467,7 +467,7 @@ it('loads extensionless TypeScript config dependencies concurrently', async () =
   await writeFile(join(cwd, 'docsfn.config.ts'), `import { title } from './theme'; export default { schemaVersion: 1, site: { title }, content: { root: ${JSON.stringify(cwd)} }, compat: { preset: 'none' } };`);
   const loaded = await Promise.all(Array.from({ length: 12 }, () => loadDocsConfig({ cwd })));
   expect(loaded.every(config => config.site.title === 'Theme')).toBe(true);
-  expect((await readdir(cwd)).some(file => file.includes('.docsfn-config'))).toBe(false);
+  expect((await readdir(cwd)).some(file => file.startsWith('.docsfn.'))).toBe(false);
 });
 it('respects CommonJS scope for side-effect-only require dependencies', async () => {
   const cwd = await createTempDir();
@@ -476,4 +476,13 @@ it('respects CommonJS scope for side-effect-only require dependencies', async ()
   await writeFile(join(cwd, 'values.json'), '{}');
   await writeFile(join(cwd, 'docsfn.config.cjs'), `require('./side.js'); module.exports = { schemaVersion: 1, site: { title: 'CJS' }, content: { root: ${JSON.stringify(cwd)} }, compat: { preset: 'none' } };`);
   expect((await loadDocsConfig({ cwd, configPath: 'docsfn.config.cjs' })).site.title).toBe('CJS');
+});
+
+it("records missing extensionless dependency candidates and recovers when created", async () => {
+  const cwd = await createTempDir();
+  await writeFile(join(cwd, "docsfn.config.ts"), `import { title } from './missing'; export default { schemaVersion: 1, site: { title }, content: { root: ${JSON.stringify(cwd)} } };`);
+  await expect(loadDocsConfig({ cwd })).rejects.toThrow();
+  expect(getDocsConfigDependencies(join(cwd, "docsfn.config.ts"))).toContain(join(cwd, "missing.ts"));
+  await writeFile(join(cwd, "missing.ts"), 'export const title = "Recovered";');
+  expect((await loadDocsConfig({ cwd })).site.title).toBe("Recovered");
 });

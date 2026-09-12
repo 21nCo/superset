@@ -79,9 +79,9 @@ export function DocsSearch({
   const queryRequestRef = useRef(0);
   const [loadedScopes, setLoadedScopes] = useState<SearchScopeFilter[] | null>(null);
   const artifact = searchArtifact ?? searchIndex;
-  const supportedScopes = useMemo(() => normalizeScopes(scopeInput ?? ["all", ...(artifact?.scopes ?? loadedScopes ?? [])]), [scopeInput, artifact, loadedScopes]);
+  const supportedScopes = useMemo(() => normalizeScopes(scopeInput?.length ? scopeInput : ["all", ...(artifact?.scopes ?? loadedScopes ?? [])]), [scopeInput, artifact, loadedScopes]);
   useEffect(() => {
-    if (!scopeInput && !artifact && loadSearchArtifact && loadedScopes === null) return;
+    if (!scopeInput?.length && !artifact && loadSearchArtifact && loadedScopes === null) return;
     if (!supportedScopes.includes(scope)) setScope(supportedScopes[0] ?? "all");
   }, [supportedScopes, scope, scopeInput, artifact, loadSearchArtifact, loadedScopes]);
 

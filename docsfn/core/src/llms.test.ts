@@ -197,5 +197,6 @@ it("matches recursive source globs with canonical provider IDs", () => {
   page.id = "docs:deep/nested/start.md";
   const txt = buildLlmsFullTxt(manifest, { includePages: ["docs/**/*.md"] });
   expect(txt).toContain(page.body);
+  expect(txt).not.toContain(manifest.pages["docs/concepts/architecture"].body);
   expect(buildLlmsFullTxt(manifest, { includePages: ["docs/**/*.md"], excludePages: ["docs/deep/**"] })).not.toContain(page.body);
 });
