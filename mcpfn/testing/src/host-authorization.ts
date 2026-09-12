@@ -377,7 +377,7 @@ async function validateOAuthRejection(response: Response, fixture: McpFnHostedAu
     validatedRedirectCode(new Response(null, { status: response.status, headers: { location: callback.toString() } }), fixture);
   } else {
     const body = await response.clone().json().catch(() => undefined);
-    if (response.status !== 400 && !(response.status === 401 && body?.error === "invalid_client")) throw new Error("OAuth error response has invalid HTTP status");
+    if (response.status !== 400 && !(!authorization && response.status === 401 && body?.error === "invalid_client")) throw new Error("OAuth error response has invalid HTTP status");
     if (response.headers.has("location") || !isJsonResponse(response) ||
         !body || typeof body.error !== "string" || !body.error) {
       throw new Error("OAuth error response must be a JSON error envelope");

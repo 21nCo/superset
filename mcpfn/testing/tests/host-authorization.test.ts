@@ -147,3 +147,14 @@ it.each([[400, 'application/json', 'passed'], [400, 'Application/JSON; charset=u
   }, [fixture]);
   expect(results[0]?.status).toBe(outcome);
 });
+
+
+it("rejects direct authorization JSON 401 invalid_client", async () => {
+  const issuer = "https://login.example.com";
+  const fixture = createHostedAuthorizationFixtures({ issuer, resource: "https://mcp.example.com/mcp" })[0]!;
+  fixture.expected = { outcome: "rejected", errorCode: "invalid_client" };
+  const results = await runHostedAuthorizationRegression({ issuer, prepareRegistration: async () => {}, request: async () =>
+    new Response(JSON.stringify({ error: "invalid_client" }), { status: 401, headers: { "content-type": "application/json" } })
+  }, [fixture]);
+  expect(results[0]?.status).toBe("failed");
+});

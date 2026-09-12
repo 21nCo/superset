@@ -564,6 +564,27 @@ it("retains a late aborted handle whose cleanup fails", async () => {
   const [transport] = InMemoryTransport.createLinkedPair();
   resolveOpen({ transport, close: cleanup });
   await rejected;
+  await expect(client.connect()).rejects.toThrow(/Retry close/);
   await client.close();
   expect(cleanup).toHaveBeenCalledTimes(2);
+});
+
+
+it("shares cleanup of a late aborted handle across close calls", async () => {
+  let resolveOpen!: (handle: McpFnTransportHandle) => void;
+  let finishCleanup!: () => void;
+  const cleanup = vi.fn(() => new Promise<void>(resolve => { finishCleanup = resolve; }));
+  const client = createMcpFnClient({ target: customTarget({ kind: "late", open: () => new Promise(resolve => { resolveOpen = resolve; }) }) });
+  const connecting = client.connect();
+  const rejected = expect(connecting).rejects.toMatchObject({ code: "MCPFN_CONNECT_ABORTED" });
+  await vi.waitFor(() => expect(resolveOpen).toBeDefined());
+  await client.close();
+  const [transport] = InMemoryTransport.createLinkedPair();
+  resolveOpen({ transport, close: cleanup });
+  await vi.waitFor(() => expect(cleanup).toHaveBeenCalledOnce());
+  const closing = client.close();
+  await Promise.resolve();
+  expect(cleanup).toHaveBeenCalledOnce();
+  finishCleanup();
+  await Promise.all([closing, rejected]);
 });

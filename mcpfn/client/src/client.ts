@@ -78,6 +78,7 @@ export class McpFnClient {
   private _protocol?: Client;
   private handle?: McpFnTransportHandle;
   private readonly pendingCleanup = new Set<McpFnTransportHandle>();
+  private readonly cleanupPromises = new Map<McpFnTransportHandle, Promise<void>>();
   private connectPromise?: Promise<void>;
   private closePromise?: Promise<void>;
   private connectController?: AbortController;
@@ -268,7 +269,7 @@ export class McpFnClient {
 
   async connect(): Promise<void> {
     if (this.closePromise) await this.closePromise;
-    if (this._state === "closing") throw new McpFnClientError("MCPFN_OPERATION_FAILED", "Retry close before reconnecting after failed cleanup", { phase: "transport-close", retryable: true });
+    if (this._state === "closing" || this.pendingCleanup.size > 0) throw new McpFnClientError("MCPFN_OPERATION_FAILED", "Retry close before reconnecting after failed cleanup", { phase: "transport-close", retryable: true });
     if (this._state === "connected") return;
     if (this.connectPromise) return this.connectPromise;
     if (this._state === "authorization-required") {
@@ -554,9 +555,15 @@ export class McpFnClient {
   private async closeRetainedHandle(handle: McpFnTransportHandle | undefined, strict = false): Promise<void> {
     if (!handle) return;
     this.pendingCleanup.add(handle);
+    let pending = this.cleanupPromises.get(handle);
+    if (!pending) {
+      pending = closeTransportHandle(handle, true).then(() => {
+        this.pendingCleanup.delete(handle);
+      }).finally(() => { this.cleanupPromises.delete(handle); });
+      this.cleanupPromises.set(handle, pending);
+    }
     try {
-      await closeTransportHandle(handle, true);
-      this.pendingCleanup.delete(handle);
+      await pending;
     } catch {
       await this.emit("transport-close", "failed", this.requestId(), "MCPFN_CREDENTIAL_CLEANUP_FAILED");
       if (strict) throw new Error("MCP target cleanup failed");

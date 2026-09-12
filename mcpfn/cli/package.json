@@ -24,7 +24,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
     "@mcpfn/auth": "0.0.4",
-    "@mcpfn/client": "0.0.3",
+    "@mcpfn/client": "0.0.4",
     "@mcpfn/core": "0.0.4",
     "@mcpfn/inspector": "0.0.3",
     "@mcpfn/testing": "0.0.5",

@@ -31,7 +31,7 @@
   },
   "dependencies": {
     "@mcpfn/auth": "0.0.4",
-    "@mcpfn/client": "0.0.3",
+    "@mcpfn/client": "0.0.4",
     "@mcpfn/core": "0.0.4",
     "@modelcontextprotocol/sdk": "1.29.0",
     "@superfunctions/oauth-core": "0.1.1"

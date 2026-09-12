@@ -1,6 +1,6 @@
 {
   "name": "@mcpfn/client",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Production MCP client, target, session, lifecycle, and diagnostic engine for McpFn",
   "type": "module",
   "main": "dist/index.cjs",
