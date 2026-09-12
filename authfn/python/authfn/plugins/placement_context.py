@@ -250,14 +250,16 @@ class PlacementContextIssuer:
         return await self._verifier.verify_signed_async(assertion, audience=audience)
 
     async def _emit(self, event: Dict[str, Any]) -> None:
-        self._notify(event)
+        await self._notify(event)
         await emit_auth_event(self._config, event)
 
-    def _notify(self, event: Dict[str, Any]) -> None:
+    async def _notify(self, event: Dict[str, Any]) -> None:
         if self._on_event is None:
             return
         try:
-            self._on_event(event)
+            result = self._on_event(event)
+            if inspect.isawaitable(result):
+                await result
         except Exception:  # noqa: BLE001
             return
 
@@ -900,7 +902,7 @@ def _rtl_hyphen_exception_is_invalid(label: str) -> bool:
     # U+061D is accepted as punctuation by the supported Node/ICU URL parser;
     # Python's newer bidi assignment alone must not turn it into an RTL label.
     has_rtl = any(direction in {"R", "AL", "AN"} and char != "\u061d"
-                  for char, direction in zip(label, directions))
+                  for char, direction in zip(label, directions, strict=True))
     if not has_rtl:
         return False
     # ICU rejects an initial combining mark when the label also contains RTL

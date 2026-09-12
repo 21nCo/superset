@@ -1041,3 +1041,17 @@ async def test_async_verification_waits_for_event_delivery() -> None:
     with pytest.raises(PlacementContextInvalidError):
         await setup.issuer.verify_signed_async(signed["assertion"], audience="wrong")
     assert events == ["authfn.placement_context.verified", "authfn.placement_context.verification_failed"]
+
+@pytest.mark.asyncio
+async def test_issuance_waits_for_async_event_hook() -> None:
+    import asyncio
+    setup = await _setup()
+    events = []
+
+    async def on_event(event):
+        await asyncio.sleep(0.001)
+        events.append(event["type"])
+
+    setup.issuer._on_event = on_event
+    await setup.issuer.issue_signed(setup.request)
+    assert "authfn.placement_context.issued" in events
