@@ -40,17 +40,67 @@ function credentialValues(headers: HeadersInit): Set<string> {
   return secrets;
 }
 
+export class McpFnRedactionLimitError extends Error {
+  constructor() { super("Credential redaction exceeded its traversal budget"); }
+}
+
+// Only these locally authored envelope paths retain structural keys. Unknown
+// children (including inspector events and server metadata) are always payloads.
+const envelopeKeys: Record<string, Set<string>> = Object.fromEntries(Object.entries({
+  root: "formatVersion kind status runtime ok target server capabilities manifestChecked manifestHash total passed failed incomplete droppedResults droppedObservedEvents incompleteReason failure timeline droppedTimelineEvents results count clientState tools resources resourceTemplates prompts droppedEvents timelineComplete droppedInventoryEntries inventoryComplete suiteVersion exitCode stdout stderr phase outcome code requestId at details",
+  result: "formatVersion name operation tool status sideEffect durationMs error droppedObservedEvents",
+  diagnostic: "phase outcome code requestId at target details",
+  inspectorEvent: "formatVersion source kind at event",
+  failure: "name message layer code phase details",
+  runtime: "node scenarioFormatVersion reportSchemaVersion packages",
+  packages: "testing",
+  droppedInventoryEntries: "tools resources resourceTemplates prompts",
+  target: "kind",
+}).map(([role, keys]) => [role, new Set(keys.split(" "))]));
+
 function scrubCredentials<T>(value: T, values: Iterable<string>, preserveKeys = false): T {
   const secrets = [...values].filter(Boolean).sort((a, b) => b.length - a.length);
-  // These fields carry arbitrary user/target maps, unlike report envelope keys.
-  const payloadFields = new Set(["details", "structuredContent", "arguments", "inputSchema", "outputSchema", "capabilities", "data", "_meta"]);
-  const scrub = (input: unknown, fixedKeys = preserveKeys): unknown => {
-    if (typeof input === "string") return secrets.reduce((text, secret) => text.split(secret).join("[REDACTED]"), input);
-    if (Array.isArray(input)) return input.map(entry => scrub(entry, fixedKeys));
-    if (input && typeof input === "object") return Object.fromEntries(Object.entries(input).map(([key, entry]) => [fixedKeys ? key : scrub(key, false), scrub(entry, fixedKeys && !payloadFields.has(key))]));
+  let entries = 0, stringBytes = 0;
+  const budget = (input: unknown, depth = 0): void => {
+    if ((Array.isArray(input) && input.length > 100_000) || ++entries > 100_000 || depth > 32) throw new McpFnRedactionLimitError();
+    if (typeof input === "string") {
+      stringBytes += Buffer.byteLength(input);
+      if (input.length > 262_144 || stringBytes > 2_097_152) throw new McpFnRedactionLimitError();
+    } else if (input && typeof input === "object") {
+      for (const key in input) if (Object.hasOwn(input, key)) {
+        budget(key, depth + 1);
+        budget((input as Record<string, unknown>)[key], depth + 1);
+      }
+    }
+  };
+  // Check before either redactor allocates copies. Exceeding a budget is an
+  // explicit failure, never silent truncation of a typed report collection.
+  budget(value);
+  const scrub = (input: unknown, role = "payload", field = ""): unknown => {
+    if (typeof input === "string") {
+      if ((role === "root" || role === "result") && field === "status" && ["passed", "failed", "incomplete", "complete"].includes(input)) return input;
+      if ((role === "root" || role === "diagnostic") && field === "outcome" && ["started", "succeeded", "failed"].includes(input)) return input;
+      if (role === "root" && field === "kind" && ["mcpfn.target-suite-report", "mcpfn.inspector-snapshot", "mcpfn.official-conformance-report"].includes(input)) return input;
+      if ((role === "root" || role === "diagnostic" || role === "failure") && field === "phase" && ["resource-discovery", "authorization-server-discovery", "client-registration", "authorization-request", "authorization-callback", "token-exchange", "token-refresh", "token-revocation", "transport-connect", "mcp-initialize", "capability-operation", "transport-close"].includes(input)) return input;
+      if (role === "failure" && field === "layer" && ["mcpfn-preflight", "authorization-server", "resource-server", "mcp-initialization", "scenario", "upstream-conformance"].includes(input)) return input;
+      if (role === "inspectorEvent" && field === "source" && ["diagnostic", "client"].includes(input)) return input;
+      if (role === "result" && field === "sideEffect" && ["read-only", "idempotent", "non-idempotent"].includes(input)) return input;
+      return secrets.reduce((text, secret) => text.split(secret).join("[REDACTED]"), input);
+    }
+    if (Array.isArray(input)) return input.map(entry => scrub(entry, role));
+    if (input && typeof input === "object") return Object.fromEntries(Object.entries(input).map(([key, entry]) => {
+      const fixed = envelopeKeys[role]?.has(key) ?? false;
+      let childRole = "payload";
+      if (fixed) {
+        if (key === "results") childRole = "result";
+        else if (key === "timeline") childRole = (value as any)?.kind === "mcpfn.inspector-snapshot" ? "inspectorEvent" : "diagnostic";
+        else if (["failure", "runtime", "packages", "droppedInventoryEntries", "target"].includes(key)) childRole = key;
+      }
+      return [fixed ? key : scrub(key), typeof entry === "string" ? scrub(entry, fixed ? role : "payload", key) : scrub(entry, childRole)];
+    }));
     return input;
   };
-  return scrub(redactOAuthValue(value, { maxStringLength: Number.MAX_SAFE_INTEGER, maxDepth: Number.MAX_SAFE_INTEGER, maxArrayEntries: Number.MAX_SAFE_INTEGER, maxObjectEntries: Number.MAX_SAFE_INTEGER })) as T;
+  return scrub(redactOAuthValue(value, { maxStringLength: 262_144, maxDepth: 64, maxArrayEntries: 100_000, maxObjectEntries: 100_000 }), preserveKeys ? "root" : "payload") as T;
 }
 
 /** Remove known opaque credential values as well as credential-shaped fields. */

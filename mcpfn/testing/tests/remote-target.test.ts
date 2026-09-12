@@ -359,3 +359,17 @@ it("retries authenticated handle revocation after a strict close fails", async (
     expect(dispose).toHaveBeenCalledOnce();
   } finally { await fixture.close(); }
 });
+
+it("redacts dynamic inspector keys without corrupting result statuses", async () => {
+  const { redactRemoteCredential, McpFnRedactionLimitError } = await import("../src/remote-target.js");
+  const credential = { headers: { "x-api-key": "passed" } };
+  const report = { kind: "mcpfn.target-suite-report", ok: true, results: [{ status: "passed", name: "passed" }], timeline: [{ details: { passed: "passed" } }] };
+  const redacted = redactRemoteCredential(credential, report, { preserveKeys: true });
+  expect(createMcpFnTargetSuiteJUnit({ ...redacted, target: { kind: "custom" }, runtime: { node: process.version }, status: "complete", total: 1, passed: 1, failed: 0, incomplete: 0, droppedResults: 0, droppedObservedEvents: 0, droppedTimelineEvents: 0 } as any)).not.toContain("<failure");
+  expect(redacted.results[0]).toEqual({ status: "passed", name: "[REDACTED]" });
+  const snapshot = { kind: "mcpfn.inspector-snapshot", timeline: [{ event: { passed: { status: "passed" } } }] };
+  expect(JSON.stringify(redactRemoteCredential(credential, snapshot, { preserveKeys: true }))).not.toContain("passed");
+  let deep: any = {}; for (let i = 0; i < 40; i++) deep = { child: deep };
+  expect(() => redactRemoteCredential(credential, deep)).toThrow(McpFnRedactionLimitError);
+  expect(() => redactRemoteCredential(credential, new Array(1_000_000))).toThrow(McpFnRedactionLimitError);
+});

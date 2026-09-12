@@ -1,4 +1,4 @@
-import { beginTargetCredentialRedaction, redactTargetCredentials } from "./remote-target.js";
+import { McpFnRedactionLimitError, beginTargetCredentialRedaction, redactTargetCredentials } from "./remote-target.js";
 import type { Implementation, ServerCapabilities } from "@modelcontextprotocol/sdk/types.js";
 import type {
   McpFnDiagnosticEvent,
@@ -201,7 +201,17 @@ async function runTargetSuite(options: RunMcpFnTargetSuiteOptions): Promise<McpF
     droppedTimelineEvents,
     results,
   };
-  return enforceReportCap(redactTargetCredentials(options.target, report, { preserveKeys: true }), maxReportBytes);
+  try {
+    return enforceReportCap(redactTargetCredentials(options.target, report, { preserveKeys: true }), maxReportBytes);
+  } catch (error) {
+    if (!(error instanceof McpFnRedactionLimitError)) throw error;
+    return enforceReportCap({ ...report, ok: false, status: "incomplete",
+      incompleteReason: "Credential redaction exceeded its traversal budget",
+      target: { kind: "custom" }, server: undefined, capabilities: undefined, manifestHash: undefined,
+      failure: undefined, results: [], timeline: [],
+      droppedResults: report.results.length, droppedTimelineEvents: report.droppedTimelineEvents + report.timeline.length,
+    }, maxReportBytes);
+  }
 }
 
 function enforceReportCap(

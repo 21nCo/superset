@@ -137,7 +137,7 @@ it.each([400, 401, 403])("rejects a Location-only token error with status %s", a
   expect(results[0]?.status).toBe("failed");
 });
 
-it.each([[400, 'Application/JSON; charset=utf-8', 'passed'], [401, 'application/json', 'failed'], [403, 'application/json', 'failed'], [400, 'text/notjson', 'failed']])('validates token rejection media type and status %s %s', async (status, contentType, outcome) => {
+it.each([[400, 'application/json', 'passed'], [400, 'Application/JSON; charset=utf-8', 'passed'], [401, 'application/json', 'failed'], [403, 'application/json', 'failed'], [400, 'text/notjson', 'failed']])('validates token rejection media type and status %s %s', async (status, contentType, outcome) => {
   const issuer = "https://login.example.com";
   const fixture = createHostedAuthorizationFixtures({ issuer, resource: "https://mcp.example.com/mcp" }).find(item => item.id === "actual-unsupported-token-grant")!;
   const callback = new URL(fixture.authorization.redirectUri);

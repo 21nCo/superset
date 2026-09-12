@@ -536,3 +536,34 @@ it("retries failed handle cleanup before reconnecting", async () => {
   expect(opens).toBe(2);
   await client.close();
 });
+
+it("retains failed cleanup after a remote protocol close", async () => {
+  const server = createMcpFnServer({ info: { name: "remote-close", version: "1" }, registry: new McpFnRegistry() });
+  const cleanup = vi.fn().mockRejectedValueOnce(new Error("retry")).mockResolvedValue(undefined);
+  const client = createMcpFnClient({ target: customTarget({ kind: "remote", open: async () => {
+    const [transport, peer] = InMemoryTransport.createLinkedPair();
+    await server.connect(peer);
+    return { transport, close: cleanup };
+  } }) });
+  await client.connect();
+  await server.close();
+  await vi.waitFor(() => expect(cleanup).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(client.state).toBe("closing"));
+  await client.close().catch(() => undefined); // Observe any still-settling remote cleanup.
+  await expect(client.close()).resolves.toBeUndefined();
+  expect(cleanup).toHaveBeenCalledTimes(2);
+});
+it("retains a late aborted handle whose cleanup fails", async () => {
+  let resolveOpen!: (handle: McpFnTransportHandle) => void;
+  const cleanup = vi.fn().mockRejectedValueOnce(new Error("retry")).mockResolvedValue(undefined);
+  const client = createMcpFnClient({ target: customTarget({ kind: "late", open: () => new Promise(resolve => { resolveOpen = resolve; }) }) });
+  const connecting = client.connect();
+  const rejected = expect(connecting).rejects.toMatchObject({ code: "MCPFN_CONNECT_ABORTED" });
+  await vi.waitFor(() => expect(resolveOpen).toBeDefined());
+  await client.close();
+  const [transport] = InMemoryTransport.createLinkedPair();
+  resolveOpen({ transport, close: cleanup });
+  await rejected;
+  await client.close();
+  expect(cleanup).toHaveBeenCalledTimes(2);
+});
