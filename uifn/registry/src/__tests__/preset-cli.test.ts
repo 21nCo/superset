@@ -124,6 +124,8 @@ describe('preset CLI and project workflows', () => {
       expect(existsSync(path.join(rootDir, '.uifn/registry.lock'))).toBe(true);
       expect(existsSync(path.join(rootDir, 'components/uifn/react/button.ts'))).toBe(true);
       const manifest = JSON.parse(readFileSync(path.join(rootDir, 'package.json'), 'utf8')) as { dependencies: Record<string, string>; devDependencies: Record<string, string> };
+      expect(manifest.devDependencies['@types/react']).toBeDefined();
+      expect(manifest.devDependencies['@types/react-dom']).toBeDefined();
       expect(manifest.devDependencies.vite).toBeDefined();
       expect(manifest.dependencies['@uifn/react']).toBeDefined();
       expect(committed.plan?.artifacts).toEqual(expect.arrayContaining(['button']));

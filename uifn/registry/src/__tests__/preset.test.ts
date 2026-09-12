@@ -105,3 +105,16 @@ it('computes contrast from the emitted in-gamut sRGB solid', () => {
     }
   }
 });
+
+it.each(['lucide', 'phosphor', 'heroicons'] as const)('includes the selected %s icon dependency', iconLibrary => {
+  const plan = compilePreset(normalizePreset({ iconLibrary }));
+  expect(plan.project.packages.some(item => item.name === plan.icons.packageName && item.relationship === 'runtime')).toBe(true);
+});
+it('scopes every menu treatment to menus without changing dialog shadows', () => {
+  const css = (['elevated', 'inset', 'bordered'] as const).map(menuTreatment => compilePreset(normalizePreset({ menuTreatment })).css.light);
+  expect(new Set(css).size).toBe(3);
+  for (const text of css) {
+    expect(text).toContain('[data-uifn-component="menu"][data-uifn-part="content"]{--uifn-component-shadow:');
+    expect(text).not.toContain('--uifn-component-shadow-overlay:');
+  }
+});

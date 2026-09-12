@@ -63,19 +63,22 @@ it('rejects a container supplied on content inside its positioner', async () => 
   } finally { await act(async () => root.unmount()); host.remove(); }
 });
 
-it('keeps automatic portals inside the root iframe document', async () => {
+it.each([[undefined, false], [null, false], [undefined, true]] as const)('keeps automatic portals in the owner document (container %s, no body %s)', async (container, noBody) => {
   const React = await import('react');
   const { createRoot } = await import('react-dom/client');
   const { SelectRoot, SelectPositioner, SelectContent } = await import('@uifn/components-react/select');
   const frame = document.createElement('iframe'); document.body.append(frame);
   const owner = frame.contentDocument!;
-  const host = owner.createElement('div'); owner.body.append(host);
+  const host = owner.createElement('div');
+  if (noBody) owner.body.remove();
+  const expectedParent = owner.body ?? owner.documentElement;
+  expectedParent.append(host);
   const root = createRoot(host);
   try {
-    await act(async () => root.render(React.createElement(SelectRoot, {}, React.createElement(SelectPositioner, {}, React.createElement(SelectContent, { forceMount: true }, 'Iframe popup')))));
-    const popup = owner.body.querySelector('[data-uifn-part="positioner"]');
+    await act(async () => root.render(React.createElement(SelectRoot, {}, React.createElement(SelectPositioner, { container }, React.createElement(SelectContent, { forceMount: true }, 'Iframe popup')))));
+    const popup = expectedParent.querySelector('[data-uifn-part="positioner"]');
     expect(popup?.textContent).toBe('Iframe popup');
-    expect(popup?.parentElement).toBe(owner.body);
+    expect(noBody ? popup?.parentElement?.parentElement : popup?.parentElement).toBe(expectedParent);
     expect(document.body.textContent).not.toContain('Iframe popup');
   } finally { await act(async () => root.unmount()); frame.remove(); }
 });

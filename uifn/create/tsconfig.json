@@ -40,6 +40,22 @@
       ],
       "@uifn/core/primitives": [
         "../core/src/primitives/index.ts"
+      ],
+      "react": [
+        "./node_modules/@types/react",
+        "../../node_modules/@types/react"
+      ],
+      "react/*": [
+        "./node_modules/@types/react/*",
+        "../../node_modules/@types/react/*"
+      ],
+      "react-dom": [
+        "./node_modules/@types/react-dom",
+        "../../node_modules/@types/react-dom"
+      ],
+      "react-dom/*": [
+        "./node_modules/@types/react-dom/*",
+        "../../node_modules/@types/react-dom/*"
       ]
     },
     "jsx": "react-jsx"

@@ -127,6 +127,8 @@ function packageJson(plan: PresetCompilePlan): string {
     dependencies,
     devDependencies: {
       '@vitejs/plugin-react': '4.3.4',
+      '@types/react': '18.3.31',
+      '@types/react-dom': '18.3.7',
       typescript: '5.6.3',
       vite: '5.4.21',
     },

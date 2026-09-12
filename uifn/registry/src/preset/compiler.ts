@@ -251,7 +251,6 @@ function colorVars(preset: UIFnPresetV1, mode: 'light' | 'dark'): Record<string,
     '--uifn-density-comfortable': '1',
     '--uifn-density-spacious': '1.125',
     ...Object.fromEntries(CHARTS[preset.chartColor].map((color, index) => [`--uifn-chart-${index + 1}`, color])),
-    '--uifn-component-shadow-overlay': preset.menuTreatment === 'elevated' ? '0 18px 48px rgb(15 23 42 / 16%)' : 'none',
     '--uifn-density-scale': String(DENSITY_SCALE[preset.density]),
     '--uifn-typography-family-sans': fontSpec(preset).body.cssStack,
     '--uifn-typography-family-heading': fontSpec(preset).heading.cssStack,
@@ -270,6 +269,11 @@ function fontSpec(preset: UIFnPresetV1): { body: FontSpec; heading: FontSpec } {
 function cssFromVars(vars: Record<string, string>, selector: string): string {
   const declarations = Object.entries(vars).map(([name, value]) => `${name}:${value};`).join('');
   return `${selector}{${declarations}}`;
+}
+
+function menuCss(preset: UIFnPresetV1, scope: string): string {
+  const shadow = { elevated: '0 18px 48px rgb(15 23 42 / 16%)', inset: 'inset 0 1px 3px rgb(15 23 42 / 12%)', bordered: 'none' }[preset.menuTreatment];
+  return `${scope}[data-uifn-component="menu"][data-uifn-part="content"]{--uifn-component-shadow:${shadow};}`;
 }
 
 function frameworkPackages(preset: UIFnPresetV1): Array<{ name: string; version: string; relationship: 'runtime' | 'peer' }> {
@@ -355,7 +359,7 @@ export function compilePreset(preset: UIFnPresetV1, template: ApprovedTemplate =
       framework: preset.framework,
       installMode: preset.installMode,
       artifacts: [...PILOT_ARTIFACTS],
-      packages: frameworkPackages(preset),
+      packages: [...frameworkPackages(preset), { name: ICONS[preset.iconLibrary].packageName, version: { lucide: '0.575.0', phosphor: '2.1.10', heroicons: '2.2.0' }[preset.iconLibrary], relationship: 'runtime' }],
     },
     commands: {
       init: `uifn init --preset ${code} --template ${template}`,
@@ -365,8 +369,8 @@ export function compilePreset(preset: UIFnPresetV1, template: ApprovedTemplate =
       decode: `uifn preset decode ${code}`,
     },
     css: {
-      light: cssFromVars(lightVars, ':root'),
-      dark: cssFromVars(darkVars, ':root[data-uifn-mode="dark"]'),
+      light: cssFromVars(lightVars, ':root') + menuCss(preset, ''),
+      dark: cssFromVars(darkVars, ':root[data-uifn-mode="dark"]') + menuCss(preset, ':root[data-uifn-mode="dark"] '),
       fonts: stylesheets.map((href) => `@import url('${href}');`).join('\n'),
     },
   };
