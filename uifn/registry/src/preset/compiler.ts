@@ -45,8 +45,8 @@ export interface PresetCompilePlan {
     packages: Array<{ name: string; version: string; relationship: 'runtime' | 'peer' }>;
   };
   commands: {
-    init: string;
-    apply: string;
+    init?: string;
+    apply?: string;
     applyTheme: string;
     applyFont: string;
     decode: string;
@@ -212,7 +212,7 @@ function colorVars(preset: UIFnPresetV1, mode: 'light' | 'dark'): Record<string,
   const canvas = mode === 'dark' ? oklch(high ? 0.08 : 0.15, Math.min(chroma, 0.02), hue) : oklch(high ? 1 : 0.98, Math.min(chroma, 0.014), hue);
   const accentSolid = solidColor(mode === 'dark' ? (high ? 0.78 : 0.68) : (high ? 0.46 : 0.55), accentChroma, accentHue);
   const radius = RADIUS_BASE[preset.radius];
-  const radiusShift = shift.radius;
+  const radiusShift = preset.radius === 'none' ? 0 : shift.radius;
   return {
     '--uifn-color-surface-canvas': canvas,
     '--uifn-color-surface-raised': mode === 'dark' ? oklch(high ? 0.12 : 0.2, Math.min(chroma, 0.022), hue) : oklch(1, Math.min(chroma, 0.008), hue),
@@ -327,7 +327,7 @@ export function compilePreset(preset: UIFnPresetV1, template: ApprovedTemplate =
   const lightVars = colorVars(preset, 'light');
   const darkVars = colorVars(preset, 'dark');
   const radius = RADIUS_BASE[preset.radius];
-  const radiusShift = STYLE_SHIFT[preset.style].radius;
+  const radiusShift = preset.radius === 'none' ? 0 : STYLE_SHIFT[preset.style].radius;
   const stylesheets = [...new Set([fonts.body.stylesheet, fonts.heading.stylesheet].filter(Boolean))] as string[];
   return {
     schemaVersion: 1,
@@ -362,8 +362,10 @@ export function compilePreset(preset: UIFnPresetV1, template: ApprovedTemplate =
       packages: [...frameworkPackages(preset), ...(preset.framework === 'react' ? [{ name: ICONS[preset.iconLibrary].packageName, version: { lucide: '0.575.0', phosphor: '2.1.10', heroicons: '2.2.0' }[preset.iconLibrary], relationship: 'runtime' as const }] : [])],
     },
     commands: {
-      init: `uifn init --preset ${code} --template ${template}`,
-      apply: `uifn apply --preset ${code}`,
+      ...(preset.framework === 'react' ? {
+        init: `uifn init --preset ${code} --template ${template}`,
+        apply: `uifn apply --preset ${code}`,
+      } : {}),
       applyTheme: `uifn apply --preset ${code} --only theme`,
       applyFont: `uifn apply --preset ${code} --only font`,
       decode: `uifn preset decode ${code}`,

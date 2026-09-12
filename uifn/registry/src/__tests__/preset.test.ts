@@ -125,3 +125,18 @@ it('keeps source-mode plans independent of packaged React components', () => {
 it.each(['svelte', 'solid'] as const)('does not add React icon packages to %s plans', framework => {
   expect(compilePreset(normalizePreset({ framework })).project.packages.map(p => p.name)).not.toContain('lucide-react');
 });
+
+it.each(['svelte', 'solid'] as const)('omits unsupported %s project mutations', framework => {
+  const plan = compilePreset(normalizePreset({ framework }));
+  expect(plan.commands.init).toBeUndefined();
+  expect(plan.commands.apply).toBeUndefined();
+  expect(plan.commands.decode).toContain('decode');
+});
+it.each(['nova', 'meridian', 'atlas'] as const)('keeps radius none square for %s', style => {
+  const plan = compilePreset(normalizePreset({ style, radius: 'none' }));
+  for (const size of ['sm', 'md', 'lg', 'xl'] as const) {
+    expect(plan.theme.radius[size]).toBe('0px');
+    expect(plan.theme.lightVars[`--uifn-radius-${size}`]).toBe('0px');
+    expect(plan.theme.darkVars[`--uifn-radius-${size}`]).toBe('0px');
+  }
+});

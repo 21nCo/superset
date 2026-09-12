@@ -132,11 +132,11 @@ function render(preset: UIFnPresetV1, locked: Set<PresetAxis>, mode: 'light' | '
         <section class="outputs">
           <article>
             <h2>New project</h2>
-            <pre><code>${plan.commands.init}</code></pre>
+            ${plan.commands.init ? `<pre><code>${plan.commands.init}</code></pre>` : "<p>Project creation is currently available for React presets.</p>"}
           </article>
           <article>
             <h2>Existing project</h2>
-            <pre><code>${plan.commands.apply}</code></pre>
+            ${plan.commands.apply ? `<pre><code>${plan.commands.apply}</code></pre>` : "<p>Full project application is currently available for React presets.</p>"}
             <pre><code>${plan.commands.applyTheme}</code></pre>
           </article>
           <article>
