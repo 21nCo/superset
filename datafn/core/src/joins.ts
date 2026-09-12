@@ -87,8 +87,18 @@ export function resolveJoinStoreResources(relations: readonly DatafnRelationSche
   for (const rel of relations) {
     if (rel.type !== "many-many") continue;
     for (const from of endpointList(rel.from)) for (const to of endpointList(rel.to)) {
-      const key = getJoinStoreKey(from, getRelationKeyName(rel, to), to);
-      resources.set(key, [...new Set([...(resources.get(key) ?? []), from, to])]);
+      // Recognize client keys and persisted keys emitted by older server
+      // mutation/clone/reconcile paths. Derive aliases only from trusted schema
+      // metadata: a join_ prefix alone must never hide a real resource.
+      const names = new Set([
+        getRelationKeyName(rel, to),
+        rel.relation ?? rel.inverse ?? firstEndpoint(rel.to),
+        String(rel.relation),
+      ]);
+      for (const name of names) {
+        const key = getJoinStoreKey(from, name, to);
+        resources.set(key, [...new Set([...(resources.get(key) ?? []), from, to])]);
+      }
     }
   }
   return resources;

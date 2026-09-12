@@ -433,3 +433,21 @@ it("translates only trusted join cursors into endpoint selectors", () => {
   const collision = extractStructuralResourceSelectors("pull", payload, { schema });
   expect(collision.ok && collision.result.selectors).toContain("join_posts_tags_tags");
 });
+
+
+it.each([
+  [{}, ["join_posts_to_tags_tags", "join_posts_tags_tags", "join_posts_undefined_tags"]],
+  [{ joinTable: "post_tags" }, ["join_posts_post_tags_tags", "join_posts_tags_tags", "join_posts_undefined_tags"]],
+  [{ inverse: "posts" }, ["join_posts_posts_tags", "join_posts_undefined_tags"]],
+])("recognizes canonical and persisted unnamed relation cursors: %j", (options, keys) => {
+  const schema: any = {
+    resources: [{ name: "posts" }, { name: "tags" }],
+    relations: [{ type: "many-many", from: "posts", to: "tags", ...options }],
+  };
+  for (const key of keys as string[]) {
+    const result = extractStructuralResourceSelectors("pull", { cursors: { [key]: "1" } }, { schema });
+    expect(result.ok && result.result.selectors).toEqual(["posts", "tags"]);
+  }
+  const unknown = extractStructuralResourceSelectors("pull", { cursors: { join_other_tags_tags: "1" } }, { schema });
+  expect(unknown.ok && unknown.result.selectors).toEqual(["join_other_tags_tags"]);
+});
