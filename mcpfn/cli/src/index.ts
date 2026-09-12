@@ -240,15 +240,18 @@ export async function runCli(
       const inspector = McpFnInspector.create({ target });
       const finishRedaction = beginTargetCredentialRedaction(target);
       try {
-        await inspector.connect();
-        const serialized = `${JSON.stringify(redactTargetCredentials(target, await inspector.snapshot(), { preserveKeys: true }), null, 2)}\n`;
-        if (options.output) {
-          await writeFile(path.resolve(cwd, options.output), serialized, "utf8");
-        }
-        stdout(serialized);
-      } finally {
-        try { await inspector.close(); } finally { finishRedaction(); }
-      }
+        try {
+          await inspector.connect();
+          const serialized = `${JSON.stringify(redactTargetCredentials(target, await inspector.snapshot(), { preserveKeys: true }), null, 2)}\n`;
+          if (options.output) {
+            await writeFile(path.resolve(cwd, options.output), serialized, "utf8");
+          }
+          stdout(serialized);
+        } finally { await inspector.close(); }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(redactTargetCredentials(target, message));
+      } finally { finishRedaction(); }
     });
 
   cli.command("test-target <target> <scenarios>", "Run scenarios against an HTTP or stdio MCP target")

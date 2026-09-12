@@ -164,7 +164,7 @@ describe("McpFn production client", () => {
     expect(client.state).toBe("idle");
   });
 
-  it("detaches an aborted open so reconnect succeeds and closes its late handle", async () => {
+  it("blocks reconnect until an aborted open has released its late handle", async () => {
     const [lateClientTransport] = InMemoryTransport.createLinkedPair();
     const server = createMcpFnServer({
       info: { name: "reconnected", version: "1.0.0" },
@@ -202,12 +202,13 @@ describe("McpFn production client", () => {
     await expect(closing).resolves.toBeUndefined();
     expect(client.state).toBe("closed");
     expect(closeHandle).not.toHaveBeenCalled();
-    await expect(client.reconnect()).resolves.toBeUndefined();
-    expect(client.state).toBe("connected");
+    await expect(client.reconnect()).rejects.toThrow(/Retry close/);
+    expect(openCalls).toBe(1);
     resolveOpen({ transport: lateClientTransport, close: closeHandle });
 
     await connectResult;
     await vi.waitFor(() => expect(closeHandle).toHaveBeenCalledOnce());
+    await expect(client.reconnect()).resolves.toBeUndefined();
     expect(client.state).toBe("connected");
     await client.close();
   });

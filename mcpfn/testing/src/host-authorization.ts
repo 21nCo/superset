@@ -408,6 +408,7 @@ function validatedRedirectCode(response: Response, fixture: McpFnHostedAuthoriza
 }
 
 async function validatedTokenSet(response: Response): Promise<{ refresh_token?: unknown }> {
+  if (!isJsonResponse(response)) throw new Error("Token response must use a JSON media type");
   const value = await response.clone().json() as Record<string, unknown> | null;
   if (!value || typeof value.access_token !== "string" || !value.access_token ||
       typeof value.token_type !== "string" || !value.token_type) {

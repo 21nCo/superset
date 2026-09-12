@@ -158,3 +158,17 @@ it("rejects direct authorization JSON 401 invalid_client", async () => {
   }, [fixture]);
   expect(results[0]?.status).toBe("failed");
 });
+
+it.each(["token-exchange", "token-refresh"])("rejects non-JSON successful %s", async phase => {
+  const issuer = "https://login.example.com";
+  const fixture = createHostedAuthorizationFixtures({ issuer, resource: "https://mcp.example.com/mcp" }).find(item => item.token?.refreshAfterExchange)!;
+  const callback = new URL(fixture.authorization.redirectUri);
+  callback.searchParams.set("code", "test-code"); callback.searchParams.set("state", fixture.authorization.state);
+  let exchanges = 0;
+  const results = await runHostedAuthorizationRegression({ issuer, prepareRegistration: async () => {}, request: async request => {
+    if (new URL(request.url).pathname.endsWith("authorize")) return Response.redirect(callback, 302);
+    exchanges++;
+    return new Response(JSON.stringify({ access_token: "token", token_type: "Bearer", refresh_token: "refresh" }), { headers: { "content-type": exchanges === (phase === "token-exchange" ? 1 : 2) ? "text/plain" : "application/json" } });
+  } }, [fixture]);
+  expect(results[0]).toMatchObject({ status: "failed", phase });
+});

@@ -373,3 +373,21 @@ it("redacts dynamic inspector keys without corrupting result statuses", async ()
   expect(() => redactRemoteCredential(credential, deep)).toThrow(McpFnRedactionLimitError);
   expect(() => redactRemoteCredential(credential, new Array(1_000_000))).toThrow(McpFnRedactionLimitError);
 });
+
+it("retains failed pre-handle releases for a cleanup retry", async () => {
+  const revoke = vi.fn().mockRejectedValueOnce(new Error("temporary")).mockResolvedValue(undefined);
+  const target = authenticatedHttpTarget("http://127.0.0.1:1/mcp", { credential: {
+    acquire: () => ({ headers: undefined } as any), revoke,
+  } });
+  await expect(target.open({ requestId: "invalid", diagnostic: async () => {} })).rejects.toThrow(/cleanup failed/);
+  await target.cleanup!();
+  expect(revoke).toHaveBeenCalledTimes(2);
+});
+it("releases malformed credentials even when inspection fails", async () => {
+  const revoke = vi.fn();
+  const target = authenticatedHttpTarget("http://127.0.0.1:1/mcp", { credential: {
+    acquire: () => ({ headers: undefined } as any), revoke,
+  } });
+  await expect(target.open({ requestId: "invalid", diagnostic: async () => {} })).rejects.toThrow();
+  expect(revoke).toHaveBeenCalledOnce();
+});

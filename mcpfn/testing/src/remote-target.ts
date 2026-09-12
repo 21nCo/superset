@@ -226,11 +226,16 @@ export function authenticatedHttpTarget(
   void _credential;
 
   const state: SecretState = { active: new Map(), scopes: new Set() };
+  const pendingReleases = new Set<() => Promise<void>>();
   const authenticated = customTarget({
     kind: "authenticated-streamable-http",
     descriptor: {
       url: descriptorUrl.toString(),
       authenticated: true,
+    },
+    async cleanup() {
+      const results = await Promise.allSettled([...pendingReleases].map(release => release()));
+      if (results.some(result => result.status === "rejected")) throw new Error("Target credential cleanup failed");
     },
     async open(targetContext): Promise<McpFnTransportHandle> {
       const context: McpFnRemoteCredentialContext = {
@@ -239,13 +244,10 @@ export function authenticatedHttpTarget(
         signal: targetContext.signal,
       };
       const lease = await acquireRemoteCredential(options.credential, context);
-      const secrets = credentialValues(lease.credential.headers);
-      for (const secret of secrets) {
-        state.active.set(secret, (state.active.get(secret) ?? 0) + 1);
-        for (const scope of state.scopes) scope.add(secret);
-      }
+      const secrets = new Set<string>();
       const release = async () => {
         await lease.release();
+        pendingReleases.delete(release);
         {
           for (const secret of secrets) {
             const count = (state.active.get(secret) ?? 1) - 1;
@@ -256,6 +258,11 @@ export function authenticatedHttpTarget(
       };
       let handle: McpFnTransportHandle | undefined;
       try {
+        for (const secret of credentialValues(lease.credential.headers)) {
+          secrets.add(secret);
+          state.active.set(secret, (state.active.get(secret) ?? 0) + 1);
+          for (const scope of state.scopes) scope.add(secret);
+        }
         const credentialHeaders = validateRemoteCredentialHeaders(lease.credential.headers);
         const headers = new Headers(requestInit?.headers);
         credentialHeaders.forEach((value, name) => headers.set(name, value));
@@ -270,6 +277,7 @@ export function authenticatedHttpTarget(
         });
         handle = await target.open(targetContext);
       } catch (error) {
+        pendingReleases.add(release);
         await release();
         throw error;
       }

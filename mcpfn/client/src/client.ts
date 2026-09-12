@@ -80,6 +80,7 @@ export class McpFnClient {
   private readonly pendingCleanup = new Set<McpFnTransportHandle>();
   private readonly cleanupPromises = new Map<McpFnTransportHandle, Promise<void>>();
   private connectPromise?: Promise<void>;
+  private readonly openingSignals = new Set<AbortSignal>();
   private closePromise?: Promise<void>;
   private connectController?: AbortController;
 
@@ -269,7 +270,7 @@ export class McpFnClient {
 
   async connect(): Promise<void> {
     if (this.closePromise) await this.closePromise;
-    if (this._state === "closing" || this.pendingCleanup.size > 0) throw new McpFnClientError("MCPFN_OPERATION_FAILED", "Retry close before reconnecting after failed cleanup", { phase: "transport-close", retryable: true });
+    if (this._state === "closing" || this.pendingCleanup.size > 0 || [...this.openingSignals].some(signal => signal.aborted)) throw new McpFnClientError("MCPFN_OPERATION_FAILED", "Retry close before reconnecting after failed cleanup", { phase: "transport-close", retryable: true });
     if (this._state === "connected") return;
     if (this.connectPromise) return this.connectPromise;
     if (this._state === "authorization-required") {
@@ -323,6 +324,7 @@ export class McpFnClient {
     retries: number,
     signal: AbortSignal,
   ): Promise<{ error: unknown } | undefined> {
+    this.openingSignals.add(signal);
     try {
       const handle = await this.options.target.open({
         requestId,
@@ -351,6 +353,8 @@ export class McpFnClient {
         "Failed to open the MCP target",
         { phase: "transport-connect", retryable: true, cause: error },
       );
+    } finally {
+      this.openingSignals.delete(signal);
     }
   }
 
@@ -516,6 +520,7 @@ export class McpFnClient {
       const pendingController = this.connectController;
       void pendingConnect?.catch(() => undefined);
       pendingController?.abort();
+
       if (this.connectPromise === pendingConnect) this.connectPromise = undefined;
       if (this.connectController === pendingController) this.connectController = undefined;
       try {
@@ -544,7 +549,7 @@ export class McpFnClient {
     this.handle = undefined;
     const handles = new Set(this.pendingCleanup);
     if (handle) handles.add(handle);
-    const results = await Promise.allSettled([protocol?.close(), ...[...handles].map(item => this.closeRetainedHandle(item, strict))]);
+    const results = await Promise.allSettled([protocol?.close(), this.options.target.cleanup?.(), ...[...handles].map(item => this.closeRetainedHandle(item, strict))]);
     if (strict && results.some((result) => result.status === "rejected")) {
       if (results[0].status === "rejected") this._protocol = protocol;
 

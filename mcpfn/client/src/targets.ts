@@ -34,12 +34,14 @@ export function customTarget(options: {
   kind: string;
   descriptor?: Record<string, unknown>;
   open(context: McpFnTargetContext): Promise<McpFnTransportHandle> | McpFnTransportHandle;
+  cleanup?(): Promise<void>;
 }): McpFnTarget {
   const descriptor = Object.freeze({ kind: options.kind, ...options.descriptor });
   return {
     kind: options.kind,
     describe: () => ({ ...descriptor }),
     open: (context) => Promise.resolve(options.open(context)),
+    ...(options.cleanup ? { cleanup: () => options.cleanup!() } : {}),
   };
 }
 
