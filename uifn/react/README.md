@@ -22,3 +22,5 @@ The React Workbench app is `@uifn/example-react-workbench` under `uifn/examples/
 npm --workspace @uifn/examples run dev:react
 npm run verify:uifn-browser -- --framework react
 ```
+
+For Select, Menu, and ContextMenu popups, pass a custom `container` to `Positioner` when nesting `Content` inside it. Positioner and Content share that portal; a nested Content container throws a descriptive error. A standalone Content can receive its own container.

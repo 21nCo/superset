@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { compilePreset, themeTokenDocument } from './compiler';
 import { decodePreset, encodePreset, normalizePreset, parsePresetJson } from './codec';
 import { UIFnPresetError } from './errors';
@@ -55,7 +56,14 @@ export function runPresetCommand(options: {
       const code = positionals[0] ?? (typeof flags.preset === 'string' ? flags.preset : '');
       if (!code) return { ok: false, error: { code: 'UIFN_PRESET_USAGE', message: 'Usage: uifn preset open <code>' } };
       const preset = decodePreset(code);
-      return { ok: true, code: encodePreset(preset), url: presetShareUrl(preset), preset, command: `open ${presetShareUrl(preset)}` };
+      const url = presetShareUrl(preset);
+      if (!options.dryRun) {
+        const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'rundll32.exe' : 'xdg-open';
+        const args = process.platform === 'win32' ? ['url.dll,FileProtocolHandler', url] : [url];
+        const launched = spawnSync(command, args, { stdio: 'ignore', timeout: 10_000 });
+        if (launched.error || launched.status !== 0) throw new UIFnPresetError('UIFN_PRESET_OPEN_FAILED', 'Could not open the Create editor. Open the returned URL in your browser.', { url });
+      }
+      return { ok: true, code: encodePreset(preset), url, preset, opened: !options.dryRun, dryRun: options.dryRun };
     }
     if (action === 'resolve') {
       return resolveProjectPreset(rootDir);

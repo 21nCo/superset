@@ -41,10 +41,10 @@ it('renders equivalent public components from package and source scaffolds', asy
   const { initProject } = await import('../../registry/src/preset/project');
   const { createServer } = await import('vite');
   const { aliases } = await import('../aliases');
-  const vite = await createServer({ configFile: false, define: { __UIFN_DEV_TRACE__: 'false' }, resolve: { alias: aliases }, server: { middlewareMode: true, watch: null }, appType: 'custom' });
+  const parent = mkdtempSync(path.join(tmpdir(), 'uifn-public-parity-'));
+  const vite = await createServer({ configFile: false, define: { __UIFN_DEV_TRACE__: 'false' }, resolve: { alias: aliases }, server: { middlewareMode: true, watch: null, fs: { allow: [parent, path.resolve(__dirname, '../../..')] } }, appType: 'custom' });
   const { createElement } = await import('react');
   const { renderToStaticMarkup } = await import('react-dom/server');
-  const parent = mkdtempSync(path.join(tmpdir(), 'uifn-public-parity-'));
   try {
     symlinkSync(path.resolve(__dirname, '../../../node_modules'), path.join(parent, 'node_modules'));
     const html: string[] = [];

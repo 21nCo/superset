@@ -754,6 +754,9 @@ export function ReactPrimitivePart({
   });
   // These compounds have no Portal part. React must own their popup portal so
   // delegated events continue to reach the root after the popup opens.
+  if (AUTOMATIC_PORTAL_PRIMITIVES.has(definition.name) && part === 'content' && positionerOwner === bridge && container !== undefined) {
+    throw new Error('Pass container to Positioner when Content is nested inside Positioner.');
+  }
   const automaticPortal = AUTOMATIC_PORTAL_PRIMITIVES.has(definition.name) &&
     (part === 'positioner' || (part === 'content' && positionerOwner !== bridge));
   const subtree = part === 'positioner' ? <PositionerOwner.Provider value={bridge}>{rendered}</PositionerOwner.Provider> : rendered;

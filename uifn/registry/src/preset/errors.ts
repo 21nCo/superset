@@ -8,6 +8,7 @@ export type PresetErrorCode =
   | 'UIFN_PRESET_PROJECT_MISSING'
   | 'UIFN_PRESET_PROJECT_AMBIGUOUS'
   | 'UIFN_PRESET_RESOLVE_DEVIATION'
+  | 'UIFN_PRESET_OPEN_FAILED'
   | 'UIFN_PRESET_USAGE';
 
 export class UIFnPresetError extends Error {

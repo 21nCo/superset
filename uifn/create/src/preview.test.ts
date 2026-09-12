@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { PRESET_FIELD_ORDER } from '@uifn/registry/preset';
 
+beforeEach(() => vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true));
+afterEach(() => vi.unstubAllGlobals());
+
 it('renders public components and schema controls with working tabs', async () => {
-  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   document.body.innerHTML = '<div id="app"></div>';
   await act(async () => { await import('./main'); });
   await vi.waitFor(() => expect(document.querySelector('[data-uifn-component="button"]')).not.toBeNull());
@@ -40,4 +42,23 @@ it('portals the positioner together with its select content', async () => {
     expect(positioner?.querySelector('[data-uifn-part="content"]')?.textContent).toBe('Popup');
     expect(host.querySelector('[data-uifn-part="positioner"]')).toBeNull();
   } finally { await act(async () => root.unmount()); host.remove(); portal.remove(); }
+});
+
+it('rejects a container supplied on content inside its positioner', async () => {
+  const React = await import('react');
+  const { createRoot } = await import('react-dom/client');
+  const { SelectRoot, SelectPositioner, SelectContent } = await import('@uifn/components-react/select');
+  const host = document.createElement('div');
+  document.body.append(host);
+  class Boundary extends React.Component<{ children?: React.ReactNode }, { error?: Error }> {
+    state: { error?: Error } = {};
+    static getDerivedStateFromError(error: Error) { return { error }; }
+    render() { return this.state.error ? this.state.error.message : this.props.children; }
+  }
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(React.createElement(Boundary, {}, React.createElement(SelectRoot, {},
+      React.createElement(SelectPositioner, {}, React.createElement(SelectContent, { container: document.body, forceMount: true }, 'Popup'))))));
+    expect(host.textContent).toContain('Pass container to Positioner');
+  } finally { await act(async () => root.unmount()); host.remove(); }
 });
