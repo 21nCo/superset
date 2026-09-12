@@ -875,6 +875,10 @@ def _rtl_hyphen_exception_is_invalid(label: str) -> bool:
     has_rtl = any(direction in {"R", "AL", "AN"} for direction in directions)
     if not has_rtl:
         return False
+    # ICU rejects an initial combining mark when the label also contains RTL
+    # characters, including marks allowed by the narrow WHATWG exception above.
+    if directions[0] == "NSM":
+        return True
     has_ltr = any(direction == "L" for direction in directions)
     has_an = any(direction == "AN" for direction in directions)
     has_en = any(direction == "EN" for direction in directions)

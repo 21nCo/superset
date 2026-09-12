@@ -1001,3 +1001,24 @@ def test_whatwg_arabic_initial_marks_match_node(codepoint: int) -> None:
     expected = subprocess.check_output([node, "-e", "process.stdout.write(new URL(process.argv[1]).origin)", authority], text=True)
     assert _normalize_authority(authority) == expected
     assert _normalize_authority(expected) == expected
+
+
+@pytest.mark.parametrize("codepoint", range(0x0898, 0x08A0))
+@pytest.mark.parametrize("suffix", ["a", "1", "-", "א", "ا", "١", "aא", "אa"])
+def test_whatwg_initial_mark_compounds_match_node(codepoint: int, suffix: str) -> None:
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node is required for the differential authority fixture")
+    authority = "https://" + chr(codepoint) + suffix + ".example"
+    result = subprocess.run(
+        [node, "-e", "try { process.stdout.write(new URL(process.argv[1]).origin) } catch { process.exitCode = 1 }", authority],
+        capture_output=True, text=True, check=False,
+    )
+    if result.returncode:
+        with pytest.raises(ConfigError):
+            _normalize_authority(authority)
+    else:
+        assert _normalize_authority(authority) == result.stdout
+        assert _normalize_authority(result.stdout) == result.stdout
