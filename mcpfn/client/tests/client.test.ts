@@ -529,6 +529,8 @@ it("retries failed handle cleanup before reconnecting", async () => {
   await client.connect();
   await expect(client.reconnect()).rejects.toThrow(/cleanup failed/);
   expect(opens).toBe(1);
+  await expect(client.connect()).rejects.toThrow(/Retry close/);
+  expect(opens).toBe(1);
   await client.reconnect();
   expect(failedClose).toHaveBeenCalledTimes(2);
   expect(opens).toBe(2);

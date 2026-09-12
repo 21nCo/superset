@@ -30,32 +30,38 @@ function credentialValues(headers: HeadersInit): Set<string> {
     if (typeof raw !== "string" || !raw.trim()) continue;
     secrets.add(raw);
     secrets.add(raw.trim());
-    const token = /^(?:Bearer|Basic)\s+(.+)$/i.exec(raw.trim())?.[1];
-    if (token) secrets.add(token);
+    const trimmed = raw.trim();
+    const separator = trimmed.search(/\s/);
+    if (separator > 0 && ["bearer", "basic"].includes(trimmed.slice(0, separator).toLowerCase())) {
+      const token = trimmed.slice(separator).trim();
+      if (token) secrets.add(token);
+    }
   }
   return secrets;
 }
 
-function scrubCredentials<T>(value: T, values: Iterable<string>): T {
+function scrubCredentials<T>(value: T, values: Iterable<string>, preserveKeys = false): T {
   const secrets = [...values].filter(Boolean).sort((a, b) => b.length - a.length);
-  const scrub = (input: unknown): unknown => {
+  // These fields carry arbitrary user/target maps, unlike report envelope keys.
+  const payloadFields = new Set(["details", "structuredContent", "arguments", "inputSchema", "outputSchema", "capabilities", "data", "_meta"]);
+  const scrub = (input: unknown, fixedKeys = preserveKeys): unknown => {
     if (typeof input === "string") return secrets.reduce((text, secret) => text.split(secret).join("[REDACTED]"), input);
-    if (Array.isArray(input)) return input.map(scrub);
-    if (input && typeof input === "object") return Object.fromEntries(Object.entries(input).map(([key, entry]) => [scrub(key), scrub(entry)]));
+    if (Array.isArray(input)) return input.map(entry => scrub(entry, fixedKeys));
+    if (input && typeof input === "object") return Object.fromEntries(Object.entries(input).map(([key, entry]) => [fixedKeys ? key : scrub(key, false), scrub(entry, fixedKeys && !payloadFields.has(key))]));
     return input;
   };
-  return scrub(redactOAuthValue(value, { maxStringLength: 262_144 })) as T;
+  return scrub(redactOAuthValue(value, { maxStringLength: Number.MAX_SAFE_INTEGER, maxDepth: Number.MAX_SAFE_INTEGER, maxArrayEntries: Number.MAX_SAFE_INTEGER, maxObjectEntries: Number.MAX_SAFE_INTEGER })) as T;
 }
 
 /** Remove known opaque credential values as well as credential-shaped fields. */
-export function redactTargetCredentials<T>(target: McpFnTarget, value: T): T {
+export function redactTargetCredentials<T>(target: McpFnTarget, value: T, options: { preserveKeys?: boolean } = {}): T {
   const state = targetSecrets.get(target);
-  return scrubCredentials(value, new Set([...(state?.active.keys() ?? []), ...[...(state?.scopes ?? [])].flatMap((scope) => [...scope])]));
+  return scrubCredentials(value, new Set([...(state?.active.keys() ?? []), ...[...(state?.scopes ?? [])].flatMap((scope) => [...scope])]), options.preserveKeys);
 }
 
 /** Redact authenticated conformance output using the acquired credential. */
-export function redactRemoteCredential<T>(credential: McpFnRemoteCredential, value: T): T {
-  return scrubCredentials(value, credentialValues(credential.headers));
+export function redactRemoteCredential<T>(credential: McpFnRemoteCredential, value: T, options: { preserveKeys?: boolean } = {}): T {
+  return scrubCredentials(value, credentialValues(credential.headers), options.preserveKeys);
 }
 
 const MAX_CREDENTIAL_HEADERS = 32;
@@ -134,10 +140,22 @@ export async function acquireRemoteCredential(
     : staticRemoteCredentialProvider(source);
   const credential = await provider.acquire(context);
   let releasePromise: Promise<void> | undefined;
+  let revoked = false;
+  let disposed = false;
   return {
     credential,
     release() {
-      releasePromise ??= releaseCredential(provider, credential, context);
+      releasePromise ??= (async () => {
+        try {
+          try {
+            if (!revoked) { await provider.revoke?.(credential, context); revoked = true; }
+          } finally {
+            if (!disposed) { await provider.dispose?.(credential, context); disposed = true; }
+          }
+        } catch {
+          throw new Error("Target credential cleanup failed");
+        }
+      })().catch(error => { releasePromise = undefined; throw error; });
       return releasePromise;
     },
   };
@@ -177,8 +195,8 @@ export function authenticatedHttpTarget(
         for (const scope of state.scopes) scope.add(secret);
       }
       const release = async () => {
-        try { await lease.release(); }
-        finally {
+        await lease.release();
+        {
           for (const secret of secrets) {
             const count = (state.active.get(secret) ?? 1) - 1;
             if (count) state.active.set(secret, count); else state.active.delete(secret);
@@ -216,6 +234,7 @@ export function authenticatedHttpTarget(
             handle!,
             { ...lease, release },
           ).catch(async (error) => {
+            closePromise = undefined;
             await targetContext.diagnostic({
               phase: "transport-close", outcome: "failed", code: "MCPFN_CREDENTIAL_CLEANUP_FAILED",
               requestId: targetContext.requestId, at: new Date().toISOString(),
@@ -257,6 +276,8 @@ function isCredentialProvider(
 }
 
 export function validateRemoteCredentialHeaders(value: HeadersInit): Headers {
+  const rawValues = value instanceof Headers ? [] : Array.isArray(value) ? value.map(entry => entry[1]) : Object.values(value);
+  if (rawValues.some(entry => typeof entry !== "string")) throw new TypeError("Credential header values must be strings");
   const headers = new Headers(value);
   const entries: Array<[string, string]> = [];
   headers.forEach((headerValue, name) => entries.push([name, headerValue]));
@@ -293,18 +314,5 @@ async function closeAuthenticatedHandle(
     else await handle.transport.close();
   } finally {
     await lease.release();
-  }
-}
-
-async function releaseCredential(
-  provider: McpFnRemoteCredentialProvider,
-  credential: McpFnRemoteCredential,
-  context: McpFnRemoteCredentialContext,
-): Promise<void> {
-  try {
-    try { await provider.revoke?.(credential, context); }
-    finally { await provider.dispose?.(credential, context); }
-  } catch {
-    throw new Error("Target credential cleanup failed");
   }
 }

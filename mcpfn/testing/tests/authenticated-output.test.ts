@@ -17,3 +17,9 @@ it("scrubs opaque credentials from runner output and never inherits authenticate
   expect(result.stdout).toContain("[REDACTED]");
   expect(spawn.mock.calls[0][2].stdio).toBe("pipe");
 });
+
+it("rejects raw output artifacts before credential acquisition", async () => {
+  const acquire = vi.fn();
+  await expect(runAuthenticatedOfficialConformance({ url: "http://127.0.0.1:1/mcp", credential: { acquire }, outputDir: "/tmp/unsafe-output" })).rejects.toThrow(/outputDir/);
+  expect(acquire).not.toHaveBeenCalled();
+});

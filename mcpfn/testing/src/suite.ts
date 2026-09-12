@@ -106,12 +106,12 @@ async function runTargetSuite(options: RunMcpFnTargetSuiteOptions): Promise<McpF
               code: event.code, phase: event.phase,
             });
           }
-          timeline.push(redactTargetCredentials(options.target, redactOAuthValue(event)) as unknown as McpFnDiagnosticEvent);
+          timeline.push(redactTargetCredentials(options.target, redactOAuthValue(event), { preserveKeys: true }) as unknown as McpFnDiagnosticEvent);
           if (timeline.length > maxTimelineEvents) {
             timeline.shift();
             droppedTimelineEvents += 1;
           }
-          await consumerDiagnostic?.(redactTargetCredentials(options.target, event));
+          await consumerDiagnostic?.(redactTargetCredentials(options.target, event, { preserveKeys: true }));
         },
       },
     );
@@ -201,7 +201,7 @@ async function runTargetSuite(options: RunMcpFnTargetSuiteOptions): Promise<McpF
     droppedTimelineEvents,
     results,
   };
-  return enforceReportCap(redactTargetCredentials(options.target, report), maxReportBytes);
+  return enforceReportCap(redactTargetCredentials(options.target, report, { preserveKeys: true }), maxReportBytes);
 }
 
 function enforceReportCap(

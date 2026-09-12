@@ -267,6 +267,7 @@ export class McpFnClient {
 
   async connect(): Promise<void> {
     if (this.closePromise) await this.closePromise;
+    if (this._state === "closing") throw new McpFnClientError("MCPFN_OPERATION_FAILED", "Retry close before reconnecting after failed cleanup", { phase: "transport-close", retryable: true });
     if (this._state === "connected") return;
     if (this.connectPromise) return this.connectPromise;
     if (this._state === "authorization-required") {

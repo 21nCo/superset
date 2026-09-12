@@ -312,3 +312,50 @@ it("retains released values for a report scope and forgets them when that scope 
     expect(redactTargetCredentials(target, "rotated-opaque-value")).toBe("rotated-opaque-value");
   } finally { finish(); await fixture.close(); }
 });
+
+it("preserves report collections and fixed keys while scrubbing payload keys", async () => {
+  const { redactRemoteCredential } = await import("../src/remote-target.js");
+  const report = { target: { kind: "http" }, results: Array.from({ length: 501 }, (_, index) => ({ index, structuredContent: { target: "target" } })), count: 501 };
+  const result = redactRemoteCredential({ headers: { "x-api-key": "target" } }, report, { preserveKeys: true });
+  expect(result.target).toEqual({ kind: "http" });
+  expect(result.results).toHaveLength(501);
+  expect(result.count).toBe(501);
+  expect(result.results[0].structuredContent).toEqual({ "[REDACTED]": "[REDACTED]" });
+});
+it("rejects non-string headers and releases the acquired lease", async () => {
+  const dispose = vi.fn();
+  const target = authenticatedHttpTarget("http://127.0.0.1:1/mcp", { credential: { acquire: () => ({ headers: { "x-api-key": 123456 } as any }), dispose } });
+  const report = await runMcpFnTargetSuite({ target });
+  expect(report.ok).toBe(false);
+  expect(dispose).toHaveBeenCalledOnce();
+  expect(report.failure?.message).toContain("must be strings");
+});
+it("retries failed cleanup without repeating successful disposal", async () => {
+  const { acquireRemoteCredential } = await import("../src/remote-target.js");
+  const revoke = vi.fn().mockRejectedValueOnce(new Error("retry")).mockResolvedValue(undefined);
+  const dispose = vi.fn();
+  const lease = await acquireRemoteCredential({ acquire: () => ({ headers: { "x-api-key": "secret" } }), revoke, dispose }, { url: "https://test/mcp", requestId: "test" });
+  await expect(lease.release()).rejects.toThrow(/cleanup failed/);
+  await expect(lease.release()).resolves.toBeUndefined();
+  await lease.release();
+  expect(revoke).toHaveBeenCalledTimes(2);
+  expect(dispose).toHaveBeenCalledOnce();
+});
+it("handles long authorization whitespace without backtracking", async () => {
+  const { redactRemoteCredential } = await import("../src/remote-target.js");
+  expect(redactRemoteCredential({ headers: { authorization: `Bearer${" ".repeat(100000)}opaque` } }, "opaque")).toBe("[REDACTED]");
+});
+
+it("retries authenticated handle revocation after a strict close fails", async () => {
+  const fixture = await startAuthenticatedServer("retry-secret");
+  const revoke = vi.fn().mockRejectedValueOnce(new Error("retry-secret")).mockResolvedValue(undefined);
+  const dispose = vi.fn();
+  const target = authenticatedHttpTarget(fixture.url, { credential: { acquire: () => ({ headers: { authorization: "Bearer retry-secret" } }), revoke, dispose } });
+  try {
+    const handle = await target.open({ requestId: "retry", diagnostic: async () => {} } as any);
+    await expect(handle.close!()).rejects.toThrow(/cleanup failed/);
+    await expect(handle.close!()).resolves.toBeUndefined();
+    expect(revoke).toHaveBeenCalledTimes(2);
+    expect(dispose).toHaveBeenCalledOnce();
+  } finally { await fixture.close(); }
+});

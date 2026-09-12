@@ -310,10 +310,15 @@ export async function runOfficialConformance(
   });
 }
 
-/** Run the pinned official suite against an authenticated MCP endpoint. */
+/**
+ * Run the pinned official suite against an authenticated MCP endpoint.
+ * Always captures stdio (even when inherit is requested) to redact credentials.
+ * outputDir is rejected before acquisition; only the returned redacted result is safe to persist.
+ */
 export async function runAuthenticatedOfficialConformance(
   options: AuthenticatedOfficialConformanceOptions,
 ): Promise<OfficialConformanceResult> {
+  if (options.outputDir !== undefined) throw new TypeError("Authenticated conformance does not support outputDir; serialize the redacted result instead");
   const { headers, credential, ...conformance } = options;
   if ((headers === undefined) === (credential === undefined)) {
     throw new TypeError("Provide exactly one of credential or headers for authenticated conformance");
@@ -331,7 +336,7 @@ export async function runAuthenticatedOfficialConformance(
       url: conformance.url,
       headers: lease.credential.headers,
     });
-    return redactRemoteCredential(lease.credential, await runOfficialConformance({ ...conformance, stdio: "pipe", url: proxy.url }));
+    return redactRemoteCredential(lease.credential, await runOfficialConformance({ ...conformance, stdio: "pipe", url: proxy.url }), { preserveKeys: true });
   } finally {
     try {
       await proxy?.close();

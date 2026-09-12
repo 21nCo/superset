@@ -344,14 +344,18 @@ function assessHostedCase(
   };
 }
 
+function isJsonResponse(response: Response): boolean {
+  const mediaType = (response.headers.get("content-type") ?? "").split(";", 1)[0].trim().toLowerCase();
+  return mediaType === "application/json" || /^application\/[a-z0-9!#$&^_.+-]+\+json$/.test(mediaType);
+}
+
 async function oauthError(response: Response): Promise<string | undefined> {
   const location = response.headers.get("location");
   if (location) {
     const code = new URL(location).searchParams.get("error");
     if (code) return code;
   }
-  const contentType = response.headers.get("content-type") ?? "";
-  if (!contentType.includes("json")) return undefined;
+  if (!isJsonResponse(response)) return undefined;
   const body = await response.clone().json().catch(() => undefined) as
     | { error?: unknown }
     | undefined;
@@ -372,9 +376,9 @@ async function validateOAuthRejection(response: Response, fixture: McpFnHostedAu
     callback.searchParams.set("code", "error-envelope-validation");
     validatedRedirectCode(new Response(null, { status: response.status, headers: { location: callback.toString() } }), fixture);
   } else {
-    if (![400, 401, 403].includes(response.status)) throw new Error("OAuth error response has invalid HTTP status");
     const body = await response.clone().json().catch(() => undefined);
-    if (response.headers.has("location") || !(response.headers.get("content-type") ?? "").includes("json") ||
+    if (response.status !== 400 && !(response.status === 401 && body?.error === "invalid_client")) throw new Error("OAuth error response has invalid HTTP status");
+    if (response.headers.has("location") || !isJsonResponse(response) ||
         !body || typeof body.error !== "string" || !body.error) {
       throw new Error("OAuth error response must be a JSON error envelope");
     }

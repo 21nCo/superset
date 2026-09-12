@@ -166,3 +166,10 @@ The fixture starts a local mock server that publishes authorization-server disco
 See [Testing and CI](https://github.com/21nCo/super-functions/blob/main/mcpfn/TESTING.md) for the complete layered strategy.
 
 When credentials come from environment variables, pass their names in `sensitiveEnvironmentVariables` to authenticated official conformance. Those names are removed case-insensitively before the upstream runner is spawned. The library cannot infer the source of arbitrary provider-returned headers.
+
+Authenticated official conformance always captures stdout and stderr, including when
+`stdio: "inherit"` is requested, so credential values can be removed before output
+is returned. `outputDir` is rejected before credentials are acquired because the
+upstream runner writes raw artifacts directly. Persist the returned redacted result
+if an authenticated run needs an artifact. Credential cleanup may be retried after
+failure; successful revoke/dispose steps are not repeated.

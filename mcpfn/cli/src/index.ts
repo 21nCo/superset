@@ -241,7 +241,7 @@ export async function runCli(
       const finishRedaction = beginTargetCredentialRedaction(target);
       try {
         await inspector.connect();
-        const serialized = `${JSON.stringify(redactTargetCredentials(target, await inspector.snapshot()), null, 2)}\n`;
+        const serialized = `${JSON.stringify(redactTargetCredentials(target, await inspector.snapshot(), { preserveKeys: true }), null, 2)}\n`;
         if (options.output) {
           await writeFile(path.resolve(cwd, options.output), serialized, "utf8");
         }
