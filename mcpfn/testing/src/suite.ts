@@ -1,4 +1,4 @@
-import { redactTargetCredentials } from "./remote-target.js";
+import { beginTargetCredentialRedaction, redactTargetCredentials } from "./remote-target.js";
 import type { Implementation, ServerCapabilities } from "@modelcontextprotocol/sdk/types.js";
 import type {
   McpFnDiagnosticEvent,
@@ -69,6 +69,12 @@ export interface McpFnTargetSuiteReport {
 export async function runMcpFnTargetSuite(
   options: RunMcpFnTargetSuiteOptions,
 ): Promise<McpFnTargetSuiteReport> {
+  const finishRedaction = beginTargetCredentialRedaction(options.target);
+  try { return await runTargetSuite(options); }
+  finally { finishRedaction(); }
+}
+
+async function runTargetSuite(options: RunMcpFnTargetSuiteOptions): Promise<McpFnTargetSuiteReport> {
   const timeline: McpFnDiagnosticEvent[] = [];
   let droppedTimelineEvents = 0;
   const maxTimelineEvents = options.maxTimelineEvents ?? 500;

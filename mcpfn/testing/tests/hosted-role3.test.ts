@@ -180,7 +180,7 @@ async function startHostedRole3(authCase: McpFnHostedAuthorizationCase): Promise
     },
   };
   } catch (error) {
-    try { await mcp.close(); } finally { await started.close(); }
+    await Promise.allSettled([mcp.close(), started.close()]);
     throw error;
   }
 }

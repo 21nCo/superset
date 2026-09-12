@@ -6,18 +6,56 @@ import {
   type McpFnTransportHandle,
 } from "@mcpfn/client";
 
-const targetSecrets = new WeakMap<McpFnTarget, Set<string>>();
+import { redactOAuthValue } from "@superfunctions/oauth-core";
 
-/** Remove known opaque credential values as well as credential-shaped fields. */
-export function redactTargetCredentials<T>(target: McpFnTarget, value: T): T {
-  const secrets = [...(targetSecrets.get(target) ?? [])].sort((a, b) => b.length - a.length);
+type SecretState = { active: Map<string, number>; scopes: Set<Set<string>> };
+const targetSecrets = new WeakMap<McpFnTarget, SecretState>();
+
+/** Retain released credentials only for the lifetime of a report operation. */
+export function beginTargetCredentialRedaction(target: McpFnTarget): () => void {
+  const state = targetSecrets.get(target);
+  if (!state) return () => undefined;
+  const scope = new Set(state.active.keys());
+  state.scopes.add(scope);
+  return () => { state.scopes.delete(scope); scope.clear(); };
+}
+
+function credentialValues(headers: HeadersInit): Set<string> {
+  // Read raw entries before Headers validation, which may itself fail.
+  const values: string[] = [];
+  if (headers instanceof Headers) headers.forEach((value) => values.push(value));
+  else values.push(...(Array.isArray(headers) ? headers.map((entry) => entry[1]) : Object.values(headers)));
+  const secrets = new Set<string>();
+  for (const raw of values) {
+    if (typeof raw !== "string" || !raw.trim()) continue;
+    secrets.add(raw);
+    secrets.add(raw.trim());
+    const token = /^(?:Bearer|Basic)\s+(.+)$/i.exec(raw.trim())?.[1];
+    if (token) secrets.add(token);
+  }
+  return secrets;
+}
+
+function scrubCredentials<T>(value: T, values: Iterable<string>): T {
+  const secrets = [...values].filter(Boolean).sort((a, b) => b.length - a.length);
   const scrub = (input: unknown): unknown => {
     if (typeof input === "string") return secrets.reduce((text, secret) => text.split(secret).join("[REDACTED]"), input);
     if (Array.isArray(input)) return input.map(scrub);
     if (input && typeof input === "object") return Object.fromEntries(Object.entries(input).map(([key, entry]) => [scrub(key), scrub(entry)]));
     return input;
   };
-  return scrub(value) as T;
+  return scrub(redactOAuthValue(value, { maxStringLength: 262_144 })) as T;
+}
+
+/** Remove known opaque credential values as well as credential-shaped fields. */
+export function redactTargetCredentials<T>(target: McpFnTarget, value: T): T {
+  const state = targetSecrets.get(target);
+  return scrubCredentials(value, new Set([...(state?.active.keys() ?? []), ...[...(state?.scopes ?? [])].flatMap((scope) => [...scope])]));
+}
+
+/** Redact authenticated conformance output using the acquired credential. */
+export function redactRemoteCredential<T>(credential: McpFnRemoteCredential, value: T): T {
+  return scrubCredentials(value, credentialValues(credential.headers));
 }
 
 const MAX_CREDENTIAL_HEADERS = 32;
@@ -119,7 +157,7 @@ export function authenticatedHttpTarget(
   const { credential: _credential, requestInit, ...transportOptions } = options;
   void _credential;
 
-  const secrets = new Set<string>();
+  const state: SecretState = { active: new Map(), scopes: new Set() };
   const authenticated = customTarget({
     kind: "authenticated-streamable-http",
     descriptor: {
@@ -133,15 +171,24 @@ export function authenticatedHttpTarget(
         signal: targetContext.signal,
       };
       const lease = await acquireRemoteCredential(options.credential, context);
+      const secrets = credentialValues(lease.credential.headers);
+      for (const secret of secrets) {
+        state.active.set(secret, (state.active.get(secret) ?? 0) + 1);
+        for (const scope of state.scopes) scope.add(secret);
+      }
+      const release = async () => {
+        try { await lease.release(); }
+        finally {
+          for (const secret of secrets) {
+            const count = (state.active.get(secret) ?? 1) - 1;
+            if (count) state.active.set(secret, count); else state.active.delete(secret);
+          }
+          secrets.clear();
+        }
+      };
       let handle: McpFnTransportHandle | undefined;
       try {
         const credentialHeaders = validateRemoteCredentialHeaders(lease.credential.headers);
-        credentialHeaders.forEach((value) => {
-          secrets.add(value);
-          // Authorization schemes are public, but their opaque token is not.
-          const token = /^(?:Bearer|Basic)\s+(.+)$/i.exec(value)?.[1];
-          if (token) secrets.add(token);
-        });
         const headers = new Headers(requestInit?.headers);
         credentialHeaders.forEach((value, name) => headers.set(name, value));
         const target = streamableHttpTarget(targetUrl, {
@@ -155,7 +202,7 @@ export function authenticatedHttpTarget(
         });
         handle = await target.open(targetContext);
       } catch (error) {
-        await lease.release();
+        await release();
         throw error;
       }
 
@@ -167,7 +214,7 @@ export function authenticatedHttpTarget(
         close() {
           closePromise ??= closeAuthenticatedHandle(
             handle!,
-            lease,
+            { ...lease, release },
           ).catch(async (error) => {
             await targetContext.diagnostic({
               phase: "transport-close", outcome: "failed", code: "MCPFN_CREDENTIAL_CLEANUP_FAILED",
@@ -182,7 +229,7 @@ export function authenticatedHttpTarget(
       };
     },
   });
-  targetSecrets.set(authenticated, secrets);
+  targetSecrets.set(authenticated, state);
   return authenticated;
 }
 
@@ -221,6 +268,7 @@ export function validateRemoteCredentialHeaders(value: HeadersInit): Headers {
   }
   let bytes = 0;
   for (const [name, headerValue] of entries) {
+    if (!headerValue.trim()) throw new TypeError("Credential header values must not be blank");
     if (FORBIDDEN_CREDENTIAL_HEADERS.has(name)) {
       throw new TypeError(`Credential header ${name} is not allowed`);
     }
@@ -254,8 +302,9 @@ async function releaseCredential(
   context: McpFnRemoteCredentialContext,
 ): Promise<void> {
   try {
-    await provider.revoke?.(credential, context);
-  } finally {
-    await provider.dispose?.(credential, context);
+    try { await provider.revoke?.(credential, context); }
+    finally { await provider.dispose?.(credential, context); }
+  } catch {
+    throw new Error("Target credential cleanup failed");
   }
 }

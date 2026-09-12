@@ -515,13 +515,14 @@ export class McpFnClient {
       await this.emit("transport-close", "started", requestId);
       const pendingConnect = this.connectPromise;
       const pendingController = this.connectController;
+      void pendingConnect?.catch(() => undefined);
       pendingController?.abort();
       if (this.connectPromise === pendingConnect) this.connectPromise = undefined;
       if (this.connectController === pendingController) this.connectController = undefined;
       try {
         await this.cleanupAttempt(true);
       } catch {
-        this._state = permanent ? "closed" : "idle";
+        this._state = "closing";
         await this.emit("transport-close", "failed", requestId);
         throw new Error("MCP target cleanup failed");
       }
@@ -543,7 +544,11 @@ export class McpFnClient {
     this._protocol = undefined;
     this.handle = undefined;
     const results = await Promise.allSettled([protocol?.close(), closeTransportHandle(handle, strict)]);
-    if (strict && results.some((result) => result.status === "rejected")) throw new Error("MCP target cleanup failed");
+    if (strict && results.some((result) => result.status === "rejected")) {
+      if (results[0].status === "rejected") this._protocol = protocol;
+      if (results[1].status === "rejected") this.handle = handle;
+      throw new Error("MCP target cleanup failed");
+    }
   }
 
   private async cleanupOwnedAttempt(

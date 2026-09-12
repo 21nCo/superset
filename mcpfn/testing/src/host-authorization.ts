@@ -239,7 +239,7 @@ async function runHostedCase(
     }));
     const authorizationError = await oauthError(authorizationResponse);
     if (authorizationError) {
-      validateOAuthRejection(authorizationResponse, fixture, true);
+      await validateOAuthRejection(authorizationResponse, fixture, true);
       return assessHostedCase(fixture, phase, authorizationResponse.status, authorizationError);
     }
     if (!isRedirect(authorizationResponse.status)) {
@@ -272,7 +272,7 @@ async function runHostedCase(
       ));
       const tokenError = await oauthError(tokenResponse);
       if (tokenError) {
-        validateOAuthRejection(tokenResponse, fixture);
+        await validateOAuthRejection(tokenResponse, fixture);
         return assessHostedCase(fixture, phase, tokenResponse.status, tokenError);
       }
       if (!tokenResponse.ok) throw new Error(`Token request returned HTTP ${tokenResponse.status}`);
@@ -298,7 +298,7 @@ async function runHostedCase(
         ));
         const refreshError = await oauthError(refreshResponse);
         if (refreshError) {
-          validateOAuthRejection(refreshResponse, fixture);
+          await validateOAuthRejection(refreshResponse, fixture);
           return assessHostedCase(fixture, phase, refreshResponse.status, refreshError);
         }
         if (!refreshResponse.ok) {
@@ -358,7 +358,7 @@ async function oauthError(response: Response): Promise<string | undefined> {
   return typeof body?.error === "string" ? body.error : undefined;
 }
 
-function validateOAuthRejection(response: Response, fixture: McpFnHostedAuthorizationCase, authorization = false): void {
+async function validateOAuthRejection(response: Response, fixture: McpFnHostedAuthorizationCase, authorization = false): Promise<void> {
   if (authorization && isRedirect(response.status)) {
     const callback = new URL(response.headers.get("location") ?? "");
     // Redirects must target the registered URI, never a rejected requested URI.
@@ -371,8 +371,13 @@ function validateOAuthRejection(response: Response, fixture: McpFnHostedAuthoriz
     callback.searchParams.delete("error_uri");
     callback.searchParams.set("code", "error-envelope-validation");
     validatedRedirectCode(new Response(null, { status: response.status, headers: { location: callback.toString() } }), fixture);
-  } else if (![400, 401, 403].includes(response.status)) {
-    throw new Error("OAuth error response has invalid HTTP status");
+  } else {
+    if (![400, 401, 403].includes(response.status)) throw new Error("OAuth error response has invalid HTTP status");
+    const body = await response.clone().json().catch(() => undefined);
+    if (response.headers.has("location") || !(response.headers.get("content-type") ?? "").includes("json") ||
+        !body || typeof body.error !== "string" || !body.error) {
+      throw new Error("OAuth error response must be a JSON error envelope");
+    }
   }
 }
 
@@ -408,7 +413,7 @@ async function validatedTokenSet(response: Response): Promise<{ refresh_token?: 
 }
 
 function isRedirect(status: number): boolean {
-  return status >= 300 && status < 400;
+  return [301, 302, 303, 307, 308].includes(status);
 }
 
 function ensureTrailingSlash(value: string): URL {

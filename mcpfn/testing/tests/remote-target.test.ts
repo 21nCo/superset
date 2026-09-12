@@ -278,3 +278,37 @@ function closeServer(server: ReturnType<typeof createServer>): Promise<void> {
     server.close((error) => error ? reject(error) : resolve());
   });
 }
+
+
+it.each(["", "   "])("rejects blank credential headers without corrupting reports (%j)", async (value) => {
+  const report = await runMcpFnTargetSuite({ target: authenticatedHttpTarget("http://127.0.0.1:1/mcp", { credential: { headers: { "x-api-key": value } } }) });
+  expect(report.ok).toBe(false);
+  expect(report.failure?.message).toContain("must not be blank");
+  expect(JSON.stringify(report).length).toBeLessThan(10000);
+});
+
+it("redacts invalid-header cleanup errors and credential-shaped fields", async () => {
+  const { redactTargetCredentials } = await import("../src/remote-target.js");
+  const target = authenticatedHttpTarget("http://127.0.0.1:1/mcp", { credential: {
+    acquire: () => ({ headers: { host: "opaque-invalid-credential" } }),
+    revoke: () => { throw new Error("opaque-invalid-credential"); },
+  } });
+  const report = await runMcpFnTargetSuite({ target });
+  expect(report.ok).toBe(false);
+  expect(JSON.stringify(report)).not.toContain("opaque-invalid-credential");
+  expect(JSON.stringify(redactTargetCredentials(target, { access_token: "unrelated-secret" }))).not.toContain("unrelated-secret");
+});
+
+it("retains released values for a report scope and forgets them when that scope ends", async () => {
+  const { beginTargetCredentialRedaction, redactTargetCredentials } = await import("../src/remote-target.js");
+  const fixture = await startAuthenticatedServer("rotated-opaque-value");
+  const target = authenticatedHttpTarget(fixture.url, { credential: { headers: { authorization: "Bearer rotated-opaque-value" } } });
+  const finish = beginTargetCredentialRedaction(target);
+  try {
+    const client = await McpFnTestClient.connectTarget(target);
+    await client.close();
+    expect(redactTargetCredentials(target, "rotated-opaque-value")).toBe("[REDACTED]");
+    finish();
+    expect(redactTargetCredentials(target, "rotated-opaque-value")).toBe("rotated-opaque-value");
+  } finally { finish(); await fixture.close(); }
+});

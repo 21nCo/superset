@@ -13,6 +13,7 @@ import { redactOAuthValue } from "@superfunctions/oauth-core";
 
 import {
   acquireRemoteCredential,
+  redactRemoteCredential,
   validateRemoteCredentialHeaders,
   type McpFnRemoteCredential,
   type McpFnRemoteCredentialProvider,
@@ -330,7 +331,7 @@ export async function runAuthenticatedOfficialConformance(
       url: conformance.url,
       headers: lease.credential.headers,
     });
-    return await runOfficialConformance({ ...conformance, url: proxy.url });
+    return redactRemoteCredential(lease.credential, await runOfficialConformance({ ...conformance, stdio: "pipe", url: proxy.url }));
   } finally {
     try {
       await proxy?.close();

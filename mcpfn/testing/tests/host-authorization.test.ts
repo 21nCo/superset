@@ -114,3 +114,25 @@ it.each(["status", "state", "destination"])("rejects malformed OAuth rejection %
   }, [fixture]);
   expect(results[0]?.status).toBe("failed");
 });
+
+
+it.each([304, 305])("rejects status %s as an OAuth error redirect", async (status) => {
+  const issuer = "https://login.example.com";
+  const fixture = createHostedAuthorizationFixtures({ issuer, resource: "https://mcp.example.com/mcp" })[0]!;
+  fixture.expected = { outcome: "rejected", errorCode: "invalid_request" };
+  const callback = new URL(fixture.authorization.redirectUri);
+  callback.searchParams.set("error", "invalid_request"); callback.searchParams.set("state", fixture.authorization.state);
+  const results = await runHostedAuthorizationRegression({ issuer, prepareRegistration: async () => {}, request: async () => new Response(null, { status, headers: { location: callback.toString() } }) }, [fixture]);
+  expect(results[0]?.status).toBe("failed");
+});
+
+it.each([400, 401, 403])("rejects a Location-only token error with status %s", async (status) => {
+  const issuer = "https://login.example.com";
+  const fixture = createHostedAuthorizationFixtures({ issuer, resource: "https://mcp.example.com/mcp" }).find((item) => item.id === "actual-unsupported-token-grant")!;
+  const callback = new URL(fixture.authorization.redirectUri);
+  callback.searchParams.set("code", "test-code"); callback.searchParams.set("state", fixture.authorization.state);
+  const results = await runHostedAuthorizationRegression({ issuer, prepareRegistration: async () => {}, request: async (request) =>
+    new URL(request.url).pathname.endsWith("authorize") ? Response.redirect(callback, 302) : new Response(null, { status, headers: { location: "https://login.example.com/error?error=unsupported_grant_type" } })
+  }, [fixture]);
+  expect(results[0]?.status).toBe("failed");
+});

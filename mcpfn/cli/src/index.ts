@@ -20,6 +20,8 @@ import {
   McpFnAssertionError,
   assertManifestContract,
   authenticatedHttpTarget,
+  beginTargetCredentialRedaction,
+  redactTargetCredentials,
   createMcpFnTargetSuiteJUnit,
   runAuthenticatedOfficialConformance,
   runOfficialConformance,
@@ -236,15 +238,16 @@ export async function runCli(
     } & RemoteAuthCliOptions) => {
       const target = parseTarget(targetValue, options, cwd);
       const inspector = McpFnInspector.create({ target });
+      const finishRedaction = beginTargetCredentialRedaction(target);
       try {
         await inspector.connect();
-        const serialized = `${JSON.stringify(await inspector.snapshot(), null, 2)}\n`;
+        const serialized = `${JSON.stringify(redactTargetCredentials(target, await inspector.snapshot()), null, 2)}\n`;
         if (options.output) {
           await writeFile(path.resolve(cwd, options.output), serialized, "utf8");
         }
         stdout(serialized);
       } finally {
-        await inspector.close();
+        try { await inspector.close(); } finally { finishRedaction(); }
       }
     });
 

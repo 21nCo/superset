@@ -514,3 +514,23 @@ describe("McpFn production client", () => {
     await client.close();
   });
 });
+
+
+it("retries failed handle cleanup before reconnecting", async () => {
+  let opens = 0;
+  const failedClose = vi.fn().mockRejectedValueOnce(new Error("busy")).mockResolvedValue(undefined);
+  const client = createMcpFnClient({ target: customTarget({ kind: "retry-cleanup", open: async () => {
+    opens++;
+    const server = createMcpFnServer({ info: { name: "retry", version: "1" }, registry: new McpFnRegistry() });
+    const [transport, peer] = InMemoryTransport.createLinkedPair();
+    await server.connect(peer);
+    return { transport, close: opens === 1 ? failedClose : () => server.close() };
+  } }) });
+  await client.connect();
+  await expect(client.reconnect()).rejects.toThrow(/cleanup failed/);
+  expect(opens).toBe(1);
+  await client.reconnect();
+  expect(failedClose).toHaveBeenCalledTimes(2);
+  expect(opens).toBe(2);
+  await client.close();
+});
