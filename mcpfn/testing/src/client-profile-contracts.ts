@@ -678,6 +678,7 @@ export async function runMcpFnClientProfileContracts(
             (fixture.expect.validationIssue && Object.keys(fixture.expect.validationIssue).length)))) {
         throw new Error(`Captured-failure fixture ${fixture.name} requires meaningful error expectations`);
       }
+      if (fixture.source !== undefined && !["minimal-valid", "captured-failure"].includes(fixture.source)) throw new Error("Invalid fixture source");
       if (!fixture.name || !fixture.tool || !["read-only", "idempotent", "non-idempotent"].includes(fixture.sideEffect)) {
         throw new Error(`Client profile ${key} contains an invalid fixture`);
       }

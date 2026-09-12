@@ -420,3 +420,6 @@ it("requires a discriminator beyond isError for captured failures", async () => 
     fixtures: [{ name: "weak", tool: "lookup", arguments: {}, sideEffect: "read-only", source: "captured-failure", expect: { isError: true } }],
   }] })).rejects.toThrow(/meaningful error expectations/);
 });
+it('rejects misspelled captured failure sources', async () => {
+  await expect(runMcpFnClientProfileContracts({ profiles: [{ id: 'test', version: '1', target: targetFor({}).target, fixtures: [{ name: 'typo', tool: 'lookup', source: 'captured-failur' as any, sideEffect: 'read-only' }] }] })).rejects.toThrow(/fixture source/);
+});

@@ -272,6 +272,15 @@ function assertProjectedCatalog(
     if (owned.size && (canonicalShape.ownershipSensitive || visibleShape.ownershipSensitive)) {
       throw new McpFnClientProfileError("MCPFN_PROFILE_ASYMMETRIC", "Server-owned fields cannot be hidden under conditional or whole-object constraints");
     }
+    for (const name of Object.keys(canonicalShape.properties)) {
+      if (!owned.has(name) && !Object.hasOwn(visibleProperties, name)) {
+        throw new McpFnClientProfileError(
+          "MCPFN_PROFILE_ASYMMETRIC",
+          `Projected catalog hides ${visibleTool.name}.${name} without trusted enrichment`,
+          { tool: visibleTool.name, property: name },
+        );
+      }
+    }
     for (const [name, schema] of Object.entries(visibleProperties)) {
       if (!Object.hasOwn(canonicalShape.properties, name) || canonicalJson(schema) !== canonicalJson(canonicalShape.properties[name])) {
         throw new McpFnClientProfileError("MCPFN_PROFILE_ASYMMETRIC", `Projected model-owned property ${visibleTool.name}.${name} must retain its canonical schema`);
@@ -455,10 +464,10 @@ function rootShape(root: Record<string, unknown>): { properties: Record<string, 
     if (!value || typeof value !== "object") return value;
     const schema = value as Record<string, unknown>;
     const result = Object.fromEntries(Object.entries(schema).map(([key, child]) => [key, resolveProperty(child, refs)]));
-    if (typeof schema.$ref === "string" && schema.$ref.startsWith("#/")) {
-      if (refs.has(schema.$ref)) throw new McpFnClientProfileError("MCPFN_INVALID_PROJECTED_CATALOG", "Recursive property references cannot be safely projected");
+    if (typeof schema.$ref === "string" && (schema.$ref === "#" || schema.$ref.startsWith("#/"))) {
+      if (refs.has(schema.$ref)) return result; // Cycle edge; its target was already expanded on this path.
       let target: unknown = root;
-      for (const part of schema.$ref.slice(2).split("/")) {
+      for (const part of schema.$ref === "#" ? [] : schema.$ref.slice(2).split("/")) {
         const key = part.replace(/~1/g, "/").replace(/~0/g, "~");
         target = target && typeof target === "object" && Object.hasOwn(target, key) ? (target as Record<string, unknown>)[key] : undefined;
       }
@@ -472,7 +481,7 @@ function rootShape(root: Record<string, unknown>): { properties: Record<string, 
     seen.add(value);
     const schema = value as Record<string, unknown>;
     for (const [key, value] of Object.entries(schema)) {
-      if (["dependencies", "dependentRequired", "dependentSchemas", "if", "then", "else", "anyOf", "oneOf", "not", "minProperties", "maxProperties", "unevaluatedProperties"].includes(key)) ownershipSensitive = true;
+      if (["dependencies", "dependentRequired", "dependentSchemas", "if", "then", "else", "anyOf", "oneOf", "not", "const", "enum", "minProperties", "maxProperties", "unevaluatedProperties"].includes(key)) ownershipSensitive = true;
       if (!["properties", "required", "allOf", "$ref", "$defs", "definitions", "title", "description", "$comment", "examples"].includes(key)) {
         constraints.add(canonicalJson({ [key]: resolveProperty(value) }));
       }

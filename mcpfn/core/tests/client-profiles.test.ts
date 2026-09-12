@@ -540,3 +540,17 @@ describe("reference and ownership projection safety", () => {
     await expect(project(canonical, visible, execution)).rejects.toThrow(/Invalid task execution metadata/);
   });
 });
+
+it.each(['optional', 'root-ref', 'const', 'enum'])('rejects asymmetric projection %s', async kind => {
+  const { buildMcpFnEffectiveCatalog } = await import('../src/client-profiles.js');
+  const inputSchema: any = { type: 'object', properties: { tenantId: { type: 'string' }, query: kind === 'root-ref' ? { $ref: '#' } : { type: 'string' } }, required: ['tenantId'], additionalProperties: false };
+  if (kind === 'const') inputSchema.const = { tenantId: 'trusted' };
+  if (kind === 'enum') inputSchema.enum = [{ tenantId: 'trusted' }];
+  const visible = { ...inputSchema, properties: kind === 'optional' ? {} : { query: inputSchema.properties.query }, required: [] };
+  await expect(buildMcpFnEffectiveCatalog({ canonicalTools: [{ name: 'test', inputSchema }], resolved: { context: undefined, extra: {} as any, reportedClient: {}, verifiedIdentity: { subject: 'trusted' }, profile: { id: 'test', version: '1', matches: () => true, serverOwnedArguments: { test: ['tenantId'] }, enrichArguments: ({ arguments: args }) => ({ ...args, tenantId: 'trusted' }), projectCatalog: () => [{ name: 'test', inputSchema: visible }] } } })).rejects.toThrow();
+});
+it('preserves an unchanged recursive property schema', async () => {
+  const { buildMcpFnEffectiveCatalog } = await import('../src/client-profiles.js');
+  const tool: any = { name: 'test', inputSchema: { type: 'object', properties: { child: { $ref: '#' } } } };
+  await expect(buildMcpFnEffectiveCatalog({ canonicalTools: [tool], resolved: { context: undefined, extra: {} as any, reportedClient: {}, verifiedIdentity: { subject: 'trusted' }, profile: { id: 'test', version: '1', matches: () => true } } })).resolves.toMatchObject({ changes: [] });
+});
