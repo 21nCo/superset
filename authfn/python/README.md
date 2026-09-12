@@ -103,3 +103,7 @@ The output is deterministic and matches the TypeScript path surface.
 - Python authfn follows the same canonical envelopes and error codes as TypeScript.
 - FastAPI and Flask cookie propagation is covered by the shared package layer and authfn parity tests.
 - Sensitive values such as passwords, OTP codes, API key secrets, and OAuth tokens are omitted or redacted from observability events.
+
+### Awaiting placement verification telemetry
+
+Use `await verifier.verify_signed_async(assertion)` (also available on the issuer) in request-scoped or serverless runtimes. It waits for configured verification event delivery on both success and rejection. The synchronous verification API remains available, but cannot guarantee asynchronous telemetry completes before the request lifetime ends.

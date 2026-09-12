@@ -244,6 +244,11 @@ class PlacementContextIssuer:
             raise ConfigError("Placement-context verification requires a keyring")
         return self._verifier.verify_signed(assertion, audience=audience)
 
+    async def verify_signed_async(self, assertion: str, *, audience: Optional[str] = None) -> PlacementBoundAuthContext:
+        if self._verifier is None:
+            raise ConfigError("Placement-context verification requires a keyring")
+        return await self._verifier.verify_signed_async(assertion, audience=audience)
+
     async def _emit(self, event: Dict[str, Any]) -> None:
         self._notify(event)
         await emit_auth_event(self._config, event)
@@ -293,6 +298,26 @@ class PlacementContextVerifier:
         self._on_event = on_event
 
     def verify_signed(self, assertion: str, *, audience: Optional[str] = None) -> PlacementBoundAuthContext:
+        return self._verify_signed(assertion, self._emit_sync, audience=audience)
+
+    async def verify_signed_async(self, assertion: str, *, audience: Optional[str] = None) -> PlacementBoundAuthContext:
+        """Verify and await telemetry before the caller's request lifetime ends."""
+        events: List[Dict[str, Any]] = []
+        try:
+            return self._verify_signed(assertion, events.append, audience=audience)
+        finally:
+            for event in events:
+                if self._on_event is not None:
+                    try:
+                        result = self._on_event(event)
+                        if isinstance(result, Awaitable):
+                            await result
+                    except Exception:  # noqa: BLE001
+                        pass
+                if self._config is not None:
+                    await emit_auth_event(self._config, event)
+
+    def _verify_signed(self, assertion: str, emit_event: Callable[[Dict[str, Any]], None], *, audience: Optional[str] = None) -> PlacementBoundAuthContext:
         requested_audience = self._default_audience if audience is None else audience
         verified_request_id: Optional[str] = None
         try:
@@ -306,7 +331,7 @@ class PlacementContextVerifier:
             if payload.get("issuer") != self._public_authority:
                 raise PlacementContextInvalidError("Placement-bound auth context issuer is invalid")
             context = _context_from_payload(payload)
-            self._emit_sync(
+            emit_event(
                 {
                     "type": "authfn.placement_context.verified",
                     "requestId": context.request_id,
@@ -321,7 +346,7 @@ class PlacementContextVerifier:
             )
             return context
         except Exception as error:
-            self._emit_sync(
+            emit_event(
                 {
                     "type": "authfn.placement_context.verification_failed",
                     "requestId": verified_request_id or _request_id(None),
@@ -872,7 +897,10 @@ def _rtl_hyphen_exception_is_invalid(label: str) -> bool:
     if not label:
         return False
     directions = [unicodedata.bidirectional(char) for char in label]
-    has_rtl = any(direction in {"R", "AL", "AN"} for direction in directions)
+    # U+061D is accepted as punctuation by the supported Node/ICU URL parser;
+    # Python's newer bidi assignment alone must not turn it into an RTL label.
+    has_rtl = any(direction in {"R", "AL", "AN"} and char != "\u061d"
+                  for char, direction in zip(label, directions))
     if not has_rtl:
         return False
     # ICU rejects an initial combining mark when the label also contains RTL

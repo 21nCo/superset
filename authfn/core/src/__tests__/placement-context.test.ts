@@ -711,6 +711,21 @@ describe('AuthFn placement-bound auth context', () => {
     }))).rejects.toBeInstanceOf(AuthFnSessionExpiredError);
   });
 
+  it('awaits verification event delivery on both success and rejection', async () => {
+    const { issuer, request, config } = await setupIssuer();
+    const issued = await issuer.issueSigned(request);
+    const delivered: string[] = [];
+    config.observability = { events: { async emit(event) {
+      await new Promise(resolve => setTimeout(resolve, 5));
+      delivered.push(event.type);
+    } } };
+    await issuer.verifySignedAsync(issued.assertion);
+    expect(delivered).toEqual(['authfn.placement_context.verified']);
+    await expect(issuer.verifySignedAsync(issued.assertion, { audience: 'wrong' }))
+      .rejects.toBeInstanceOf(AuthFnPlacementContextInvalidError);
+    expect(delivered).toEqual(['authfn.placement_context.verified', 'authfn.placement_context.verification_failed']);
+  });
+
   it('keeps the signed request id on post-signature verification failures', async () => {
     const { issuer, request, events } = await setupIssuer();
     const issued = await issuer.issueSigned(request);

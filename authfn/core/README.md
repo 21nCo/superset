@@ -165,3 +165,7 @@ Sensitive values such as passwords, OTP codes, API key secrets, and OAuth tokens
 - `authfn` does not bundle framework adapters. Use the shared `@superfunctions/http-*` adapters directly.
 - `authfn` does not bundle email or SMS delivery. Plug a provider in through the OTP delivery interface today, or layer `sendfn` in at the application boundary.
 - Migration and cutover planning from Better Auth is intentionally out of scope for this spec bundle.
+
+### Awaiting placement verification telemetry
+
+Use `await verifier.verifySignedAsync(assertion)` (also available on the issuer) in request-scoped or serverless runtimes. It waits for configured verification event delivery on both success and rejection. The synchronous verification API remains available, but cannot guarantee asynchronous telemetry completes before the request lifetime ends.

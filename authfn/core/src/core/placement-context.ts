@@ -99,6 +99,11 @@ export interface AuthFnPlacementContextVerifier {
     assertion: string,
     input?: AuthFnPlacementContextDeriveInput
   ): AuthFnPlacementBoundAuthContext;
+  /** Await verification telemetry before a request-scoped runtime returns. */
+  verifySignedAsync(
+    assertion: string,
+    input?: AuthFnPlacementContextDeriveInput
+  ): Promise<AuthFnPlacementBoundAuthContext>;
 }
 
 export interface AuthFnPlacementContextDeriveInput {
@@ -128,6 +133,11 @@ export interface AuthFnPlacementContextIssuer {
     assertion: string,
     input?: AuthFnPlacementContextDeriveInput
   ): AuthFnPlacementBoundAuthContext;
+  /** Await verification telemetry before a request-scoped runtime returns. */
+  verifySignedAsync(
+    assertion: string,
+    input?: AuthFnPlacementContextDeriveInput
+  ): Promise<AuthFnPlacementBoundAuthContext>;
 }
 
 interface PlacementPrincipal {
@@ -314,7 +324,11 @@ export function createAuthFnPlacementContextIssuer(
         assertion: signPlacementPayload(payloadFromContext(context, options.keyring), options.keyring)
       };
     },
-    verifySigned
+    verifySigned,
+    async verifySignedAsync(assertion, input) {
+      if (!verifier) throw new AuthFnConfigError('Placement-context verification requires a keyring');
+      return verifier.verifySignedAsync(assertion, input);
+    }
   };
 }
 
@@ -342,8 +356,11 @@ export function createAuthFnPlacementContextVerifier(
   validateKeyring(options.keyring);
   const now = options.now ?? (() => new Date());
 
-  return {
-    verifySigned(assertion, input) {
+  function verify(
+    assertion: string,
+    input: AuthFnPlacementContextDeriveInput | undefined,
+    pending: Promise<void>[]
+  ): AuthFnPlacementBoundAuthContext {
       const requestedAudience = input?.audience ?? defaultAudience;
       let verifiedRequestId: string | undefined;
       try {
@@ -358,7 +375,7 @@ export function createAuthFnPlacementContextVerifier(
         }
         const context = contextFromPayload(payload);
         if (options.config) {
-          void emit(options.config, undefined, 'authfn.placement_context.verified', {
+          pending.push(emit(options.config, undefined, 'authfn.placement_context.verified', {
             requestId: context.requestId,
             outcome: 'success',
             regionId: context.homeRegion,
@@ -367,21 +384,28 @@ export function createAuthFnPlacementContextVerifier(
               audience: context.audience,
               subjectDigest: hashForTelemetry(context.subject)
             }
-          });
+          }));
         }
         return context;
       } catch (error) {
         if (options.config) {
-          void emit(options.config, undefined, 'authfn.placement_context.verification_failed', {
+          pending.push(emit(options.config, undefined, 'authfn.placement_context.verification_failed', {
             requestId: verifiedRequestId,
             outcome: 'rejected',
             metadata: { errorType: readErrorCode(error), audience: requestedAudience }
-          });
+          }));
         }
         throw error instanceof AuthFnPlacementContextInvalidError
           ? error
           : new AuthFnPlacementContextInvalidError();
       }
+  }
+  return {
+    verifySigned(assertion, input) { return verify(assertion, input, []); },
+    async verifySignedAsync(assertion, input) {
+      const pending: Promise<void>[] = [];
+      try { return verify(assertion, input, pending); }
+      finally { await Promise.all(pending); }
     }
   };
 }

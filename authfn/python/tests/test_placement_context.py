@@ -1004,7 +1004,7 @@ def test_whatwg_arabic_initial_marks_match_node(codepoint: int) -> None:
 
 
 @pytest.mark.parametrize("codepoint", range(0x0898, 0x08A0))
-@pytest.mark.parametrize("suffix", ["a", "1", "-", "א", "ا", "١", "aא", "אa"])
+@pytest.mark.parametrize("suffix", ["a", "1", "-", "א", "ا", "١", "aא", "אa", "\u061d", "\u061f"])
 def test_whatwg_initial_mark_compounds_match_node(codepoint: int, suffix: str) -> None:
     import shutil
     import subprocess
@@ -1022,3 +1022,22 @@ def test_whatwg_initial_mark_compounds_match_node(codepoint: int, suffix: str) -
     else:
         assert _normalize_authority(authority) == result.stdout
         assert _normalize_authority(result.stdout) == result.stdout
+
+
+@pytest.mark.asyncio
+async def test_async_verification_waits_for_event_delivery() -> None:
+    import asyncio
+    setup = await _setup()
+    signed = await setup.issuer.issue_signed(setup.request)
+    events = []
+
+    async def on_event(event):
+        await asyncio.sleep(0.001)
+        events.append(event["type"])
+
+    setup.issuer._verifier._on_event = on_event
+    await setup.issuer.verify_signed_async(signed["assertion"])
+    assert events == ["authfn.placement_context.verified"]
+    with pytest.raises(PlacementContextInvalidError):
+        await setup.issuer.verify_signed_async(signed["assertion"], audience="wrong")
+    assert events == ["authfn.placement_context.verified", "authfn.placement_context.verification_failed"]
