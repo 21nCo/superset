@@ -532,6 +532,10 @@ describe("reference and ownership projection safety", () => {
     await expect(project({ type: "object", $ref: "#/$defs/input", $defs: { input: canonical } },
       { type: "object", $ref: "#/$defs/input", $defs: { input: visible } })).resolves.toBeDefined();
   });
+  it("accepts reordered allOf branches without moving constraints", async () => {
+    const branches = [{ properties: { a: { type: "string" } }, additionalProperties: false }, { properties: { b: { type: "string" } } }];
+    await expect(project({ ...canonical, allOf: branches }, { ...visible, allOf: [...branches].reverse() })).resolves.toBeDefined();
+  });
   it("preserves allOf constraint ownership", async () => {
     const branches = [{ properties: { a: { type: "string" } }, additionalProperties: false }, { properties: { b: { type: "string" } } }];
     await expect(project({ ...canonical, allOf: branches }, { ...visible, allOf: [
@@ -568,4 +572,11 @@ it('preserves an unchanged recursive property schema', async () => {
   const { buildMcpFnEffectiveCatalog } = await import('../src/client-profiles.js');
   const tool: any = { name: 'test', inputSchema: { type: 'object', properties: { child: { $ref: '#' } } } };
   await expect(buildMcpFnEffectiveCatalog({ canonicalTools: [tool], resolved: { context: undefined, extra: {} as any, reportedClient: {}, verifiedIdentity: { subject: 'trusted' }, profile: { id: 'test', version: '1', matches: () => true } } })).resolves.toMatchObject({ changes: [] });
+});
+
+it("accepts unchanged required keys without property declarations", async () => {
+  const { buildMcpFnEffectiveCatalog } = await import("../src/client-profiles.js");
+  await expect(buildMcpFnEffectiveCatalog({ canonicalTools: [{ name: "test", inputSchema: { type: "object", required: ["token"] } }], resolved: {
+    context: undefined, extra: {} as any, reportedClient: {}, verifiedIdentity: { subject: "trusted" }, profile: { id: "test", version: "1", matches: () => true },
+  } })).resolves.toMatchObject({ changes: [] });
 });

@@ -289,8 +289,7 @@ function assertProjectedCatalog(
     for (const required of canonicalShape.required) {
       if (owned.has(required)) continue;
       if (
-        !visibleRequired.has(required) ||
-        !Object.hasOwn(visibleProperties, required)
+        !visibleRequired.has(required)
       ) {
         throw new McpFnClientProfileError(
           "MCPFN_PROFILE_ASYMMETRIC",
@@ -495,6 +494,23 @@ function rootShape(root: Record<string, unknown>, owned = new Set<string>()): { 
     }
     return result;
   };
+  // Sort whole branches, retaining the association between their fields and constraints.
+  const branchKey = (value: unknown): string => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return canonicalJson(value);
+    const schema = value as Record<string, unknown>;
+    const shape: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(schema)) {
+      if (["title", "description", "$comment", "examples", "$defs", "definitions"].includes(key)) continue;
+      if (key === "properties" && child && typeof child === "object") {
+        shape[key] = Object.fromEntries(Object.entries(child).filter(([name]) => !owned.has(name)).map(([name, item]) => [name, resolveProperty(item)]));
+      } else if (key === "required" && Array.isArray(child)) {
+        shape[key] = child.filter(name => !owned.has(name)).sort(compareCodeUnits);
+      } else if (key === "allOf" && Array.isArray(child)) {
+        shape[key] = child.map(branchKey).sort(compareCodeUnits);
+      } else shape[key] = child;
+    }
+    return canonicalJson(shape);
+  };
   const visit = (value: unknown, path = "root") => {
     if (!value || typeof value !== "object" || Array.isArray(value) || seen.has(value)) return;
     seen.add(value);
@@ -521,7 +537,7 @@ function rootShape(root: Record<string, unknown>, owned = new Set<string>()): { 
       }
     }
     if (Array.isArray(schema.required)) for (const name of schema.required) if (typeof name === "string") required.add(name);
-    if (Array.isArray(schema.allOf)) schema.allOf.forEach((child, index) => visit(child, `${path}/allOf/${index}`));
+    if (Array.isArray(schema.allOf)) [...schema.allOf].sort((left, right) => compareCodeUnits(branchKey(left), branchKey(right))).forEach((child, index) => visit(child, `${path}/allOf/${index}`));
   };
   visit(root);
   return { properties, required, constraints: [...constraints].sort(compareCodeUnits), ownershipSensitive };

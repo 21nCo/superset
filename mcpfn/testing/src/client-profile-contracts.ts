@@ -148,6 +148,8 @@ const PORTABILITY_KEYWORDS = new Set([
   "$dynamicRef",
   "dependentSchemas",
   "dependentRequired",
+  "minContains",
+  "maxContains",
   "prefixItems",
   "unevaluatedItems",
   "unevaluatedProperties",
@@ -329,6 +331,8 @@ function walkSchema(
     "dependencies",
     "dependentSchemas",
   "dependentRequired",
+  "minContains",
+  "maxContains",
     "patternProperties",
     "properties",
   ]) {

@@ -423,3 +423,7 @@ it("requires a discriminator beyond isError for captured failures", async () => 
 it('rejects misspelled captured failure sources', async () => {
   await expect(runMcpFnClientProfileContracts({ profiles: [{ id: 'test', version: '1', target: targetFor({}).target, fixtures: [{ name: 'typo', tool: 'lookup', source: 'captured-failur' as any, sideEffect: 'read-only' }] }] })).rejects.toThrow(/fixture source/);
 });
+
+it.each(["minContains", "maxContains"])("flags %s portability", keyword => {
+  expect(validateMcpFnSchemaPortability({ type: "array", contains: { type: "string" }, [keyword]: 2 }, "#").some(issue => issue.path.includes(keyword))).toBe(true);
+});
