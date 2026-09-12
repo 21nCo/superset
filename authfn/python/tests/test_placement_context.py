@@ -1055,3 +1055,18 @@ async def test_issuance_waits_for_async_event_hook() -> None:
     setup.issuer._on_event = on_event
     await setup.issuer.issue_signed(setup.request)
     assert "authfn.placement_context.issued" in events
+
+@pytest.mark.asyncio
+async def test_sync_verification_schedules_async_hook() -> None:
+    import asyncio
+    setup = await _setup()
+    signed = await setup.issuer.issue_signed(setup.request)
+    delivered = asyncio.Event()
+
+    async def on_event(event):
+        assert event["type"] == "authfn.placement_context.verified"
+        delivered.set()
+
+    setup.issuer._verifier._on_event = on_event
+    setup.issuer.verify_signed(signed["assertion"])
+    await asyncio.wait_for(delivered.wait(), timeout=1)

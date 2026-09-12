@@ -364,19 +364,30 @@ class PlacementContextVerifier:
             raise PlacementContextInvalidError() from error
 
     def _emit_sync(self, event: Dict[str, Any]) -> None:
+        pending_hook = None
         if self._on_event is not None:
             try:
-                self._on_event(event)
+                pending_hook = self._on_event(event)
             except Exception:  # noqa: BLE001
                 pass
-        if self._config is None:
+
+        async def deliver() -> None:
+            if inspect.isawaitable(pending_hook):
+                try:
+                    await pending_hook
+                except Exception:  # noqa: BLE001
+                    pass
+            if self._config is not None:
+                await emit_auth_event(self._config, event)
+
+        if not inspect.isawaitable(pending_hook) and self._config is None:
             return
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
-            asyncio.run(emit_auth_event(self._config, event))
+            asyncio.run(deliver())
             return
-        loop.create_task(emit_auth_event(self._config, event))
+        loop.create_task(deliver())
 
 
 def create_placement_context_verifier(**kwargs: Any) -> PlacementContextVerifier:
