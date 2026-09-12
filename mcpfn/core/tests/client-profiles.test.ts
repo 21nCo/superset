@@ -392,7 +392,7 @@ describe("McpFn client profiles", () => {
     await expect(client.listTools()).rejects.toThrow(/canonical schema/);
   });
 
-  it.each([null, "tenantId", ["tenantId", "tenantId"], [42], ["__proto__"]])(
+  it.each([[null], ["tenantId"], [["tenantId", "tenantId"]], [[42]], [["__proto__"]]])(
     "rejects malformed ownership declarations: %j", (value) => {
       const bad = tenantProfile();
       bad.serverOwnedArguments = { lookup: value } as never;
@@ -508,5 +508,35 @@ describe("optional projected tool metadata", () => {
       context: undefined, extra: {} as any, reportedClient: {}, verifiedIdentity: { subject: "trusted" },
       profile: { id: "test", version: "1", matches: () => true, projectCatalog: ({ tools }) => tools.map((tool) => ({ ...tool, outputSchema: null as any })) },
     } })).rejects.toThrow(/preserve root constraints/);
+  });
+});
+
+describe("reference and ownership projection safety", () => {
+  async function project(inputSchema: any, projected: any, execution?: any) {
+    const { buildMcpFnEffectiveCatalog } = await import("../src/client-profiles.js");
+    return buildMcpFnEffectiveCatalog({ canonicalTools: [{ name: "test", inputSchema }], resolved: {
+      context: undefined, extra: {} as any, reportedClient: {}, verifiedIdentity: { subject: "trusted" },
+      profile: { id: "test", version: "1", matches: () => true,
+        serverOwnedArguments: { test: ["tenantId"] }, enrichArguments: ({ arguments: args }) => ({ ...args, tenantId: "trusted" }),
+        projectCatalog: () => [{ name: "test", inputSchema: projected, ...(execution === undefined ? {} : { execution }) }],
+      },
+    } });
+  }
+  const canonical = { type: "object", properties: { tenantId: { type: "string" }, query: { type: "string" } }, required: ["tenantId"] };
+  const visible = { type: "object", properties: { query: { type: "string" } } };
+  it.each(["dependencies", "dependentRequired"])("rejects owned-field %s even when copied unchanged", async keyword => {
+    const constraint = { [keyword]: { tenantId: ["query"] } };
+    await expect(project({ ...canonical, ...constraint }, { ...visible, ...constraint })).rejects.toThrow(/whole-object constraints/);
+  });
+  it("allows ownership projection inside local root definitions", async () => {
+    await expect(project({ type: "object", $ref: "#/$defs/input", $defs: { input: canonical } },
+      { type: "object", $ref: "#/$defs/input", $defs: { input: visible } })).resolves.toBeDefined();
+  });
+  it("rejects a changed referenced model-owned property", async () => {
+    await expect(project({ ...canonical, properties: { ...canonical.properties, query: { $ref: "#/$defs/query" } }, $defs: { query: { type: "string" } } },
+      { ...visible, properties: { query: { $ref: "#/$defs/query" } }, $defs: { query: { type: "number" } } })).rejects.toThrow(/canonical schema/);
+  });
+  it.each([[null], [{ taskSupport: null }]])("rejects null execution metadata %j", async execution => {
+    await expect(project(canonical, visible, execution)).rejects.toThrow(/Invalid task execution metadata/);
   });
 });

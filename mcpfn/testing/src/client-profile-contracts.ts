@@ -147,6 +147,7 @@ const PORTABILITY_KEYWORDS = new Set([
   "$dynamicAnchor",
   "$dynamicRef",
   "dependentSchemas",
+  "dependentRequired",
   "prefixItems",
   "unevaluatedItems",
   "unevaluatedProperties",
@@ -269,6 +270,9 @@ export function diffMcpFnClientProfileSnapshots(
       changes.push({ kind: "modified", tool, beforeHash, afterHash });
     }
   }
+  if (changes.length === 0 && before.catalogHash !== after.catalogHash) {
+    throw new Error("Inconsistent catalog hashes for identical tool entries");
+  }
   const summary = {
     added: changes.filter(({ kind }) => kind === "added").length,
     removed: changes.filter(({ kind }) => kind === "removed").length,
@@ -324,6 +328,7 @@ function walkSchema(
     "definitions",
     "dependencies",
     "dependentSchemas",
+  "dependentRequired",
     "patternProperties",
     "properties",
   ]) {
@@ -515,7 +520,7 @@ async function runProfileCase(
         { ...profileCase.client, capabilities: profileCase.capabilities },
       );
     } catch (error) {
-      return { ...result, phase: "connect", error: boundedError(error) };
+      return { ...result, phase: "connect", error: "Target connection failed" };
     }
     let tools: Tool[] | undefined;
     try {
@@ -551,7 +556,7 @@ async function runProfileCase(
       }
     } catch (error) {
       tools = undefined;
-      result = { ...result, phase: "catalog", error: boundedError(error) };
+      result = { ...result, phase: "catalog", error: "Target catalog validation failed" };
     }
     if (tools) {
       const advertised = new Set(tools.map(({ name }) => name));
@@ -669,7 +674,7 @@ export async function runMcpFnClientProfileContracts(
       validateMcpFnClientProfileSnapshot(profile.expectedSnapshot);
     for (const fixture of profile.fixtures ?? []) {
       if (fixture.source === "captured-failure" && (!fixture.expect || fixture.expect.isError === false ||
-          !(fixture.expect.isError === true || fixture.expect.errorCode || fixture.expect.lifecycleStage ||
+          !(fixture.expect.structuredContent !== undefined || fixture.expect.errorCode || fixture.expect.lifecycleStage ||
             (fixture.expect.validationIssue && Object.keys(fixture.expect.validationIssue).length)))) {
         throw new Error(`Captured-failure fixture ${fixture.name} requires meaningful error expectations`);
       }

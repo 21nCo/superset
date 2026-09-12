@@ -402,3 +402,21 @@ it("fails the catalog phase for duplicate tool names and produces no snapshot", 
     expect(report.profiles[0].snapshot).toBeUndefined();
   } finally { list.mockRestore(); }
 });
+
+it("rejects contradictory aggregate snapshot hashes", () => {
+  const snapshot = createMcpFnClientProfileSnapshot({ id: "test", version: "1" }, [projectedTool()]);
+  expect(() => diffMcpFnClientProfileSnapshots(snapshot, { ...snapshot, catalogHash: "f".repeat(64) })).toThrow(/Inconsistent catalog hashes/);
+});
+it("flags dependentRequired portability", () => {
+  expect(validateMcpFnSchemaPortability({ type: "object", dependentRequired: { a: ["b"] } }, "#").some(issue => issue.path.includes("dependentRequired"))).toBe(true);
+});
+it("does not copy opaque connection error values into reports", async () => {
+  const report = await runMcpFnClientProfileContracts({ profiles: [{ id: "test", version: "1", target: customTarget({ kind: "test", open: async () => { throw new Error("customer-123"); } }) }] });
+  expect(JSON.stringify(report)).not.toContain("customer-123");
+  expect(report.profiles[0]).toMatchObject({ phase: "connect", ok: false });
+});
+it("requires a discriminator beyond isError for captured failures", async () => {
+  await expect(runMcpFnClientProfileContracts({ profiles: [{ id: "test", version: "1", target: targetFor({}).target,
+    fixtures: [{ name: "weak", tool: "lookup", arguments: {}, sideEffect: "read-only", source: "captured-failure", expect: { isError: true } }],
+  }] })).rejects.toThrow(/meaningful error expectations/);
+});

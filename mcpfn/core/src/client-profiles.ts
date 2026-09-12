@@ -261,7 +261,7 @@ function assertProjectedCatalog(
     const visibleShape = rootShape(visibleTool.inputSchema);
     if (canonicalJson(canonicalShape.constraints) !== canonicalJson(visibleShape.constraints) ||
         canonicalJson(canonicalTool.outputSchema) !== canonicalJson(visibleTool.outputSchema) ||
-        (canonicalTool.execution?.taskSupport ?? "forbidden") !== (visibleTool.execution?.taskSupport ?? "forbidden")) {
+        taskSupport(canonicalTool) !== taskSupport(visibleTool)) {
       throw new McpFnClientProfileError("MCPFN_PROFILE_ASYMMETRIC", "Projected tools must preserve root constraints, output schemas and task support");
     }
     const visibleRequired = visibleShape.required;
@@ -269,6 +269,9 @@ function assertProjectedCatalog(
     const owned = new Set(
       profile.serverOwnedArguments?.[visibleTool.name] ?? [],
     );
+    if (owned.size && (canonicalShape.ownershipSensitive || visibleShape.ownershipSensitive)) {
+      throw new McpFnClientProfileError("MCPFN_PROFILE_ASYMMETRIC", "Server-owned fields cannot be hidden under conditional or whole-object constraints");
+    }
     for (const [name, schema] of Object.entries(visibleProperties)) {
       if (!Object.hasOwn(canonicalShape.properties, name) || canonicalJson(schema) !== canonicalJson(canonicalShape.properties[name])) {
         throw new McpFnClientProfileError("MCPFN_PROFILE_ASYMMETRIC", `Projected model-owned property ${visibleTool.name}.${name} must retain its canonical schema`);
@@ -430,19 +433,48 @@ function assertTrustedProfileIdentity<T>(resolved: McpFnResolvedClientProfile<T>
   }
 }
 
+function taskSupport(tool: McpFnListedTool): string {
+  if (tool.execution === undefined) return "forbidden";
+  if (!tool.execution || typeof tool.execution !== "object" || Array.isArray(tool.execution) ||
+      (tool.execution.taskSupport !== undefined && !["forbidden", "optional", "required"].includes(tool.execution.taskSupport))) {
+    throw new McpFnClientProfileError("MCPFN_INVALID_PROJECTED_CATALOG", "Invalid task execution metadata");
+  }
+  return tool.execution.taskSupport === undefined ? "forbidden" : tool.execution.taskSupport;
+}
+
 /** Resolve only root object composition; never traverse argument values. */
-function rootShape(root: Record<string, unknown>): { properties: Record<string, unknown>; required: Set<string>; constraints: string[] } {
+function rootShape(root: Record<string, unknown>): { properties: Record<string, unknown>; required: Set<string>; constraints: string[]; ownershipSensitive: boolean } {
   const properties: Record<string, unknown> = Object.create(null);
   const required = new Set<string>();
   const constraints = new Set<string>();
+  let ownershipSensitive = false;
   const seen = new Set<unknown>();
+  // Compare the schemas actually referenced by a property, not just pointer strings.
+  const resolveProperty = (value: unknown, refs = new Set<string>()): unknown => {
+    if (Array.isArray(value)) return value.map(child => resolveProperty(child, refs));
+    if (!value || typeof value !== "object") return value;
+    const schema = value as Record<string, unknown>;
+    const result = Object.fromEntries(Object.entries(schema).map(([key, child]) => [key, resolveProperty(child, refs)]));
+    if (typeof schema.$ref === "string" && schema.$ref.startsWith("#/")) {
+      if (refs.has(schema.$ref)) throw new McpFnClientProfileError("MCPFN_INVALID_PROJECTED_CATALOG", "Recursive property references cannot be safely projected");
+      let target: unknown = root;
+      for (const part of schema.$ref.slice(2).split("/")) {
+        const key = part.replace(/~1/g, "/").replace(/~0/g, "~");
+        target = target && typeof target === "object" && Object.hasOwn(target, key) ? (target as Record<string, unknown>)[key] : undefined;
+      }
+      if (target === undefined) throw new McpFnClientProfileError("MCPFN_INVALID_PROJECTED_CATALOG", "Unresolved property schema reference");
+      result.$ref = resolveProperty(target, new Set([...refs, schema.$ref]));
+    }
+    return result;
+  };
   const visit = (value: unknown) => {
     if (!value || typeof value !== "object" || Array.isArray(value) || seen.has(value)) return;
     seen.add(value);
     const schema = value as Record<string, unknown>;
     for (const [key, value] of Object.entries(schema)) {
-      if (!["properties", "required", "allOf", "$ref", "title", "description", "$comment", "examples"].includes(key)) {
-        constraints.add(canonicalJson({ [key]: value }));
+      if (["dependencies", "dependentRequired", "dependentSchemas", "if", "then", "else", "anyOf", "oneOf", "not", "minProperties", "maxProperties", "unevaluatedProperties"].includes(key)) ownershipSensitive = true;
+      if (!["properties", "required", "allOf", "$ref", "$defs", "definitions", "title", "description", "$comment", "examples"].includes(key)) {
+        constraints.add(canonicalJson({ [key]: resolveProperty(value) }));
       }
     }
     if (typeof schema.$ref === "string") {
@@ -457,14 +489,15 @@ function rootShape(root: Record<string, unknown>): { properties: Record<string, 
     }
     if (schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties)) {
       for (const [name, child] of Object.entries(schema.properties)) {
-        if (Object.hasOwn(properties, name) && canonicalJson(properties[name]) !== canonicalJson(child)) {
-          properties[name] = { allOf: [properties[name], child] };
-        } else properties[name] = child;
+        const resolved = resolveProperty(child);
+        if (Object.hasOwn(properties, name) && canonicalJson(properties[name]) !== canonicalJson(resolved)) {
+          properties[name] = { allOf: [properties[name], resolved] };
+        } else properties[name] = resolved;
       }
     }
     if (Array.isArray(schema.required)) for (const name of schema.required) if (typeof name === "string") required.add(name);
     if (Array.isArray(schema.allOf)) for (const child of schema.allOf) visit(child);
   };
   visit(root);
-  return { properties, required, constraints: [...constraints].sort(compareCodeUnits) };
+  return { properties, required, constraints: [...constraints].sort(compareCodeUnits), ownershipSensitive };
 }
