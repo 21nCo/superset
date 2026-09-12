@@ -32,6 +32,11 @@ import {
   getRelationCapabilityFieldNames,
   resolveCapabilities,
 } from "./capabilities.js";
+import {
+  ANCESTOR_INACTIVE_FIELD,
+  ANCESTOR_INACTIVE_FIELD_DEF,
+  getAncestorInactiveResources,
+} from "./system-fields.js";
 
 const SIMPLE_CAPABILITIES: ReadonlySet<SimpleCapability> = new Set([
   "timestamps",
@@ -242,6 +247,7 @@ export function validateSchema(schema: unknown): DatafnEnvelope<DatafnSchema> {
   const resourceNames = new Set<string>();
   const normalizedIdPrefixes = new Map<string, string>();
   const normalizedResources: DatafnResourceSchema[] = [];
+  const ancestorInactiveResources = getAncestorInactiveResources(s.relations);
 
   for (const resource of s.resources) {
     if (
@@ -497,6 +503,16 @@ export function validateSchema(schema: unknown): DatafnEnvelope<DatafnSchema> {
     }
 
     const injectedFields = getCapabilityFields(resolvedCapabilities);
+    if (ancestorInactiveResources.has(r.name)) {
+      if (fieldNames.has(ANCESTOR_INACTIVE_FIELD)) {
+        return err(
+          "SYSTEM_FIELD_COLLISION",
+          `Field "${ANCESTOR_INACTIVE_FIELD}" on resource "${r.name}" is a DataFn system field maintained by relation.inheritsInactive and must not be declared`,
+          { path: `resources.${r.name}.fields.${ANCESTOR_INACTIVE_FIELD}` },
+        );
+      }
+      injectedFields.push({ ...ANCESTOR_INACTIVE_FIELD_DEF });
+    }
     for (const injectedField of injectedFields) {
       fieldNames.add(injectedField.name);
     }
@@ -751,21 +767,6 @@ export function validateSchema(schema: unknown): DatafnEnvelope<DatafnSchema> {
     if (fromRefError) return fromRefError;
     const toRefError = validateRelationRef(normalizedTo.result, "to");
     if (toRefError) return toRefError;
-    if (r.inheritsInactive === true) {
-      const dependentResources = r.type === "many-one"
-        ? (Array.isArray(normalizedFrom.result) ? normalizedFrom.result : [normalizedFrom.result])
-        : (Array.isArray(normalizedTo.result) ? normalizedTo.result : [normalizedTo.result]);
-      for (const name of dependentResources) {
-        const dependentResource = normalizedResources.find((resource) => resource.name === name);
-        if (!dependentResource?.fields.some((field) => field.name === "isAncestorInactive")) {
-          return err(
-            "SCHEMA_INVALID",
-            `Invalid schema: relation.inheritsInactive requires resource "${name}" to define isAncestorInactive`,
-            { path: "relations.inheritsInactive" },
-          );
-        }
-      }
-    }
 
     if (r.joinTable !== undefined && typeof r.joinTable !== "string") {
       return err("SCHEMA_INVALID", "Invalid schema: relation.joinTable must be string", {

@@ -59,6 +59,14 @@ export {
   getRelationCapabilityFieldNames,
 } from "./capabilities.js";
 
+export {
+  ANCESTOR_INACTIVE_FIELD,
+  ANCESTOR_INACTIVE_FIELD_DEF,
+  getAncestorInactiveResources,
+  resourceRequiresAncestorInactive,
+  findSystemFieldWrite,
+} from "./system-fields.js";
+
 // Re-export error types and helpers
 export type { DatafnErrorCode, DatafnError, DatafnEnvelope } from "./errors.js";
 export { DATAFN_ERROR_CODES, isDatafnErrorCode, ok, err } from "./errors.js";

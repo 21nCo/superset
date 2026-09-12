@@ -111,6 +111,45 @@ type DatafnCapabilityRecord = {
   visibility?: string;
 };
 
+type DatafnSchemaRelations<S extends DatafnSchema> =
+  IsAny<S> extends true
+    ? never
+    : DatafnSchema extends S
+      ? never
+      : DatafnSchemaLiteral<S> extends { readonly relations: readonly (infer Relation)[] }
+        ? Relation
+        : S extends { readonly relations: readonly (infer Relation)[] }
+          ? Relation
+          : never;
+
+type EndpointNames<Endpoint> = Endpoint extends string
+  ? Endpoint
+  : Endpoint extends readonly (infer Name extends string)[]
+    ? Name
+    : never;
+
+type InheritsInactiveDependents<Relation> = Relation extends {
+  readonly inheritsInactive: true;
+  readonly type: infer Type;
+  readonly from: infer From;
+  readonly to: infer To;
+}
+  ? Type extends "many-many"
+    ? never
+    : Type extends "many-one"
+      ? EndpointNames<From>
+      : EndpointNames<To>
+  : never;
+
+/**
+ * Runtime-owned fields a resource receives from schema structure, e.g.
+ * `isAncestorInactive` on the dependent side of an `inheritsInactive` relation.
+ */
+export type DatafnSystemRecord<S extends DatafnSchema, Name extends string> =
+  Name extends InheritsInactiveDependents<DatafnSchemaRelations<S>>
+    ? { isAncestorInactive: boolean }
+    : {};
+
 export type DatafnResourceRecord<
   S extends DatafnSchema,
   Name extends string,
@@ -130,6 +169,7 @@ export type DatafnResourceRecord<
           : unknown;
       }
       & DatafnCapabilityRecord
+      & DatafnSystemRecord<S, Name>
     : Record<string, unknown> & DatafnCapabilityRecord;
 
 export type DatafnFilter<TRecord = Record<string, unknown>> =

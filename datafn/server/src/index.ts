@@ -136,3 +136,16 @@ export {
   DatabaseSequenceStore,
   ChainedSequenceStore,
 } from "./execution/sync/sequence-store.js";
+
+// Re-export inherited-inactivity recompute (one-shot backfill for existing rows)
+export {
+  recomputeAncestorInactive,
+  recomputeAncestorInactiveAll,
+  ancestorInactiveResources,
+} from "./execution/migration/ancestor-inactive.js";
+export type {
+  AncestorInactiveCursor,
+  RecomputeAncestorInactiveOptions,
+  RecomputeAncestorInactiveResult,
+  RecomputeAncestorInactiveAllResult,
+} from "./execution/migration/ancestor-inactive.js";

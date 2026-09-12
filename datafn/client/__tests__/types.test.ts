@@ -121,16 +121,18 @@ describe("DatafnClient Types", () => {
     const queryPromise = client.tasks.query({
       select: ["id", "title", "updatedAt"],
     });
+    queryPromise.catch(() => undefined);
     type QueryRow = Awaited<typeof queryPromise>["data"][number];
     expectTypeOf<QueryRow["id"]>().toEqualTypeOf<string>();
     expectTypeOf<QueryRow["title"]>().toEqualTypeOf<string>();
     expectTypeOf<QueryRow["updatedAt"]>().toEqualTypeOf<string | Date>();
-    expectTypeOf(client.tasks.select("task:1")).toMatchTypeOf<
-      Promise<TaskRecord | undefined>
-    >();
+    const selectPromise = client.tasks.select("task:1");
+    selectPromise.catch(() => undefined);
+    expectTypeOf(selectPromise).toMatchTypeOf<Promise<TaskRecord | undefined>>();
     const selectedTaskPromise = client.tasks.select("task:1", {
       select: ["id", "title"],
     });
+    selectedTaskPromise.catch(() => undefined);
     type SelectedTask = NonNullable<Awaited<typeof selectedTaskPromise>>;
     expectTypeOf<SelectedTask["id"]>().toEqualTypeOf<string>();
     expectTypeOf<SelectedTask["title"]>().toEqualTypeOf<string>();

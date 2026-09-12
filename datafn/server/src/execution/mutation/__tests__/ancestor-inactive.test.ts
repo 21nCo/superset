@@ -15,7 +15,6 @@ const schema = {
         { name: "note", type: "string" as const, required: false },
         { name: "parentId", type: "string" as const, required: false },
         { name: "parentPath", type: "string" as const, required: false },
-        { name: "isAncestorInactive", type: "boolean" as const, required: false },
       ],
     },
   ],
