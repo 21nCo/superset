@@ -38,7 +38,8 @@
     "filefn/examples/full-demo/*",
     "filefn/examples/production/*",
     "plugfn/*",
-    "sendfn/*"
+    "sendfn/*",
+    "reviewfn/*"
   ],
   "scripts": {
     "build": "turbo run build",

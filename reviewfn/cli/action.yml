@@ -1,0 +1,26 @@
+name: ReviewFn advisory review
+description: Run an evidence-backed ReviewFn assessment for the exact checked-out commit
+inputs:
+  config:
+    description: Path to trusted ReviewFn configuration from the base revision
+    default: reviewfn.config.json
+  package-version:
+    description: Exact @reviewfn/cli version to execute
+    required: true
+  publish:
+    description: Publish from this trusted job after validation
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        REVIEWFN_CONFIG: ${{ inputs.config }}
+        REVIEWFN_VERSION: ${{ inputs.package-version }}
+      run: npx --yes "@reviewfn/cli@${REVIEWFN_VERSION}" review --config "${REVIEWFN_CONFIG}"
+    - if: inputs.publish == 'true'
+      shell: bash
+      env:
+        REVIEWFN_CONFIG: ${{ inputs.config }}
+        REVIEWFN_VERSION: ${{ inputs.package-version }}
+      run: npx --yes "@reviewfn/cli@${REVIEWFN_VERSION}" publish --config "${REVIEWFN_CONFIG}"

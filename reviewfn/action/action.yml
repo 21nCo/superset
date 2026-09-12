@@ -1,0 +1,26 @@
+name: ReviewFn advisory review
+description: Run ReviewFn against the exact checked-out pull request commit
+inputs:
+  config:
+    description: Trusted ReviewFn configuration path
+    default: reviewfn.config.json
+  version:
+    description: Exact @reviewfn/cli version
+    required: true
+  publish:
+    description: Publish from this trusted job after validation
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        REVIEWFN_CONFIG: ${{ inputs.config }}
+        REVIEWFN_VERSION: ${{ inputs.version }}
+      run: npx --yes "@reviewfn/cli@${REVIEWFN_VERSION}" review --config "${REVIEWFN_CONFIG}"
+    - if: inputs.publish == 'true'
+      shell: bash
+      env:
+        REVIEWFN_CONFIG: ${{ inputs.config }}
+        REVIEWFN_VERSION: ${{ inputs.version }}
+      run: npx --yes "@reviewfn/cli@${REVIEWFN_VERSION}" publish --config "${REVIEWFN_CONFIG}"
