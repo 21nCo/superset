@@ -3,12 +3,18 @@
  * Tests TV-DTE-001, TV-DTE-002 from TEST_VECTORS.md
  */
 
+import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import {
   toEpochMs,
   fromEpochMs,
   coerceDateFieldsToEpoch,
   parseDateFieldsToDate,
+  toBoundsEpochMs,
+  formatBoundEpochMs,
 } from "../src/date.js";
 
 const ISO = "2024-01-01T00:00:00.000Z";
@@ -146,5 +152,64 @@ describe("parseDateFieldsToDate (TV-DTE-002)", () => {
     parseDateFieldsToDate(record, fields);
     coerceDateFieldsToEpoch(record, fields);
     expect(record.createdAt).toBe(EPOCH);
+  });
+});
+
+describe("timezone-less datetime parsing contract", () => {
+  const TZ_LESS = "2026-06-15T12:00:00";
+  const UTC_EPOCH = Date.parse("2026-06-15T12:00:00.000Z");
+
+  const instantTestName = "toEpochMs, fromEpochMs, and toBoundsEpochMs resolve the same instant";
+  it(instantTestName, () => {
+    expect(toEpochMs(TZ_LESS)).toBe(UTC_EPOCH);
+    expect(fromEpochMs(TZ_LESS).getTime()).toBe(UTC_EPOCH);
+    expect(toBoundsEpochMs(TZ_LESS)).toBe(UTC_EPOCH);
+  });
+
+  it("parsing does not depend on the process timezone", () => {
+    // Run in a child process pinned to a non-UTC zone: the canonical
+    // conversion must still resolve the timezone-less string as UTC.
+    const require = createRequire(import.meta.url);
+    const runner = join(dirname(require.resolve("vitest/package.json")), "vitest.mjs");
+    const result = spawnSync(process.execPath, [
+      runner, "run", "__tests__/date.test.ts", "--maxWorkers=1", "--minWorkers=1",
+      `--testNamePattern=${instantTestName}`,
+    ], {
+      cwd: fileURLToPath(new URL("../", import.meta.url)),
+      env: { ...process.env, TZ: "America/New_York" },
+      encoding: "utf8",
+      timeout: 15000,
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr + result.stdout).toBe(0);
+  }, 20000);
+});
+
+describe("toBoundsEpochMs", () => {
+  it("parses timezone-less ISO datetimes as UTC", () => {
+    expect(toBoundsEpochMs("2026-06-15T12:00:00")).toBe(
+      Date.parse("2026-06-15T12:00:00.000Z"),
+    );
+  });
+  it("keeps explicit timezone designators", () => {
+    expect(toBoundsEpochMs(ISO)).toBe(EPOCH);
+  });
+  it("passes epoch numbers and Date objects through", () => {
+    expect(toBoundsEpochMs(EPOCH)).toBe(EPOCH);
+    expect(toBoundsEpochMs(new Date(ISO))).toBe(EPOCH);
+  });
+  it("returns NaN for non-date values so callers can skip them", () => {
+    expect(Number.isNaN(toBoundsEpochMs({ ciphertext: "x" }))).toBe(true);
+  });
+});
+
+describe("formatBoundEpochMs", () => {
+  it("formats finite bounds as ISO strings", () => {
+    expect(formatBoundEpochMs(EPOCH)).toBe(ISO);
+  });
+  it("never throws on invalid bounds", () => {
+    expect(formatBoundEpochMs(Number.NaN)).toBe("NaN");
+    expect(formatBoundEpochMs(Infinity)).toBe("Infinity");
+    expect(formatBoundEpochMs(1e20)).toBe("100000000000000000000");
   });
 });

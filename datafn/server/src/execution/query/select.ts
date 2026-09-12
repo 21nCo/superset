@@ -14,6 +14,7 @@ import {
   relationFkFieldForManyOne,
   resolveEndpointResource,
   resourceNameFromId,
+  stripNullsForNonNullableFields,
   type DatafnRelationEndpoint,
   type DatafnRelationMatch,
 } from "@datafn/core";
@@ -266,6 +267,10 @@ export function materializeSelect(
   const resourceSchema = schema.resources.find((r) => r.name === resource);
   if (!resourceSchema) return { id: record.id };
 
+  // Persisted stores can hold null for non-nullable fields (nullable SQL
+  // columns, replace clears). Expose them as undefined in query results.
+  record = stripNullsForNonNullableFields(record, resourceSchema);
+
   // EXE-014: Use cached FK omit-set computation
   const fkFieldsToOmit = getFkFieldsToOmit(schema, resource);
 
@@ -405,7 +410,9 @@ export function materializeSelect(
             ),
             htreeRelation,
             metadata,
-          ).map((c) => applyOmit(c, omit));
+          ).map((c) =>
+            applyOmit(stripNullsForNonNullableFields(c, resourceSchema), omit),
+          );
         } else if (parsed.directive === "**") {
           result[parsed.baseName] = filterAncestorInactiveRecords(
             htreeChildren(
@@ -417,7 +424,9 @@ export function materializeSelect(
             ),
             htreeRelation,
             metadata,
-          ).map((d) => applyOmit(d, omit));
+          ).map((d) =>
+            applyOmit(stripNullsForNonNullableFields(d, resourceSchema), omit),
+          );
         }
         includedFields.add(parsed.baseName);
       } else if (parsed.baseName === "parent") {
@@ -426,7 +435,9 @@ export function materializeSelect(
           resource,
           htreeRelation.relation,
           store,
-        ).map((a) => applyOmit(a, omit));
+        ).map((a) =>
+          applyOmit(stripNullsForNonNullableFields(a, resourceSchema), omit),
+        );
         includedFields.add(parsed.baseName);
       }
       continue;

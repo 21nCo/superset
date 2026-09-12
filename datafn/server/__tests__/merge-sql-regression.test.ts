@@ -158,6 +158,90 @@ describe("SQL regression: merge persistence and false-success gating", () => {
     expect(queryUpdateBody.result.data[0].value).toBe("dark");
   });
 
+  it("replace clears omitted optional fields as SQL NULL and reads expose them as undefined", async () => {
+    const insertRes = await server.router.handle(
+      new Request("http://localhost/datafn/mutation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resource: "task",
+          version: "1",
+          clientId: "client-1",
+          mutationId: "m-replace-insert",
+          operation: "insert",
+          id: "task:replace-1",
+          record: { title: "Initial", priority: 5 },
+        }),
+      }),
+    );
+    expect(insertRes.status).toBe(200);
+
+    const replaceRes = await server.router.handle(
+      new Request("http://localhost/datafn/mutation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resource: "task",
+          version: "1",
+          clientId: "client-1",
+          mutationId: "m-replace-clear",
+          operation: "replace",
+          id: "task:replace-1",
+          // priority omitted: replace must clear it
+          record: { title: "Replaced" },
+        }),
+      }),
+    );
+    const replaceBody = await replaceRes.json();
+    expect(replaceRes.status).toBe(200);
+    expect(replaceBody.ok).toBe(true);
+
+    // The relational adapter actually cleared the column (Drizzle ignores
+    // undefined update values, so only a persisted null achieves this).
+    const row = sqlite
+      .prepare("SELECT title, priority FROM task WHERE id = ?")
+      .get("task:replace-1") as { title: string; priority: number | null };
+    expect(row.title).toBe("Replaced");
+    expect(row.priority).toBeNull();
+
+    // Query results normalize the persisted null back to undefined so the
+    // non-nullable field type contract holds.
+    const queryRes = await server.router.handle(
+      new Request("http://localhost/datafn/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resource: "task",
+          filters: { id: { $eq: "task:replace-1" } },
+        }),
+      }),
+    );
+    const queryBody = await queryRes.json();
+    expect(queryBody.ok).toBe(true);
+    expect(queryBody.result.data).toHaveLength(1);
+    expect(queryBody.result.data[0].title).toBe("Replaced");
+    expect(queryBody.result.data[0].priority).toBeUndefined();
+    expect("priority" in queryBody.result.data[0]).toBe(false);
+
+    // Change tracking carries an explicit, JSON-safe null so synced clients
+    // clear the field instead of retaining the old value.
+    const pullRes = await server.router.handle(
+      new Request("http://localhost/datafn/pull", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId: "c2", cursor: "0", limit: 100 }),
+      }),
+    );
+    const pullBody = await pullRes.json();
+    expect(pullRes.status).toBe(200);
+    const replaceChange = pullBody.result.changes.findLast(
+      (change: any) => change.id === "task:replace-1" && change.op === "upsert",
+    );
+    expect(replaceChange).toBeDefined();
+    expect(replaceChange.record.priority).toBeNull();
+    expect("priority" in replaceChange.record).toBe(true);
+  });
+
   it("ineligible merge is not applied and does not emit change-tracking records (TV-MRG-002, TV-OBS-002)", async () => {
     const pushRes = await server.router.handle(
       new Request("http://localhost/datafn/push", {

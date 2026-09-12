@@ -10,7 +10,12 @@
  */
 
 import type { DatafnSchema } from "../../core-types.js";
-import { endpointIncludes, resolveCapabilities, getCapabilityFields } from "@datafn/core";
+import {
+  endpointIncludes,
+  resolveCapabilities,
+  getCapabilityFields,
+  stripNullsForNonNullableFields,
+} from "@datafn/core";
 import type { CapabilityEntry, ShareableCapability } from "@datafn/core";
 import type { Adapter, WhereClause } from "@superfunctions/db";
 import type { DFQLQuery, QueryResult } from "./dfql.js";
@@ -461,6 +466,10 @@ function projectFieldsPushdown(
 ): Record<string, unknown> {
   const resourceSchema = schema.resources.find((r) => r.name === resource);
   if (!resourceSchema) return { id: record.id };
+
+  // Persisted stores can hold null for non-nullable fields (nullable SQL
+  // columns, replace clears). Expose them as undefined in query results.
+  record = stripNullsForNonNullableFields(record, resourceSchema);
 
   const resolvedCapabilities = resolveCapabilities(
     schema.capabilities as any,

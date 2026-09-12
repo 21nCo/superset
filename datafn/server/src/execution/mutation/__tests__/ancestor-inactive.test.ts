@@ -12,6 +12,7 @@ const schema = {
       capabilities: ["archivable"],
       fields: [
         { name: "label", type: "string" as const, required: false },
+        { name: "note", type: "string" as const, required: false },
         { name: "parentId", type: "string" as const, required: false },
         { name: "parentPath", type: "string" as const, required: false },
         { name: "isAncestorInactive", type: "boolean" as const, required: false },
@@ -146,5 +147,48 @@ describe("ancestor inactive propagation", () => {
       "goal:2",
       "goal:3",
     ]);
+  });
+
+  it("htree children.* results expose cleared non-nullable fields as undefined", async () => {
+    await mutation({
+      resource: "goals",
+      version: 1,
+      operation: "merge",
+      clientId: "c1",
+      mutationId: "m-note",
+      id: "goal:2",
+      record: { note: "remember this" },
+    });
+
+    // Replace omits `note`: it is cleared to null in storage.
+    const replace = await mutation({
+      resource: "goals",
+      version: 1,
+      operation: "replace",
+      clientId: "c1",
+      mutationId: "m-replace",
+      id: "goal:2",
+      record: { label: "Child", parentId: "goal:1", parentPath: "goal:1" },
+    });
+    expect(replace.res.status).toBe(200);
+    const stored = await db.findOne({
+      model: "goals",
+      where: [{ field: "id", operator: "eq", value: "goal:2" }],
+      namespace: "ns:1",
+    });
+    expect(stored.note).toBeNull();
+
+    const root = await query({
+      resource: "goals",
+      version: 1,
+      filters: { id: "goal:1" },
+      select: ["id", "children.*"],
+    });
+    expect(root.res.status).toBe(200);
+    const children = root.body.result.data[0].children;
+    expect(children).toHaveLength(1);
+    expect(children[0].id).toBe("goal:2");
+    expect(children[0].note).toBeUndefined();
+    expect("note" in children[0]).toBe(false);
   });
 });

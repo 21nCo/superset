@@ -39,11 +39,16 @@ export function executeQuery(
   // Phase 15: Aggregate queries
   if (query.groupBy || hasTemporalGrouping(query as any)) {
     const resourceName = query.resource as string;
+    // Predicates and aggregation operate on storage values; normalize output only.
     const records = store.getRecords(resourceName);
     return executeAggregateQuery(query as any, records, schema, store, temporalConfig);
   }
 
-  // Get all records for the resource
+  // Get all records for the resource. Filters and sorting intentionally run
+  // against the stored representation so in-memory results match the
+  // FULL_PUSHDOWN strategy (e.g. $eq: null matches stored SQL NULLs via
+  // IS NULL). materializeSelect normalizes persisted nulls for the returned
+  // records, so the read contract is unaffected.
   let records = store.getRecords(query.resource);
 
   // Apply filters

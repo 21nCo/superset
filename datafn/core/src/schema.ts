@@ -23,6 +23,9 @@ import type {
 } from "./capabilities.js";
 import type { DatafnEnvelope } from "./errors.js";
 import { ok, err } from "./errors.js";
+import { validateFieldValue } from "./validate.js";
+import { toBoundsEpochMs } from "./date.js";
+import { isDatafnE2eeEnvelope } from "./e2ee.js";
 import {
   CAPABILITY_FIELD_DEFS,
   getCapabilityFields,
@@ -382,6 +385,83 @@ export function validateSchema(schema: unknown): DatafnEnvelope<DatafnSchema> {
           "Invalid schema: field.required must be boolean",
           { path: `resources.${r.name}.fields.${f.name}.required` }
         );
+      }
+      if (normalizedType === "date") {
+        // Date bounds are absolute epoch milliseconds: they must be finite,
+        // ordered, and any non-null default must lie within them, otherwise a
+        // replace/insert that applies the default would bypass mutation-time
+        // bounds enforcement.
+        const min = f.min;
+        const max = f.max;
+        if (
+          min !== undefined &&
+          (typeof min !== "number" || !Number.isFinite(min))
+        ) {
+          return err(
+            "SCHEMA_INVALID",
+            `Invalid schema: date field "${f.name}" min must be finite epoch milliseconds`,
+            { path: `resources.${r.name}.fields.${f.name}.min` },
+          );
+        }
+        if (
+          max !== undefined &&
+          (typeof max !== "number" || !Number.isFinite(max))
+        ) {
+          return err(
+            "SCHEMA_INVALID",
+            `Invalid schema: date field "${f.name}" max must be finite epoch milliseconds`,
+            { path: `resources.${r.name}.fields.${f.name}.max` },
+          );
+        }
+        if (
+          typeof min === "number" &&
+          typeof max === "number" &&
+          min > max
+        ) {
+          return err(
+            "SCHEMA_INVALID",
+            `Invalid schema: date field "${f.name}" min must not exceed max`,
+            { path: `resources.${r.name}.fields.${f.name}.min` },
+          );
+        }
+        if (
+          f.default !== undefined &&
+          f.default !== null &&
+          (min !== undefined || max !== undefined)
+        ) {
+          const defaultEpoch = toBoundsEpochMs(f.default);
+          // Reject defaults that do not parse as dates (e.g. "not-a-date" or
+          // a plain object): replace/merge-create apply defaults without
+          // mutation-time bounds checks, so an unparseable default would be
+          // persisted as-is. Opaque e2ee envelopes stay exempt.
+          if (
+            (!Number.isFinite(defaultEpoch) ||
+              !validateFieldValue("date", f.default, false).ok) &&
+            !isDatafnE2eeEnvelope(f.default)
+          ) {
+            return err(
+              "SCHEMA_INVALID",
+              `Invalid schema: date field "${f.name}" default must be a valid date`,
+              { path: `resources.${r.name}.fields.${f.name}.default` },
+            );
+          }
+          if (Number.isFinite(defaultEpoch)) {
+            if (typeof min === "number" && defaultEpoch < min) {
+              return err(
+                "SCHEMA_INVALID",
+                `Invalid schema: date field "${f.name}" default is before its min bound`,
+                { path: `resources.${r.name}.fields.${f.name}.default` },
+              );
+            }
+            if (typeof max === "number" && defaultEpoch > max) {
+              return err(
+                "SCHEMA_INVALID",
+                `Invalid schema: date field "${f.name}" default is after its max bound`,
+                { path: `resources.${r.name}.fields.${f.name}.default` },
+              );
+            }
+          }
+        }
       }
       fieldNames.add(f.name);
       normalizedFields.push({

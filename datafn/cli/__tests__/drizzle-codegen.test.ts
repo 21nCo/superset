@@ -1336,3 +1336,12 @@ describe("Drizzle Schema Codegen", () => {
   });
 
 });
+
+ it.each(["postgres", "mysql", "sqlite"] as const)("%s keeps required nullable columns nullable", (dialect) => {
+   const output = generateDrizzleSchema({ resources: [{ name: "item", version: 1, fields: [
+     { name: "requiredValue", type: "string", required: true },
+     { name: "nullableValue", type: "string", required: true, nullable: true },
+   ] }], relations: [] }, dialect);
+   expect(output.split("\n").find((line) => line.includes("requiredValue:"))).toContain(".notNull()");
+   expect(output.split("\n").find((line) => line.includes("nullableValue:"))).not.toContain(".notNull()");
+ });

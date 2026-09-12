@@ -114,7 +114,7 @@ describe("DatafnClient Types", () => {
     type TaskRecord = DatafnResourceRecord<typeof typedSchema, "tasks">;
     expectTypeOf<TaskRecord["id"]>().toEqualTypeOf<string>();
     expectTypeOf<TaskRecord["title"]>().toEqualTypeOf<string>();
-    expectTypeOf<TaskRecord["done"]>().toEqualTypeOf<boolean | null | undefined>();
+    expectTypeOf<TaskRecord["done"]>().toEqualTypeOf<boolean | undefined>();
     expectTypeOf<TaskRecord["createdAt"]>().toEqualTypeOf<string | Date>();
     expectTypeOf<TaskRecord["updatedAt"]>().toEqualTypeOf<string | Date>();
     expectTypeOf<TaskRecord["updatedBy"]>().toEqualTypeOf<string | null | undefined>();

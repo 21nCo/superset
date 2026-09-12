@@ -26,6 +26,22 @@ export type {
 // Re-export defineSchema helper
 export { defineSchema } from "./types.js";
 
+// Re-export const-safe field builders
+export { field } from "./field.js";
+export type {
+  DatafnArrayFieldOptions,
+  DatafnBooleanFieldOptions,
+  DatafnBuiltField,
+  DatafnDateFieldOptions,
+  DatafnFieldOptionsByType,
+  DatafnFileFieldOptions,
+  DatafnJsonFieldOptions,
+  DatafnJsonValue,
+  DatafnNumberFieldOptions,
+  DatafnObjectFieldOptions,
+  DatafnStringFieldOptions,
+} from "./field.js";
+
 // Re-export capability types and helpers
 export type {
   SimpleCapability,
@@ -137,6 +153,9 @@ export {
   normalizeRelationPayload,
 } from "./relations.js";
 
+// Re-export record read-path normalization
+export { stripNullsForNonNullableFields } from "./records.js";
+
 // Re-export aggregation utilities
 export { calculateAggregation } from "./aggregate.js";
 
@@ -197,6 +216,8 @@ export {
   fromEpochMs,
   coerceDateFieldsToEpoch,
   parseDateFieldsToDate,
+  toBoundsEpochMs,
+  formatBoundEpochMs,
 } from "./date.js";
 
 // Re-export validation primitives
