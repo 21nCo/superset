@@ -257,7 +257,7 @@ export interface DatafnServerConfig<TContext = any> {
 
   /** Authorizes each DataFn action after context creation and before route execution. */
   authorize?: (
-    ctx: TContext,
+    ctx: TContext & { parsedBody?: unknown },
     action:
       | "status"
       | "query"
@@ -1695,6 +1695,8 @@ export async function createDatafnServer<TContext = any>(
         method: route.method,
         path: route.path,
         meta: route.meta,
+        // withAuth and the REST handler validate URL segments and complete DataFn response hooks.
+        decodeParams: false,
         handler: withAuth(action, route.handler as any, true),
       });
     }

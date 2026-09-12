@@ -128,6 +128,9 @@ export interface Route<TContext = any> {
   /** Route path (supports params: /users/:id) */
   path: string;
 
+  /** Decode path parameters before dispatch (default true). Disable only when the handler validates raw segments. */
+  decodeParams?: boolean;
+
   /** Route handler */
   handler: RouteHandler<TContext>;
 

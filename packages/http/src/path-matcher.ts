@@ -39,7 +39,7 @@ export function compilePattern(pattern: string): CompiledPattern {
 /**
  * Match a path against a compiled pattern and extract parameters
  */
-export function matchPath(compiledPattern: CompiledPattern, path: string): PathMatch {
+export function matchPath(compiledPattern: CompiledPattern, path: string, decodeParams = true): PathMatch {
   const match = path.match(compiledPattern.pattern);
   
   if (!match) {
@@ -51,7 +51,7 @@ export function matchPath(compiledPattern: CompiledPattern, path: string): PathM
   // Extract named groups
   if (match.groups) {
     for (const key of compiledPattern.keys) {
-      params[key] = decodeURIComponent(match.groups[key]);
+      params[key] = decodeParams ? decodeURIComponent(match.groups[key]) : match.groups[key];
     }
   }
   

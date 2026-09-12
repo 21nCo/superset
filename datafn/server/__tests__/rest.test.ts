@@ -283,13 +283,20 @@ describe("REST authorization selectors", () => {
       routeHooks: { afterResponse: ({ response }) => { called++; return response; },
         headers: { "x-route-hook": "yes" } },
     });
-    // Exercise the DataFn handler boundary directly: the generic HTTP router
-    // separately decodes params before dispatch.
-    const route = server.router.getRoutes().find((route) => route.method === "GET" && route.path === "/datafn/resources/:resource");
-    expect(route).toBeDefined();
-    const response = await route!.handler(new Request("http://localhost/datafn/resources/%E0%A4%A"), {} as any);
+    const response = await server.router.handle(new Request("http://localhost/datafn/resources/%E0%A4%A"));
     expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: { code: "DFQL_INVALID" } });
     expect(response.headers.get("x-route-hook")).toBe("yes");
     expect(called).toBe(1);
   });
+});
+
+it("exposes the original REST body through the typed authorization context", async () => {
+  const bodies: unknown[] = [];
+  const server = await createDatafnServer<{ actor: string }>({ schema: testSchema, database: memoryAdapter(), rest: true,
+    context: () => ({ actor: 'trusted' }),
+    authorize: (context) => { const actor: string = context.actor; const body: unknown = context.parsedBody; bodies.push(body); return actor === 'trusted'; },
+  });
+  await server.router.handle(new Request('http://localhost/datafn/resources/task', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ record: { title: 'test' } }) }));
+  expect(bodies).toEqual([{ record: { title: 'test' } }]);
 });

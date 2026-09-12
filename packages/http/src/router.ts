@@ -63,7 +63,7 @@ export function createRouter<TContext = any>(
         continue;
       }
 
-      const pathMatch = matchPath(entry.compiledPattern, normalizedPath);
+      const pathMatch = matchPath(entry.compiledPattern, normalizedPath, entry.route.decodeParams);
       if (pathMatch.matched) {
         return {
           route: entry.route,
@@ -83,7 +83,7 @@ export function createRouter<TContext = any>(
     const normalizedPath = normalizePath(path);
     const methods = new Set<string>();
     for (const entry of compiledRoutes) {
-      if (matchPath(entry.compiledPattern, normalizedPath).matched) {
+      if (matchPath(entry.compiledPattern, normalizedPath, entry.route.decodeParams).matched) {
         methods.add(entry.route.method);
       }
     }
