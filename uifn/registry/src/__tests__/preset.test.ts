@@ -108,7 +108,7 @@ it('computes contrast from the emitted in-gamut sRGB solid', () => {
 
 it.each(['lucide', 'phosphor', 'heroicons'] as const)('includes the selected %s icon dependency', iconLibrary => {
   const plan = compilePreset(normalizePreset({ iconLibrary }));
-  expect(plan.project.packages.some(item => item.name === plan.icons.packageName && item.relationship === 'runtime')).toBe(true);
+  expect(plan.project.packages.some(item => item.name === ({ lucide: 'lucide-react', phosphor: '@phosphor-icons/react', heroicons: '@heroicons/react' }[iconLibrary]) && item.relationship === 'runtime')).toBe(true);
 });
 it('scopes every menu treatment to menus without changing dialog shadows', () => {
   const css = (['elevated', 'inset', 'bordered'] as const).map(menuTreatment => compilePreset(normalizePreset({ menuTreatment })).css.light);
@@ -117,4 +117,11 @@ it('scopes every menu treatment to menus without changing dialog shadows', () =>
     expect(text).toContain('[data-uifn-component="menu"][data-uifn-part="content"]{--uifn-component-shadow:');
     expect(text).not.toContain('--uifn-component-shadow-overlay:');
   }
+});
+
+it('keeps source-mode plans independent of packaged React components', () => {
+  expect(compilePreset(normalizePreset({ installMode: 'source' })).project.packages.map(p => p.name)).not.toContain('@uifn/components-react');
+});
+it.each(['svelte', 'solid'] as const)('does not add React icon packages to %s plans', framework => {
+  expect(compilePreset(normalizePreset({ framework })).project.packages.map(p => p.name)).not.toContain('lucide-react');
 });

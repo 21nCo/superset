@@ -145,7 +145,7 @@ function desiredFiles(plan: PresetCompilePlan, domains: Array<'full' | PartialPr
     files['package.json'] = packageJson(plan);
     files[PRESET_APP_PATH] = appSource(plan);
     files[PRESET_MAIN_PATH] = mainSource();
-    files['README.md'] = `# uifn app\n\nPreset \`${plan.code}\`\n\n\`\`\`bash\n${plan.commands.decode}\n${plan.commands.apply}\n\`\`\`\n`;
+    files['README.md'] = '# uifn app\n\nThe active preset code and settings are stored in `.uifn/preset.json`. This state is updated after full and partial applies.\n\nTo inspect or apply a preset, use `uifn preset decode <code>` or `uifn apply --preset <code>`.\n';
   }
   files[PRESET_STATE_PATH] = serializeState(plan, files);
   return files;

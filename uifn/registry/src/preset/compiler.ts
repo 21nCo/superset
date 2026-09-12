@@ -296,7 +296,7 @@ function frameworkPackages(preset: UIFnPresetV1): Array<{ name: string; version:
     ];
   }
   return [
-    { name: '@uifn/components-react', version: '0.0.1', relationship: 'runtime' },
+    ...(preset.installMode === 'package' ? [{ name: '@uifn/components-react', version: '0.0.1', relationship: 'runtime' as const }] : []),
     { name: '@uifn/components', version: '0.0.1', relationship: 'runtime' },
     { name: '@uifn/react', version: '0.0.3', relationship: 'runtime' },
     { name: '@uifn/recipes', version: '0.0.1', relationship: 'runtime' },
@@ -359,7 +359,7 @@ export function compilePreset(preset: UIFnPresetV1, template: ApprovedTemplate =
       framework: preset.framework,
       installMode: preset.installMode,
       artifacts: [...PILOT_ARTIFACTS],
-      packages: [...frameworkPackages(preset), { name: ICONS[preset.iconLibrary].packageName, version: { lucide: '0.575.0', phosphor: '2.1.10', heroicons: '2.2.0' }[preset.iconLibrary], relationship: 'runtime' }],
+      packages: [...frameworkPackages(preset), ...(preset.framework === 'react' ? [{ name: ICONS[preset.iconLibrary].packageName, version: { lucide: '0.575.0', phosphor: '2.1.10', heroicons: '2.2.0' }[preset.iconLibrary], relationship: 'runtime' as const }] : [])],
     },
     commands: {
       init: `uifn init --preset ${code} --template ${template}`,
