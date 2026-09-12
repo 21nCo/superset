@@ -6,11 +6,12 @@ from typing import Any, Dict, List, Literal, Optional, Protocol
 
 from pydantic import BaseModel, Field
 
-from .core import OAuthProviderDescriptor
+from .core import OAuthCoreErrorCode, OAuthProviderDescriptor
 
 OAuthTokenGrantType = Literal["authorization_code", "refresh_token", "client_credentials"]
 OAuthTokenAuthMethod = Literal["client_secret_post", "client_secret_basic"]
 OAuthHttpErrorCode = Literal[
+    OAuthCoreErrorCode,
     "OAUTH_TOKEN_EXCHANGE_FAILED",
     "OAUTH_TOKEN_REFRESH_FAILED",
     "PROVIDER_RATE_LIMITED",
