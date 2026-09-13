@@ -91,7 +91,9 @@ venv
 
 # AI tool configs
 .claude/
-.entire/
+.entire/*
+!.entire/.gitignore
+!.entire/settings.json
 .cursor/
 .gemini/
 
