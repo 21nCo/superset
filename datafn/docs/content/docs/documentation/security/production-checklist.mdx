@@ -9,7 +9,9 @@ Don't ship DataFn to production without ticking every item below. They're indepe
 
 ## Server configuration
 
-- [ ] `authorize` callback verifies authentication. Default: anonymous → `false`.
+- [ ] `authorize` requires a verified authenticated session for protected actions. Selector extraction does not authenticate callers.
+
+- [ ] Resource gating in `authorize` uses `extractStructuralResourceSelectors` rather than reading `payload.resource` or recursively searching JSON.
 - [ ] `allowUnknownResources` is `false` (the default — do not override).
 - [ ] `debug` is `false` (set explicitly or rely on `NODE_ENV=production`).
 - [ ] `limits.maxPayloadBytes` is set to a value appropriate for your records (default 5 MB is conservative).
@@ -85,5 +87,6 @@ Don't ship DataFn to production without ticking every item below. They're indepe
 ## See also
 
 - [Layered model](/docs/documentation/security/layered-model)
+- [Structural resource selectors](/docs/documentation/security/resource-selectors)
 - [Server Setup](/docs/documentation/server/setup)
 - [Production / Deploy](/docs/documentation/deploy)

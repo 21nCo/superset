@@ -21,6 +21,7 @@ type DatafnErrorCode =
   | "DFQL_UNKNOWN_FIELD"
   | "DFQL_UNKNOWN_RELATION"
   | "DFQL_UNSUPPORTED"
+  | "DATAFN_UNSUPPORTED_PROTOCOL_VERSION"
   | "DFQL_ABORTED"
   | "DFQL_SHARE_SCOPE_INVALID"
   | "DFQL_PRINCIPAL_INVALID"
@@ -50,6 +51,7 @@ type DatafnErrorCode =
 | `DFQL_UNKNOWN_FIELD` | Referenced field does not exist on resource. |
 | `DFQL_UNKNOWN_RELATION` | Referenced relation does not exist. |
 | `DFQL_UNSUPPORTED` | Unsupported DFQL operator or feature. |
+| `DATAFN_UNSUPPORTED_PROTOCOL_VERSION` | Request `protocolVersion` is not a supported DataFn envelope version. |
 | `DFQL_ABORTED` | Transaction aborted. |
 | `DFQL_SHARE_SCOPE_INVALID` | Share scope is invalid. Thrown when `scope` is not `"record"` or `"resource"`, when a record-scope share is missing `id`, or when a resource-scope share includes `id`. |
 | `DFQL_PRINCIPAL_INVALID` | Principal identifier is invalid. Thrown when `shareWith.principalId` is empty, when both `principalId` and `userId` are provided with conflicting values, or when neither is provided. |

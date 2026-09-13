@@ -1,3 +1,4 @@
+import type { DatafnRequestAction } from '@datafn/core';
 import type { ObservationEvent } from '@superfunctions/observability';
 
 export type DataFnEventType =
@@ -8,17 +9,7 @@ export type DataFnEventType =
   | 'datafn.retention.pruned'
   | 'datafn.retention.prune_failed';
 
-export type DataFnAction =
-  | 'status'
-  | 'query'
-  | 'mutation'
-  | 'transact'
-  | 'seed'
-  | 'clone'
-  | 'pull'
-  | 'push'
-  | 'reconcile'
-  | 'search';
+export type DataFnAction = DatafnRequestAction;
 
 export interface DataFnRequestEventMetadata extends Record<string, unknown> {
   action?: DataFnAction;

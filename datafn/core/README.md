@@ -18,6 +18,7 @@ npm install @datafn/core
 - **Envelope Pattern** — Structured `ok | error` result types with helper functions
 - **KV Utilities** — Built-in key-value resource helpers (`ensureBuiltinKv`, `kvId`)
 - **Error Codes** — Enumerated error codes for consistent error handling
+- **Structural Resource Selectors** — Parse request envelopes and collect protocol-level resource selectors for routing and authorization
 
 ---
 
@@ -426,6 +427,22 @@ type DfqlTransact = {
 };
 ```
 
+### Structural resource selectors
+
+Gateways and authorization plugins must not recursively inspect request JSON for fields named `resource` or `resources`. Application records and filters may legitimately use those names.
+
+```typescript
+import { extractStructuralResourceSelectors } from "@datafn/core";
+
+const extracted = extractStructuralResourceSelectors("query", payload);
+if (extracted.ok) {
+  extracted.result.selectors; // protocol-level resources only
+  extracted.result.protocolVersion; // "1"
+}
+```
+
+`parseDatafnRequest` plus `collectStructuralResourceSelectors` is the composable form. Unsupported `protocolVersion` values return `DATAFN_UNSUPPORTED_PROTOCOL_VERSION`.
+
 ### Sort & Cursor
 
 ```typescript
@@ -667,3 +684,12 @@ const schema = defineSchema({
 ## License
 
 MIT
+
+For pull requests, pass trusted application schema metadata as the third argument:
+`extractStructuralResourceSelectors("pull", payload, { schema })` (or
+`parseDatafnRequest("pull", payload, { schema })`). The parser translates known
+many-to-many join cursor keys into their endpoint resources. Without schema
+metadata, cursor names remain selectors; unknown `join_` names are never silently
+ignored. Gateways handling relational sync must supply the same schema as the
+server and authorize every returned endpoint. The server preflight supplies its
+validated schema automatically; custom authorization callbacks should also pass their trusted schema to the helper.

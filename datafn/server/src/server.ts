@@ -11,7 +11,7 @@ import type {
   DatafnSchema,
 } from "@datafn/core/types";
 import type { SearchProvider } from "./search-provider.js";
-import { validateSchema, ensureBuiltinKv, ensureBuiltinTemporal, isNamespaced } from "@datafn/core";
+import { parseDatafnRequest, collectStructuralResourceSelectors, validateSchema, ensureBuiltinKv, ensureBuiltinTemporal, isNamespaced } from "@datafn/core";
 import {
   createObservabilityMiddleware,
   createRouter,
@@ -46,7 +46,7 @@ import {
 import { DbIdempotencyStore } from "./execution/idempotency-db.js";
 import { ChangeTrackingService } from "./execution/sync/change-tracking.js";
 import { errorResponse, errorToEnvelope } from "./http/errors.js";
-import { createRestRoutes } from "./routes/rest.js";
+import { createRestRoutes, sanitizePathSegment } from "./routes/rest.js";
 import { checkPayloadLimit, readBodyWithLimit } from "./http/middleware.js";
 import { parseJsonBody } from "./http/json.js";
 import { WebSocketManager, type WebSocketClient, type WsAuthContext } from "./ws.js";
@@ -208,45 +208,6 @@ function normalizeResourceEndpoint(endpoint: string | readonly string[]): string
   return typeof endpoint === "string" ? [endpoint] : [...endpoint];
 }
 
-function payloadReferencesInternalResource(
-  payload: unknown,
-  internalResourceNames: ReadonlySet<string>,
-): boolean {
-  if (internalResourceNames.size === 0) {
-    return false;
-  }
-  if (Array.isArray(payload)) {
-    return payload.some((entry) => payloadReferencesInternalResource(entry, internalResourceNames));
-  }
-  if (!payload || typeof payload !== "object") {
-    return false;
-  }
-
-  const record = payload as Record<string, unknown>;
-  if (typeof record.resource === "string" && internalResourceNames.has(record.resource)) {
-    return true;
-  }
-  if (
-    Array.isArray(record.resources) &&
-    record.resources.some((resource) => typeof resource === "string" && internalResourceNames.has(resource))
-  ) {
-    return true;
-  }
-
-  for (const key of ["mutations", "queries", "steps", "operations"]) {
-    if (Array.isArray(record[key]) && payloadReferencesInternalResource(record[key], internalResourceNames)) {
-      return true;
-    }
-  }
-  for (const key of ["query", "mutation", "payload"]) {
-    if (record[key] && payloadReferencesInternalResource(record[key], internalResourceNames)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 function normalizePluginAuthorizationError(
   error: unknown,
   pluginName: string,
@@ -296,7 +257,7 @@ export interface DatafnServerConfig<TContext = any> {
 
   /** Authorizes each DataFn action after context creation and before route execution. */
   authorize?: (
-    ctx: TContext,
+    ctx: TContext & { parsedBody?: unknown },
     action:
       | "status"
       | "query"
@@ -1181,6 +1142,7 @@ export async function createDatafnServer<TContext = any>(
       req: Request,
       ctx: TContext & { parsedBody?: unknown },
     ) => Promise<Response> | Response,
+    rest = false,
   ): ((req: Request, ctx: TContext) => Promise<Response>) => {
     return async (req: Request, ctx: TContext): Promise<Response> => {
       const enrichedCtx = createEnrichedContext(ctx);
@@ -1329,7 +1291,32 @@ export async function createDatafnServer<TContext = any>(
           enrichedCtx.parsedBody = payload;
         }
 
-        if (payloadReferencesInternalResource(payload, internalResourceNames)) {
+        // REST bodies are application records; their resource is owned by the
+        // matched URL, not a coincidentally named field in the record.
+        let structuralPayload = payload;
+        if (rest) {
+          let resource: string;
+          try {
+            const segment = sanitizePathSegment(new URL(req.url).pathname.split("/")[3] ?? "");
+            if (!segment.ok) throw new Error("Invalid path segment");
+            resource = segment.value;
+          } catch {
+            return completeDatafnResponse({
+              action, request: req, context: enrichedCtx, payload,
+              response: errorResponse({ code: "DFQL_INVALID", message: "Invalid path segment", details: { path: "resource" } }, 400),
+            });
+          }
+          structuralPayload = { resource };
+        }
+        const parsedProtocol = parseDatafnRequest(action, structuralPayload, { schema: validatedSchema });
+        if (!parsedProtocol.ok) {
+          return completeDatafnResponse({
+            action, request: req, context: enrichedCtx, payload,
+            response: errorResponse(parsedProtocol.error, 400),
+          });
+        }
+        const selection = collectStructuralResourceSelectors(parsedProtocol.result);
+        if (selection.selectors.some((resource) => internalResourceNames.has(resource))) {
           await emitDataFnEvent({
             domain: "datafn",
             type: "datafn.authorization.denied",
@@ -1376,7 +1363,7 @@ export async function createDatafnServer<TContext = any>(
           action,
           request: req,
           context: enrichedCtx,
-          payload,
+          payload: structuralPayload,
         });
         if (!pluginAuthorization.ok) {
           await emitDataFnEvent({
@@ -1398,7 +1385,7 @@ export async function createDatafnServer<TContext = any>(
 
         // Check authorization if configured - only called AFTER successful JSON parse
         if (config.authorize) {
-          const authorized = await config.authorize(enrichedCtx, action, payload);
+          const authorized = await config.authorize(enrichedCtx, action, structuralPayload);
           if (!authorized) {
             await emitDataFnEvent({
               domain: "datafn",
@@ -1710,7 +1697,9 @@ export async function createDatafnServer<TContext = any>(
         method: route.method,
         path: route.path,
         meta: route.meta,
-        handler: withAuth(action, route.handler as any),
+        // withAuth and the REST handler validate URL segments and complete DataFn response hooks.
+        decodeParams: false,
+        handler: withAuth(action, route.handler as any, true),
       });
     }
   }

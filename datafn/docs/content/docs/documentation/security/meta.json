@@ -5,6 +5,7 @@
     "index",
     "layered-model",
     "request-authz",
+    "resource-selectors",
     "field-level-authz",
     "namespace-isolation",
     "rate-limiting",

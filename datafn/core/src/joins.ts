@@ -80,3 +80,26 @@ export function enumerateJoinStoreKeys(
   }
   return keys;
 }
+
+/** Resolve logical join cursors against trusted relation metadata, never by prefix. */
+export function resolveJoinStoreResources(relations: readonly DatafnRelationSchema[]): Map<string, string[]> {
+  const resources = new Map<string, string[]>();
+  for (const rel of relations) {
+    if (rel.type !== "many-many") continue;
+    for (const from of endpointList(rel.from)) for (const to of endpointList(rel.to)) {
+      // Recognize client keys and persisted keys emitted by older server
+      // mutation/clone/reconcile paths. Derive aliases only from trusted schema
+      // metadata: a join_ prefix alone must never hide a real resource.
+      const names = new Set([
+        getRelationKeyName(rel, to),
+        rel.relation ?? rel.inverse ?? firstEndpoint(rel.to),
+        String(rel.relation),
+      ]);
+      for (const name of names) {
+        const key = getJoinStoreKey(from, name, to);
+        resources.set(key, [...new Set([...(resources.get(key) ?? []), from, to])]);
+      }
+    }
+  }
+  return resources;
+}

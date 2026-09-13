@@ -2177,3 +2177,22 @@ describe("MRG-003: push merge race retry behavior", () => {
     );
   });
 });
+
+ it.each(["constructor", "prototype", "__proto__"])("round-trips canonical changes for own resource key %s", async name => {
+  const server = await createDatafnServer({allowUnknownResources: true, database: memoryAdapter(), schema: {resources: [{name, version: 1, fields: [{name: "label", type: "string"}]}]}});
+  const request = async (action: string, payload: unknown) => (await server.router.handle(new Request(`http://localhost/datafn/${action}`, {method: "POST", body: JSON.stringify(payload)}))).json();
+  let cursor = "0";
+  for (const operation of ["insert", "merge", "delete"] as const) {
+    const push = await request("push", {clientId: "writer", mutations: [{resource: name, version: 1, operation, clientId: "writer", mutationId: operation, id: "r1", record: {label: operation}}]});
+    expect(push.ok, JSON.stringify(push)).toBe(true);
+    expect(push.result.applied).toContain(operation);
+    const pull = await request("pull", {clientId: "reader", cursors: {[name]: cursor}});
+    expect(pull.result.ok).toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(pull.result.cursors, name)).toBe(true);
+    expect(Number(pull.result.cursors[name])).toBeGreaterThan(Number(cursor));
+    const changes = pull.result[operation === "insert" ? "records" : operation === "merge" ? "merged" : "deleted"];
+    expect(Object.prototype.hasOwnProperty.call(changes, name)).toBe(true);
+    expect(changes[name]).toHaveLength(1);
+    cursor = pull.result.cursors[name];
+  }
+ });

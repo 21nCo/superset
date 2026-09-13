@@ -109,6 +109,27 @@ export { unwrapEnvelope } from "./envelope.js";
 
 export * from "./dfql.js";
 
+export {
+  DATAFN_REQUEST_ACTIONS,
+  DATAFN_REQUEST_PROTOCOL_VERSION,
+  DATAFN_REQUEST_PROTOCOL_VERSIONS,
+  DATAFN_STRUCTURAL_SELECTOR_POSITIONS,
+  collectStructuralResourceSelectors,
+  extractStructuralResourceSelectors,
+  isDatafnRequestAction,
+  parseDatafnRequest,
+} from "./protocol.js";
+export type {
+  DatafnRequestAction,
+  DatafnRequestProtocolVersion,
+  DatafnResourceSelector,
+  ParsedDatafnMutation,
+  ParsedDatafnQuery,
+  ParsedDatafnRequest,
+  ParsedDatafnTransactStep,
+  StructuralResourceSelection,
+} from "./protocol.js";
+
 // Re-export KV utilities
 export { ensureBuiltinKv, kvId, KV_RESOURCE_NAME } from "./kv.js";
 

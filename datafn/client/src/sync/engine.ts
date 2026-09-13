@@ -672,7 +672,7 @@ export class SyncEngine {
   }
 
   private async buildPullCursors(): Promise<Record<string, string>> {
-    const cursors: Record<string, string> = {};
+    const cursors: Record<string, string> = Object.create(null);
 
     for (const res of this.schema.resources) {
       if (res.isRemoteOnly) continue;
@@ -1298,7 +1298,7 @@ export class SyncEngine {
       );
 
       // Calculate aggregated cursor delta (initial cursors vs final cursors)
-      const cursorDelta: Record<string, number> = {};
+      const cursorDelta: Record<string, number> = Object.create(null);
       if (lastResult.cursors) {
         for (const [resource, newCursor] of Object.entries(lastResult.cursors)) {
           const oldCursor = cursors[resource] || "0";

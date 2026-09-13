@@ -17,5 +17,5 @@
   "dependencies": { "@mailfn/core": "0.1.0" },
   "peerDependencies": { "sendfn": ">=0.0.4" },
   "peerDependenciesMeta": { "sendfn": { "optional": true } },
-  "devDependencies": { "@superfunctions/db": "0.2.0", "@types/node": "^22.0.0", "typescript": "^5.6.0", "vitest": "3.2.4" }
+  "devDependencies": { "sendfn": "0.0.4", "@superfunctions/db": "0.2.0", "@types/node": "^22.0.0", "typescript": "^5.6.0", "vitest": "3.2.4" }
 }

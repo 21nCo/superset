@@ -673,7 +673,7 @@ export function mergeCanonicalChangeStreamsBounded(
     .map((stream) => ({ resource: stream.resource, changes: stream.changes, index: 0 }));
 
   const merged: Array<{ resource: string; change: ChangeEntry }> = [];
-  const latestCursorPerResource: Record<string, number> = {};
+  const latestCursorPerResource: Record<string, number> = Object.create(null);
   let peakWindow = heads.length;
 
   while (heads.length > 0 && merged.length < limit) {
@@ -962,11 +962,11 @@ async function executePullCanonical(
     (resource) => resource !== ACTOR_FEED_CURSOR_KEY,
   );
 
-  const records: Record<string, Array<Record<string, unknown>>> = {};
-  const merged: Record<string, Array<Record<string, unknown>>> = {};
-  const deleted: Record<string, string[]> = {};
-  const joins: Record<string, { upsert: Array<Record<string, unknown>>; delete: Array<{ from: string; to: string }> }> = {};
-  const cursors: Record<string, string> = {};
+  const records: Record<string, Array<Record<string, unknown>>> = Object.create(null);
+  const merged: Record<string, Array<Record<string, unknown>>> = Object.create(null);
+  const deleted: Record<string, string[]> = Object.create(null);
+  const joins: Record<string, { upsert: Array<Record<string, unknown>>; delete: Array<{ from: string; to: string }> }> = Object.create(null);
+  const cursors: Record<string, string> = Object.create(null);
 
   for (const resource of requestedResourceKeys) {
     if (!resource.startsWith("join_") && !resource.startsWith("__datafn_")) {

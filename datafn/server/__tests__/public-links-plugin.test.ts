@@ -360,6 +360,9 @@ describe("DataFn public-links plugin", () => {
       "/datafn/reconcile",
     ]) {
       const denied = await post(server, path, {
+        // Valid selector-bearing envelopes reach the plugin authorization gate.
+        resource: "linkTag",
+        resources: ["linkTag"],
         clientId: "public-client",
         mutations: [],
         steps: [],

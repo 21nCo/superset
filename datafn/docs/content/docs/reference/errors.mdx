@@ -33,9 +33,9 @@ These fire at server startup (during `validateSchema`) or when a schema is loade
 | `CAPABILITY_FIELD_COLLISION` | A field you declared has the same name as a capability-injected system field (e.g. declaring `createdAt` while `timestamps` is enabled). | Drop the conflicting field; capabilities own these names. See [System Fields](/docs/dfql/schema/system-fields). |
 | `CAPABILITY_DEPENDENCY` | A capability requires another that isn't enabled (`shareable` depends on `audit`). | Add the dependency to the schema or remove the dependent capability. |
 
-## DFQL errors
+## Request protocol and DFQL errors
 
-These fire on query, mutation, or transaction requests when the payload doesn't match the schema.
+Protocol-version errors apply to every action before authorization. DFQL errors describe malformed envelopes or schema-invalid query, mutation, and transaction payloads.
 
 | Code | Common cause | Fix |
 | --- | --- | --- |
@@ -44,6 +44,7 @@ These fire on query, mutation, or transaction requests when the payload doesn't 
 | `DFQL_UNKNOWN_FIELD` | A field in `select`, `filters`, `sort`, or `record` isn't on the resource. | Same as above. |
 | `DFQL_UNKNOWN_RELATION` | A relation path in `select` references an undeclared relation. | Add the relation to the schema or fix the path. |
 | `DFQL_UNSUPPORTED` | A feature (operator, capability operation) is not supported by the current server build. | Common in cross-resource search without a `SearchProvider`. Configure the missing dependency. |
+| `DATAFN_UNSUPPORTED_PROTOCOL_VERSION` | The request declared a `protocolVersion` DataFn does not support. | Omit `protocolVersion` or send `"1"`. Fail closed; do not route or authorize. |
 | `DFQL_ABORTED` | A step in `transact` aborted because a prior step failed. | Check the first non-`DFQL_ABORTED` error in `results`. |
 | `DFQL_SHARE_SCOPE_INVALID` | `share` mutation with an invalid `scope` (must be `"record"` or `"resource"`). | Pass `scope: "record"` + `id`, or `scope: "resource"` (no id). |
 | `DFQL_PRINCIPAL_INVALID` | `share` mutation with an empty `principalId`, both `principalId` and `userId`, or neither. | Pass one of them, non-empty. |

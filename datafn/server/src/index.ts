@@ -1,3 +1,24 @@
+export {
+  DATAFN_REQUEST_ACTIONS,
+  DATAFN_REQUEST_PROTOCOL_VERSION,
+  DATAFN_REQUEST_PROTOCOL_VERSIONS,
+  DATAFN_STRUCTURAL_SELECTOR_POSITIONS,
+  collectStructuralResourceSelectors,
+  extractStructuralResourceSelectors,
+  isDatafnRequestAction,
+  parseDatafnRequest,
+} from "@datafn/core";
+export type {
+  DatafnRequestAction,
+  DatafnRequestProtocolVersion,
+  DatafnResourceSelector,
+  ParsedDatafnMutation,
+  ParsedDatafnQuery,
+  ParsedDatafnRequest,
+  ParsedDatafnTransactStep,
+  StructuralResourceSelection,
+} from "@datafn/core";
+
 // Re-export server factory and types
 export { datafn } from "./app.js";
 export type { DatafnApp, DatafnAppConfig, DatafnAppServerConfig } from "./app.js";

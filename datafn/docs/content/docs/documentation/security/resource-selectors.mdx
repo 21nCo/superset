@@ -1,0 +1,130 @@
+---
+title: "Structural Resource Selectors"
+description: "Canonical API for deriving protocol-level resource selectors used by gateways and authorization plugins."
+audience: guide
+applies_to: server
+---
+
+Gateways and authorization plugins must know which DataFn resources a request **structurally** addresses before dispatch or policy evaluation. Those selectors live on the DFQL protocol envelope. Application records and filters can independently contain fields named `resource` or `resources`.
+
+Do not recursively search request JSON. Use `extractStructuralResourceSelectors` from `@datafn/core` (also re-exported from `@datafn/server`). This is the supported security-sensitive integration point.
+
+## Why this API exists
+
+A generic recursive scan cannot distinguish protocol structure from domain data. A consumer-maintained shallow scan avoids some false positives but drifts when DataFn adds envelope shapes. Selector extraction belongs next to request parsing so both share one versioned protocol contract.
+
+Returned selectors are **inputs to product policy**. The extractor does not grant access, choose a regional cell, or evaluate permissions.
+
+## Parse, then visit
+
+Prefer the two composable layers:
+
+1. `parseDatafnRequest(action, payload)` validates selector-bearing protocol structure into a discriminated envelope. Schema and operation semantics are validated separately before execution.
+2. `collectStructuralResourceSelectors(parsed)` visits that envelope exhaustively.
+
+`extractStructuralResourceSelectors(action, payload)` runs both steps for gateway preflight.
+
+```typescript
+import {
+  extractStructuralResourceSelectors,
+  unwrapEnvelope,
+} from "@datafn/core";
+
+const selection = unwrapEnvelope(
+  extractStructuralResourceSelectors("query", payload),
+);
+// selection.protocolVersion === "1"
+// selection.selectors is a deduplicated, encounter-ordered list
+```
+
+## Envelope coverage
+
+The parser accepts every current `DatafnRequestAction` and inspects only protocol-defined selector positions:
+
+| Action | Selector positions | Selector-less? |
+| --- | --- | --- |
+| `query` | `resource` on the query or each batch entry | no — missing `resource` is `DFQL_INVALID` |
+| `mutation` | `resource` on the mutation or each batch entry | no |
+| `transact` | `steps[].resource`, `steps[].query.resource`, `steps[].mutation.resource` | empty `steps` is valid |
+| `search` | `resources[]`, keys of `filters`, keys of `temporalByResource` | yes — omitted `resources` searches all |
+| `clone` | `tables[]`, `page.table` | yes — omitted `tables` clones all |
+| `pull` | keys of `cursors`, excluding `__datafn_actor_feed__` | yes — global `cursor` pull |
+| `push` | `mutations[].resource` | no — `mutations` is required |
+| `reconcile` | `resources[]` | no |
+| `status`, `seed` | none | yes |
+
+Application record properties, mutation values, filter operands, and nested domain JSON are ignored even when they use the names `resource` or `resources`.
+
+```typescript
+extractStructuralResourceSelectors("query", {
+  resource: "skills",
+  filters: { metadata: { resource: "workspaces" } },
+  record: { resources: ["workspaceMemberships"] },
+});
+// => { protocolVersion: "1", selectors: ["skills"] }
+```
+
+Batched queries, mutations, and transaction steps are included:
+
+```typescript
+extractStructuralResourceSelectors("transact", {
+  steps: [
+    { query: { resource: "skills" } },
+    { mutation: { resource: "contextNotes", operation: "insert", record: { resource: "nope" } } },
+    { resource: "skillContexts" },
+  ],
+});
+// => { protocolVersion: "1", selectors: ["skills", "contextNotes", "skillContexts"] }
+```
+
+## Authorization preflight
+
+Selectors are structural anchors, **not the complete set of resources execution may access**. Relation queries, nested select tokens and mutation relations can reach other resources. Clone with joins can include join tables beyond explicit `tables`. Keep execution-time resource, relation, field and row policies enabled; this callback is only an additional coarse gate. Broad operations in this example require an administrator. Do not infer permission from an empty selector set.
+
+
+`authorize` still receives untrusted JSON. Derive selectors from the canonical API instead of reading `payload.resource` by hand:
+
+```typescript
+import { extractStructuralResourceSelectors } from "@datafn/server";
+
+authorize: (ctx, action, payload) => {
+  if (!ctx.session?.userId) return false;
+  if (action === "status") return true;
+
+  // Broad operations need an explicit action policy, even with no selectors.
+  if (["seed", "search", "clone", "pull"].includes(action)) {
+    return ctx.session.role === "admin";
+  }
+  const extracted = extractStructuralResourceSelectors(action, payload);
+  if (!extracted.ok) return false;
+
+  return extracted.result.selectors.length > 0 && extracted.result.selectors.every((resource) =>
+    ctx.session.allowedResources.includes(resource),
+  );
+}
+```
+
+Empty selector sets are meaningful: `status` and `seed` have no explicit resource selector; `seed` still writes server state; `search` without `resources` addresses the full searchable set. Decide product policy on that empty set — do not invent selectors by scanning JSON.
+
+## Errors
+
+Malformed selector positions return `DFQL_INVALID` with `details.path` pointing at the bad field. Unknown actions return `DFQL_UNSUPPORTED`. An explicit `protocolVersion` other than `"1"` returns `DATAFN_UNSUPPORTED_PROTOCOL_VERSION` and fails closed before routing or authorization.
+
+Batch entries, transaction wrappers and nested query/mutation nodes also reject unsupported versions. Version-shaped fields inside application data are ignored.
+
+Current requests may omit `protocolVersion`; the parser stamps the parsed envelope with `"1"`. Do not add recursive discovery for future indirect addressing — introduce a new explicit protocol variant instead.
+
+## See also
+
+- [Request authorization](/docs/documentation/security/request-authz)
+- [Multi-region gateway](/docs/documentation/multi-region-gateway)
+- [Error types](/docs/reference/core/errors)
+
+For pull requests, pass trusted application schema metadata as the third argument:
+`extractStructuralResourceSelectors("pull", payload, { schema })` (or
+`parseDatafnRequest("pull", payload, { schema })`). The parser translates known
+many-to-many join cursor keys into their endpoint resources. Without schema
+metadata, cursor names remain selectors; unknown `join_` names are never silently
+ignored. Gateways handling relational sync must supply the same schema as the
+server and authorize every returned endpoint. The server preflight supplies its
+validated schema automatically; custom authorization callbacks should also pass their trusted schema to the helper.

@@ -13,9 +13,11 @@ applies_to: server
 authorize: async (
   ctx: TContext,            // your HTTP framework's context
   action: DatafnAction,     // "status" | "query" | "mutation" | "transact" | "seed" | "clone" | "pull" | "push" | "reconcile" | "search"
-  payload: unknown,         // the parsed JSON body (null for GETs)
+  payload: unknown,         // protocol payload; REST uses { resource } from the URL
 ) => boolean | Promise<boolean>
 ```
+
+For REST routes, both authorization hooks receive `{ resource }` derived from the matched URL. The original body remains available as `ctx.parsedBody` for execution and any application-specific policy checks.
 
 Return `true` to allow, `false` to deny. Throwing has the same effect as `false`.
 
@@ -31,7 +33,7 @@ Return `true` to allow, `false` to deny. Throwing has the same effect as `false`
 - Row-level filtering (use [namespaces](/docs/documentation/security/namespace-isolation))
 - Capability-driven sharing rules (the `shareable` capability handles these directly)
 
-`authorize` runs before the schema is validated, which means `payload` is untrusted JSON. Don't treat field values as authoritative until DataFn has validated them.
+`authorize` runs before the schema is validated, which means `payload` is untrusted JSON. Don't treat field values as authoritative until DataFn has validated them. For protocol resource names, use [structural resource selectors](/docs/documentation/security/resource-selectors) instead of walking the payload.
 
 ## Minimum production callback
 
@@ -56,19 +58,31 @@ authorize: async (ctx, action) => {
 
 ## Per-resource gating
 
-The `payload` includes the target resource for `query`, `mutation`, and `transact`. Use it to deny entire resources by role:
+Do not read `payload.resource` or recursively search the body. Application records and filters may contain fields named `resource` or `resources`. Use the canonical extractor:
 
 ```typescript
+import { extractStructuralResourceSelectors } from "@datafn/server";
+
 authorize: async (ctx, action, payload) => {
   if (!ctx.session?.userId) return false;
-  if (action === "mutation" && payload?.resource === "billing") {
-    return ctx.session.roles.includes("billing-admin");
+  if (action === "status") return true;
+
+  // Broad operations need an explicit action policy, even with no selectors.
+  if (["seed", "search", "clone", "pull"].includes(action)) {
+    return ctx.session.isAdmin;
   }
-  return true;
+  const extracted = extractStructuralResourceSelectors(action, payload);
+  if (!extracted.ok) return false;
+
+  return extracted.result.selectors.length > 0 && extracted.result.selectors.every((resource) =>
+    ctx.session.allowedResources.includes(resource),
+  );
 }
 ```
 
-For batch payloads (`mutation` or `transact`), `payload` may be an array; check every element if you want strict gating.
+This is a coarse preflight, not transitive authorization: relations and nested selects can access resources beyond the anchors. Execution-time permissions must still enforce access. Broad operations require their own policy, as above.
+
+See [Structural resource selectors](/docs/documentation/security/resource-selectors) for batch, transaction, search, and sync envelopes.
 
 ## Throwing for richer errors
 
@@ -137,7 +151,7 @@ describe("authorize", () => {
   it("denies anonymous", async () => {
     const server = await makeTestServer({ authorize: (ctx) => Boolean(ctx.session?.userId) });
     const env = await server.router.fetch(
-      new Request("http://t/datafn/query", { method: "POST", body: "{}" }),
+      new Request("http://t/datafn/query", { method: "POST", body: JSON.stringify({ resource: "tasks" }) }),
     );
     const body = await env.json();
     expect(body.ok).toBe(false);
@@ -149,5 +163,6 @@ describe("authorize", () => {
 ## See also
 
 - [Field-level authorization](/docs/documentation/security/field-level-authz)
+- [Structural resource selectors](/docs/documentation/security/resource-selectors)
 - [Namespace isolation](/docs/documentation/security/namespace-isolation)
 - [AuthFn integration recipe](/docs/recipes/authfn-integration)

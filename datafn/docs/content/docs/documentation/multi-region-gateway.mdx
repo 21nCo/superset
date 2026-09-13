@@ -98,6 +98,8 @@ The gateway strips caller-supplied internal headers, preserves the method, compl
 
 On an authenticated, guaranteed pre-execution `DATAFN_REGION_MISMATCH`, the gateway invalidates its cache, re-resolves placement, and retries exactly once. It does not replay ambiguous timeouts or responses produced after execution began. Existing mutation IDs and idempotency keys remain authoritative for application-level retries.
 
+Resource names used for authorization or audit must come from `extractStructuralResourceSelectors` in `@datafn/core`. That API inspects only protocol selector positions and ignores application fields named `resource` or `resources`. It does not choose a region; pair it with the placement directory above. See [Structural resource selectors](/docs/documentation/security/resource-selectors).
+
 ## Errors and availability
 
 | Code | Meaning | Default behavior |
