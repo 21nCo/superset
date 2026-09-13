@@ -555,7 +555,7 @@ function buildColumnDefinition(
       def += ".notNull()";
     }
   } else {
-    if (field.required) def += ".notNull()";
+    if (field.required && field.nullable !== true) def += ".notNull()";
     if (field.unique === true) def += ".unique()";
   }
 

@@ -1,14 +1,15 @@
-from typing import Any, Dict
+from typing import Any
+
 from .indexing import index_data
 from .search import search_index
 
 MAX_LIMIT = 10_000
 
 
-def _parse_limit(payload: Dict[str, Any]) -> int:
+def _parse_limit(payload: dict[str, Any]) -> int:
     raw_limit = payload.get("limit", 20)
     if isinstance(raw_limit, bool):
-        raise ValueError("Invalid limit")
+        raise ValueError("Invalid limit")  # noqa: TRY004 - preserve the limit validation error contract.
     try:
         limit = int(raw_limit)
     except (TypeError, ValueError) as error:
@@ -17,7 +18,7 @@ def _parse_limit(payload: Dict[str, Any]) -> int:
         raise ValueError("Invalid limit")
     return limit
 
-def create_searchfn_server(config: Dict[str, Any]) -> Dict[str, Any]:
+def create_searchfn_server(config: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(config, dict):
         raise TypeError("config must be a dict")
 
@@ -31,7 +32,7 @@ def create_searchfn_server(config: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(table_prefix, str) or not table_prefix:
         raise ValueError("table_prefix must be a non-empty string")
 
-    async def index_handler(ctx: Any, payload: Any) -> Dict[str, Any]:
+    async def index_handler(ctx: Any, payload: Any) -> dict[str, Any]:
         del ctx
         if payload is None:
             payload = {}
@@ -45,7 +46,7 @@ def create_searchfn_server(config: Dict[str, Any]) -> Dict[str, Any]:
         result = await index_data(schema, db, model, table_prefix)
         return {"ok": True, "result": result}
 
-    async def search_handler(ctx: Any, payload: Any) -> Dict[str, Any]:
+    async def search_handler(ctx: Any, payload: Any) -> dict[str, Any]:
         del ctx
         if not isinstance(payload, dict):
             return {"ok": False, "error": "Invalid payload"}

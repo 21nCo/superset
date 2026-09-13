@@ -57,13 +57,13 @@ class SQLAlchemyAdapter:
         self.version = "0.1.0"
         self.capabilities = AdapterCapabilities(
             transactions=True,
-            nested_transactions=False,
+            nestedTransactions=False,
             joins=False,
-            full_text_search=False,
-            json_operations=True,
-            schema_management=False,
-            migration_support=False,
-            batch_operations=True,
+            fullTextSearch=False,
+            jsonOperations=True,
+            schemaManagement=False,
+            migrationSupport=False,
+            batchOperations=True,
         )
 
     def _get_table_name(self, model: str, namespace: Optional[str] = None) -> str:
@@ -573,12 +573,13 @@ class SQLAlchemyAdapter:
 
             return HealthStatus(
                 healthy=True,
+                lastError=None,
                 uptime=int(time.time() - self._start_time),
             )
         except Exception as e:
             return HealthStatus(
                 healthy=False,
-                last_error=str(e),
+                lastError=str(e),
                 uptime=int(time.time() - self._start_time),
             )
 

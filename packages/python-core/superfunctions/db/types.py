@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Literal, Optional, Protocol, Set, TypeVar
 
 from pydantic import BaseModel, Field
 
-
 # ============================================================================
 # Enums
 # ============================================================================
@@ -58,6 +57,7 @@ class WhereClause(BaseModel):
     field: str
     operator: Operator = Operator.EQ
     value: Any
+    connector: Literal["AND", "OR"] = "AND"
 
     class Config:
         use_enum_values = True

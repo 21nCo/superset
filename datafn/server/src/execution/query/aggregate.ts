@@ -20,7 +20,7 @@ import { applyLimitOffset, applyCursorAfter, computeNextCursor } from "./paginat
 export function executeAggregateQuery(
   query: Record<string, unknown>,
   records: Record<string, unknown>[],
-  schema: { resources: readonly { name: string; fields: readonly { name: string }[] }[]; relations?: readonly unknown[] },
+  schema: { resources: readonly { name: string; fields: readonly { name: string; nullable?: boolean }[] }[]; relations?: readonly unknown[] },
   store: { getRecord: (resource: string, id: string) => Record<string, unknown> | null | undefined },
   temporal?: DatafnTemporalConfig,
 ): { groups: Record<string, unknown>[]; nextCursor: unknown | null } {
@@ -74,9 +74,11 @@ export function executeAggregateQuery(
   // 3. Aggregate
   const aggregations = (query.aggregations as Record<string, { op: string; field: string }>) || {};
   let results: Record<string, unknown>[] = [];
+  const samples = new WeakMap<Record<string, unknown>, Record<string, unknown>>();
 
   for (const [, groupRecords] of groups.entries()) {
     const row: Record<string, unknown> = {};
+    samples.set(row, groupRecords[0]);
 
     // Add group keys to row — re-resolve from sample record to preserve types
     groupBy.forEach((field) => {
@@ -89,7 +91,11 @@ export function executeAggregateQuery(
         query.resource as string,
         resourceSchema,
       );
-      row[field] = val;
+      // Cleared non-nullable fields normalize to absent; keep that contract
+      // in group rows instead of materializing an undefined key.
+      if (val !== undefined) {
+        row[field] = val;
+      }
     });
     for (const group of temporalGroups) {
       row[group.alias] = resolveTemporalBucketValue(groupRecords[0], group);
@@ -151,7 +157,19 @@ export function executeAggregateQuery(
   }
 
   return {
-    groups: paginated,
+    groups: paginated.map((row) => {
+      const output = { ...row };
+      for (const field of groupBy) {
+        // Never normalize an aggregation alias as if it were a source field.
+        if (Object.prototype.hasOwnProperty.call(aggregations, field)) continue;
+        if (output[field] === null && resolveValue(
+          samples.get(row)!, field, schema, store, query.resource as string, resourceSchema, true,
+        ) === undefined) {
+          delete output[field];
+        }
+      }
+      return output;
+    }),
     nextCursor,
   };
 }
@@ -188,13 +206,16 @@ function orderGroupedResults(groups: Record<string, unknown>[], sortTerms: Array
 function resolveValue(
   record: Record<string, unknown>,
   path: string,
-  schema: { resources: readonly { name: string; fields: readonly { name: string }[] }[]; relations?: readonly unknown[] },
+  schema: { resources: readonly { name: string; fields: readonly { name: string; nullable?: boolean }[] }[]; relations?: readonly unknown[] },
   store: { getRecord: (resource: string, id: string) => Record<string, unknown> | null | undefined },
   resourceName: string,
-  precomputedResource?: { name: string; fields: readonly { name: string }[] }, // EXE-013: pre-computed to avoid per-record O(n) lookup
+  precomputedResource?: { name: string; fields: readonly { name: string; nullable?: boolean }[] }, // EXE-013: pre-computed to avoid per-record O(n) lookup
+  normalize = false,
 ): unknown {
   if (!path.includes(".")) {
-    return record[path];
+    const definition = precomputedResource?.fields.find((field) => field.name === path);
+    return normalize && record[path] === null && definition && definition.nullable !== true
+      ? undefined : record[path];
   }
 
   // Dot path resolution
@@ -247,7 +268,9 @@ function resolveValue(
   }
 
   const lastField = parts[parts.length - 1];
-  return currentRecord[lastField];
+  const definition = schema.resources.find((entry) => entry.name === currentResource)?.fields.find((field) => field.name === lastField);
+  return normalize && currentRecord[lastField] === null && definition && definition.nullable !== true
+    ? undefined : currentRecord[lastField];
 }
 
 // calculateAggregation is imported from @datafn/core above.

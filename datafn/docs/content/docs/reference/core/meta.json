@@ -1,4 +1,4 @@
 {
   "title": "@datafn/core",
-  "pages": ["types", "schema", "filters", "normalize", "date", "temporal", "kv", "hooks", "search-provider", "errors"]
+  "pages": ["types", "schema", "filters", "normalize", "date", "temporal", "kv", "hooks", "search-provider", "errors", "namespace-storage"]
 }

@@ -1,0 +1,75 @@
+---
+title: "Namespace storage"
+description: "Server APIs that resolve DataFn-owned namespace storage for migration and ownership tooling."
+audience: reference
+applies_to: typescript
+---
+
+See the conceptual guide: [Namespace storage contract](/docs/documentation/namespace-storage).
+
+## resolveNamespaceStoragePlan
+
+```typescript
+function resolveNamespaceStoragePlan(input: {
+  schema: DatafnSchema;
+  catalog: NamespaceStorageCatalog;
+  manifestVersion?: string;
+  schemaVersion?: string;
+}): NamespaceStoragePlan;
+```
+
+Validates the installed PostgreSQL schema against the logical manifest and returns a deterministic plan. Unknown DataFn namespace tables fail closed.
+
+## inspectPostgresNamespaceStorage
+
+```typescript
+function inspectPostgresNamespaceStorage(
+  query: PostgresNamespaceStorageQuery,
+): Promise<NamespaceStorageCatalog>;
+```
+
+Runs DataFn-owned catalog SQL through the provided query callback.
+
+## selectNamespaceStorageEntries
+
+```typescript
+function selectNamespaceStorageEntries(
+  plan: NamespaceStoragePlan,
+  operation: NamespaceStorageOperation,
+): readonly NamespaceStorageEntry[];
+```
+
+`cleanup` is returned in reverse copy order. `drain` currently contains only `permission_directory_outbox`.
+
+## drainNamespaceStorage
+
+```typescript
+function drainNamespaceStorage(input: {
+  adapter: Adapter;
+  plan: NamespaceStoragePlan;
+  namespace: string;
+  runtime: DatafnMultiRegionRuntimeConfig;
+  logger?: DatafnLogger;
+}): Promise<{ processed: number; pending: number }>;
+```
+
+Drains permission-directory outbox rows for one namespace without touching other namespaces.
+
+## composeNamespaceStoragePlan
+
+Adds application-owned relations. DataFn does not claim those tables. Collisions with DataFn relations throw `DATAFN_NAMESPACE_STORAGE_INVALID`.
+
+### Installed-schema and drain guarantees
+
+Catalog inspection reads both columns and valid, non-partial PostgreSQL indexes.
+A supplied catalog must include index metadata: namespace-only table stubs are
+rejected. Plans require operational columns, canonical generated physical column
+names, and a primary row identity on `id` or `(namespace selector, id)`.
+Expression/partial/invalid indexes cannot certify that identity. Custom physical
+mappings outside these conventions fail closed instead of producing a partial plan.
+This is structural validation, not a live tenant-migration rehearsal.
+
+Namespace draining respects unexpired pre-commit and retry leases. `pending` is
+an existence indicator (0 or 1), including rows still owned by active mutations;
+never treat `processed: 0` as proof of quiescence. Fence new writes, settle active
+writers, and retry until pending is zero before copying or cleaning up storage.

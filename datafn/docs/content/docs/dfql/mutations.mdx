@@ -113,6 +113,12 @@ These are valid only when the target resource enables the required capability.
 }
 ```
 
+Fields omitted from a `replace` record are reset: a field with a `default`
+gets that value, and every other field is cleared. Cleared fields are
+persisted as `null` — the only clear representation every supported storage
+adapter applies and that survives JSON change tracking — and are exposed as
+`undefined` in query results unless the field is `nullable`.
+
 ### Delete
 
 ```typescript
