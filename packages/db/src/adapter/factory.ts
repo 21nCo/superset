@@ -79,7 +79,7 @@ function buildAdapterContext(
 
     // Field name helpers
     getFieldName: ({ model, field }) => {
-      const fieldSchema = schema[model]?.fields[field];
+      const fieldSchema = Object.prototype.hasOwnProperty.call(schema, model) ? schema[model]?.fields[field] : undefined;
       return fieldSchema?.fieldName ?? field;
     },
 

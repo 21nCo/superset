@@ -1138,3 +1138,13 @@ describe("SyncEngine push", () => {
     expect(await storage.changelogList()).toEqual([]);
   });
 });
+
+it("serializes reserved resource names as own pull cursor keys", async () => {
+  const names = ["constructor", "prototype", "__proto__"];
+  const engine = new SyncEngine(new MemoryStorageAdapter(), {} as any, new EventBus(), "reader", {resources: names.map(name => ({name, version: 1, fields: []}))});
+  const cursors = JSON.parse(JSON.stringify(await (engine as any).buildPullCursors()));
+  for (const name of names) {
+    expect(Object.hasOwn(cursors, name)).toBe(true);
+    expect(cursors[name]).toBe("0");
+  }
+});

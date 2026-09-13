@@ -68,7 +68,7 @@ export function transformWhereForStorage(
   model: string,
   where: WhereClause[] | undefined,
 ): WhereClause[] | undefined {
-  const table = schema[model];
+  const table = Object.prototype.hasOwnProperty.call(schema, model) ? schema[model] : undefined;
   if (!table || !where?.length) {
     return where;
   }
@@ -369,7 +369,7 @@ function transformRecord<T>(
     return record;
   }
 
-  const table = schema[model];
+  const table = Object.prototype.hasOwnProperty.call(schema, model) ? schema[model] : undefined;
   if (!table) {
     return record;
   }

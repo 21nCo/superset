@@ -462,3 +462,13 @@ it.each(["constructor", "prototype", "__proto__"])("retains own cursor resource 
   const result = extractStructuralResourceSelectors("pull", payload);
   expect(result.ok && result.result.selectors).toEqual([name]);
 });
+
+ it.each(["public ", " public", "constructor", "prototype", "__proto__"])("preserves exact selector names: %s", name => {
+  for (const [action, payload] of [
+    ["query", {resource: name}],
+    ["search", {query: "x", filters: {[name]: {}}, temporalByResource: {[name]: {}}}],
+  ] as const) {
+    const result = extractStructuralResourceSelectors(action, payload);
+    expect(result.ok && result.result.selectors).toEqual([name]);
+  }
+});

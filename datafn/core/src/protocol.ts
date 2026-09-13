@@ -171,7 +171,7 @@ function normalizeSelector(value: unknown, path: string): DatafnEnvelope<DatafnR
   if (trimmed.length === 0) {
     return invalid("Invalid DFQL: resource selector must be a non-empty string", path);
   }
-  return ok(asSelector(trimmed));
+  return ok(asSelector(value));
 }
 
 class SelectorBuilder {
@@ -206,9 +206,6 @@ class SelectorBuilder {
     }
     for (const key of Object.keys(value)) {
       if (key === excluded) continue;
-      if (DISALLOWED_KEYS.has(key)) {
-        return invalid(`Disallowed key: ${key}`, path);
-      }
       const added = this.add(key, `${path}.${key}`);
       if (!added.ok) return added;
     }
