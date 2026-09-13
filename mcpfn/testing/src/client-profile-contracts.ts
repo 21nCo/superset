@@ -261,7 +261,7 @@ export function diffMcpFnClientProfileSnapshots(
   );
   const names = [
     ...new Set([...beforeByName.keys(), ...afterByName.keys()]),
-  ].sort();
+  ].sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
   const changes: McpFnClientProfileSnapshotChange[] = [];
   for (const tool of names) {
     const beforeHash = beforeByName.get(tool);
@@ -312,7 +312,7 @@ function createDialectValidator(dialect: string) {
 }
 
 function pointerSegment(value: string): string {
-  return value.replace(/~/g, "~0").replace(/\//g, "~1");
+  return value.replaceAll("~", "~0").replaceAll("/", "~1");
 }
 
 function walkSchema(

@@ -475,7 +475,7 @@ function rootShape(root: Record<string, unknown>, owned = new Set<string>()): { 
     catch { throw new McpFnClientProfileError("MCPFN_INVALID_PROJECTED_CATALOG", "Invalid schema reference encoding"); }
     let target: unknown = resources.get(schema) ?? root;
     for (const part of pointer === "" ? [] : pointer.slice(1).split("/")) {
-      const key = part.replace(/~1/g, "/").replace(/~0/g, "~");
+      const key = part.replaceAll("~1", "/").replaceAll("~0", "~");
       target = target && typeof target === "object" && Object.hasOwn(target, key) ? (target as Record<string, unknown>)[key] : undefined;
     }
     if (target === undefined) throw new McpFnClientProfileError("MCPFN_INVALID_PROJECTED_CATALOG", "Unresolved schema reference");
