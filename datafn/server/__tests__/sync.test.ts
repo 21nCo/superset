@@ -2188,10 +2188,10 @@ describe("MRG-003: push merge race retry behavior", () => {
     expect(push.result.applied).toContain(operation);
     const pull = await request("pull", {clientId: "reader", cursors: {[name]: cursor}});
     expect(pull.result.ok).toBe(true);
-    expect(Object.hasOwn(pull.result.cursors, name)).toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(pull.result.cursors, name)).toBe(true);
     expect(Number(pull.result.cursors[name])).toBeGreaterThan(Number(cursor));
     const changes = pull.result[operation === "insert" ? "records" : operation === "merge" ? "merged" : "deleted"];
-    expect(Object.hasOwn(changes, name)).toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(changes, name)).toBe(true);
     expect(changes[name]).toHaveLength(1);
     cursor = pull.result.cursors[name];
   }
