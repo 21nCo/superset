@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy import Column, ForeignKey, Integer, MetaData, String, Table, create_engine, event
 from sqlalchemy.exc import OperationalError
 
@@ -13,7 +14,7 @@ if package_root_str not in sys.path:
     sys.path.insert(0, package_root_str)
 
 from superfunctions.db import (  # noqa: E402
-    ConnectionError,
+    AdapterConnectionError,
     ConstraintViolationError,
     DeleteParams,
     DuplicateKeyError,
@@ -190,8 +191,10 @@ async def test_find_many_respects_or_connectors(adapter) -> None:
 async def test_update_many_requires_where_clause(adapter) -> None:
     await adapter.create(model="users", data={"email": "alice@example.com", "name": "Alice"})
 
-    with pytest.raises(QueryFailedError, match="update_many requires a where clause"):
+    with pytest.raises(ValidationError):
         await adapter.update_many(model="users", where=None, data={"name": "Updated"})
+    with pytest.raises(QueryFailedError, match="update_many requires a where clause"):
+        await adapter.update_many(model="users", where=[], data={"name": "Updated"})
 
 
 @pytest.mark.asyncio
@@ -264,7 +267,7 @@ async def test_update_preserves_connection_errors(adapter, monkeypatch) -> None:
 
     monkeypatch.setattr(adapter, "_fetch_one_by_clause", fake_fetch_one_by_clause)
 
-    with pytest.raises(ConnectionError):
+    with pytest.raises(AdapterConnectionError):
         await adapter._update(
             UpdateParams(
                 model="users",
@@ -282,7 +285,7 @@ async def test_create_many_preserves_connection_errors(adapter, monkeypatch) -> 
 
     monkeypatch.setattr(adapter, "_create", fake_create)
 
-    with pytest.raises(ConnectionError):
+    with pytest.raises(AdapterConnectionError):
         await adapter.create_many(
             model="users",
             data=[{"email": "alice@example.com", "name": "Alice"}],
@@ -374,7 +377,7 @@ async def test_delete_preserves_connection_errors(adapter, monkeypatch) -> None:
 
     monkeypatch.setattr(adapter, "_fetch_one_by_clause", fake_fetch_one_by_clause)
 
-    with pytest.raises(ConnectionError):
+    with pytest.raises(AdapterConnectionError):
         await adapter._delete(
             DeleteParams(
                 model="users",
