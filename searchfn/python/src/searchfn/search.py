@@ -1,12 +1,14 @@
+from __future__ import annotations
+
 from collections import defaultdict
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .utils import DEFAULT_PREFIX, tokenize
 
 
 def _normalize_limit(limit: int) -> int:
     if isinstance(limit, bool):
-        raise ValueError("limit must be a positive integer")
+        raise ValueError("limit must be a positive integer")  # noqa: TRY004 - bool is an invalid integer value.
     normalized = int(limit)
     if normalized <= 0:
         raise ValueError("limit must be a positive integer")
@@ -17,10 +19,10 @@ async def search_index(
     schema: Any,
     db: Any,
     query: str,
-    model: Optional[str] = None,
+    model: str | None = None,
     limit: int = 20,
     table_prefix: str = DEFAULT_PREFIX,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     del schema
     index_table = f"{table_prefix}index"
     tokens = tokenize(query)
@@ -29,7 +31,7 @@ async def search_index(
     if not tokens:
         return []
 
-    matches: List[Dict[str, Any]] = []
+    matches: list[dict[str, Any]] = []
     for token in dict.fromkeys(tokens):
         where_clause = [{"field": "term", "operator": "eq", "value": token}]
         if model:
@@ -38,7 +40,7 @@ async def search_index(
         token_matches = await db.find_many(index_table, where_clause)
         matches.extend(token_matches)
 
-    scores: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"score": 0, "matches": set()})
+    scores: dict[str, dict[str, Any]] = defaultdict(lambda: {"score": 0, "matches": set()})
     for match in matches:
         key = f"{match['model']}:{match['recordId']}"
         entry = scores[key]

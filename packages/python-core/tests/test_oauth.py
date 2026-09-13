@@ -129,7 +129,7 @@ async def test_start_persists_default_scopes_and_reuses_them_during_callback() -
             {
                 "providerId": "google",
                 "redirectUri": "https://app.example.com/callback",
-                "subject": OAuthBrowserAuthSubject.model_validate({"kind": "browser"}),
+                "subject": OAuthBrowserAuthSubject.model_validate({"kind": "browser", "intentId": "test-intent"}),
             }
         )
     )
@@ -164,7 +164,7 @@ async def test_start_rejects_non_allowlisted_redirect_uri_and_emits_failure() ->
                 {
                     "providerId": "google",
                     "redirectUri": "https://evil.example.com/callback",
-                    "subject": OAuthBrowserAuthSubject.model_validate({"kind": "browser"}),
+                    "subject": OAuthBrowserAuthSubject.model_validate({"kind": "browser", "intentId": "test-intent"}),
                     "requestId": "req_blocked",
                 }
             )

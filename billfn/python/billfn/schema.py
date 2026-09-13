@@ -4,13 +4,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from superfunctions.db import TableSchema
-
 BILLFN_SCHEMA_VERSION = 3
 
 
 def get_schema() -> Dict[str, Any]:
-    billing_accounts: TableSchema = {
+    billing_accounts: Dict[str, Any] = {
         "modelName": "billingAccounts",
         "fields": {
             "id": {"type": "string", "required": True, "unique": True},
@@ -24,7 +22,7 @@ def get_schema() -> Dict[str, Any]:
         },
     }
 
-    subscriptions: TableSchema = {
+    subscriptions: Dict[str, Any] = {
         "modelName": "subscriptions",
         "fields": {
             "id": {"type": "string", "required": True, "unique": True},
@@ -61,7 +59,7 @@ def get_schema() -> Dict[str, Any]:
         ],
     }
 
-    checkout_sessions: TableSchema = {
+    checkout_sessions: Dict[str, Any] = {
         "modelName": "checkoutSessions",
         "fields": {
             "checkoutSessionId": {"type": "string", "required": True, "unique": True},
@@ -87,7 +85,7 @@ def get_schema() -> Dict[str, Any]:
         ],
     }
 
-    entitlement_snapshots: TableSchema = {
+    entitlement_snapshots: Dict[str, Any] = {
         "modelName": "entitlementSnapshots",
         "fields": {
             "id": {"type": "string", "required": True, "unique": True},
@@ -107,7 +105,7 @@ def get_schema() -> Dict[str, Any]:
         ],
     }
 
-    usage_meters: TableSchema = {
+    usage_meters: Dict[str, Any] = {
         "modelName": "usageMeters",
         "fields": {
             "id": {"type": "string", "required": True, "unique": True},
@@ -121,7 +119,7 @@ def get_schema() -> Dict[str, Any]:
         ],
     }
 
-    usage_ledger: TableSchema = {
+    usage_ledger: Dict[str, Any] = {
         "modelName": "usageLedger",
         "fields": {
             "id": {"type": "string", "required": True, "unique": True},
@@ -132,7 +130,7 @@ def get_schema() -> Dict[str, Any]:
         },
     }
 
-    webhook_receipts: TableSchema = {
+    webhook_receipts: Dict[str, Any] = {
         "modelName": "webhookReceipts",
         "fields": {
             "id": {"type": "string", "required": True, "unique": True},
@@ -151,7 +149,7 @@ def get_schema() -> Dict[str, Any]:
         ],
     }
 
-    billing_events: TableSchema = {
+    billing_events: Dict[str, Any] = {
         "modelName": "billingEvents",
         "fields": {
             "id": {"type": "string", "required": True, "unique": True},
@@ -162,7 +160,7 @@ def get_schema() -> Dict[str, Any]:
         },
     }
 
-    refunds: TableSchema = {
+    refunds: Dict[str, Any] = {
         "modelName": "refunds",
         "fields": {
             "id": {"type": "string", "required": True, "unique": True},
@@ -192,7 +190,7 @@ def get_schema() -> Dict[str, Any]:
         ],
     }
 
-    subscription_change_requests: TableSchema = {
+    subscription_change_requests: Dict[str, Any] = {
         "modelName": "subscriptionChangeRequests",
         "fields": {
             "id": {"type": "string", "required": True, "unique": True},
@@ -218,7 +216,7 @@ def get_schema() -> Dict[str, Any]:
         ],
     }
 
-    reconciliation_jobs: TableSchema = {
+    reconciliation_jobs: Dict[str, Any] = {
         "modelName": "reconciliationJobs",
         "fields": {
             "id": {"type": "string", "required": True, "unique": True},
@@ -252,7 +250,7 @@ def get_schema() -> Dict[str, Any]:
         ],
     }
 
-    reconciliation_cursors: TableSchema = {
+    reconciliation_cursors: Dict[str, Any] = {
         "modelName": "reconciliationCursors",
         "fields": {
             "id": {"type": "string", "required": True, "unique": True},
@@ -271,7 +269,7 @@ def get_schema() -> Dict[str, Any]:
         ],
     }
 
-    schemas: List[TableSchema] = [
+    schemas: List[Dict[str, Any]] = [
         billing_accounts,
         subscriptions,
         checkout_sessions,

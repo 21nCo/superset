@@ -254,39 +254,46 @@ class MemoryAdapter:
         return self._storage[model]
 
     def _matches_where(self, record: Dict[str, Any], where: List[WhereClause]) -> bool:
-        """Check if a record matches all where conditions."""
-        for condition in where:
-            field = condition.field
-            operator = condition.operator
-            value = condition.value
+        """Combine predicates left-to-right, matching the SQLAlchemy adapter."""
+        if not where:
+            return True
+        matched = self._matches_condition(record, where[0])
+        for condition in where[1:]:
+            current = self._matches_condition(record, condition)
+            matched = (matched or current) if condition.connector == "OR" else (matched and current)
+        return matched
 
-            record_value = record.get(field)
+    def _matches_condition(self, record: Dict[str, Any], condition: WhereClause) -> bool:
+        field = condition.field
+        operator = condition.operator
+        value = condition.value
 
-            if operator == Operator.EQ or operator == "eq":
-                if record_value != value:
-                    return False
-            elif operator == Operator.NE or operator == "ne":
-                if record_value == value:
-                    return False
-            elif operator == Operator.GT or operator == "gt":
-                if record_value is None or record_value <= value:
-                    return False
-            elif operator == Operator.GTE or operator == "gte":
-                if record_value is None or record_value < value:
-                    return False
-            elif operator == Operator.LT or operator == "lt":
-                if record_value is None or record_value >= value:
-                    return False
-            elif operator == Operator.LTE or operator == "lte":
-                if record_value is None or record_value > value:
-                    return False
-            elif operator == Operator.IN or operator == "in":
-                if record_value not in value:
-                    return False
-            elif operator == Operator.CONTAINS or operator == "contains":
-                if record_value is None or value not in record_value:
-                    return False
+        record_value = record.get(field)
 
+        if operator == Operator.EQ or operator == "eq":
+            if record_value != value:
+                return False
+        elif operator == Operator.NE or operator == "ne":
+            if record_value == value:
+                return False
+        elif operator == Operator.GT or operator == "gt":
+            if record_value is None or record_value <= value:
+                return False
+        elif operator == Operator.GTE or operator == "gte":
+            if record_value is None or record_value < value:
+                return False
+        elif operator == Operator.LT or operator == "lt":
+            if record_value is None or record_value >= value:
+                return False
+        elif operator == Operator.LTE or operator == "lte":
+            if record_value is None or record_value > value:
+                return False
+        elif operator == Operator.IN or operator == "in":
+            if record_value not in value:
+                return False
+        elif operator == Operator.CONTAINS or operator == "contains":
+            if record_value is None or value not in record_value:
+                return False
         return True
 
     async def clear_all(self) -> None:

@@ -1,4 +1,6 @@
-from typing import Any, Dict, Optional
+from __future__ import annotations
+
+from typing import Any
 
 from .utils import DEFAULT_PREFIX, get_schema_models, tokenize
 
@@ -58,9 +60,9 @@ async def _delete_existing_index_rows(
 async def index_data(
     schema: Any,
     db: Any,
-    model: Optional[str] = None,
+    model: str | None = None,
     table_prefix: str = DEFAULT_PREFIX,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     index_table = f"{table_prefix}index"
     models = get_schema_models(schema)
 
