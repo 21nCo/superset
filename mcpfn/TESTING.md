@@ -1,6 +1,6 @@
 # Testing and CI
 
-A regression-free MCP project needs five independent layers.
+A regression-free MCP project needs six independent layers.
 
 Scenario arrays remain readable for compatibility, while new portable bundles
 use the version 1 `mcpfn.scenarios` artifact. Every scenario can declare a
@@ -13,6 +13,7 @@ the maintained compatibility matrix.
 | --- | --- | --- |
 | Unit/domain | Handler logic, authorization, persistence, policy | Existing package tests |
 | Contract | Tools, resources, prompts, tasks, extensions, host requirements | Hashed manifest plus `mcpfn diff` |
+| Deterministic profile compatibility | Authenticated effective catalogs, schema portability, projection/enrichment symmetry, trusted fixtures, diagnostic fidelity | `runMcpFnClientProfileContracts` plus `mcpfn test-profiles` |
 | Semantic protocol | Real client/server calls and stable business envelopes | `@mcpfn/testing` scenarios |
 | Authentication | API keys, OAuth challenges, scopes, audience, expiry, revocation, PKCE, refresh, and client metadata | `@mcpfn/testing/auth` and `@mcpfn/testing/playwright` |
 | Protocol conformance | Initialization, JSON-RPC, transport, and MCP specification behavior | Official `@modelcontextprotocol/conformance` via `mcpfn conformance` |
@@ -29,6 +30,51 @@ mcpfn diff ./mcpfn.manifest.json ./candidate.manifest.json --fail-on-behavioral
 For a registry export, pass both `--name` and `--version`. Exit code `1` means the diff found a breaking change, or a behavioral change when requested. Exit code `2` means the source or command was invalid.
 
 Review additive changes before replacing the committed baseline. A compatible diff means old inputs remain structurally accepted; it does not prove the new tool is authorized or semantically correct.
+
+## Deterministic client profiles
+
+Client-profile contracts exercise the catalog and calls through the production
+`@mcpfn/client` target/session engine. Configure at least one generic case and
+each authenticated profile that the consumer supports. Every case gets an
+independent target connection so one authentication, listing, call, or close
+failure does not abort later profiles.
+
+The suite hashes the complete effective `tools/list` response, records
+value-free per-tool hashes, validates input and output schemas using their
+declared draft-07, 2019-09, or 2020-12 dialect, and executes only explicit
+fixtures. Fixtures classified `idempotent` or `non-idempotent` remain
+incomplete unless `allowSideEffects` is explicitly enabled. Captured
+production-failure fixtures use the same call path and are never serialized
+with their argument values.
+
+```ts
+import {
+  createMcpFnClientProfileSnapshot,
+  runMcpFnClientProfileContracts,
+} from "@mcpfn/testing";
+
+const report = await runMcpFnClientProfileContracts({
+  profiles: [{
+    id: "consumer/trusted",
+    version: "1",
+    target: authenticatedTarget,
+    expectedSnapshot: reviewedSnapshot,
+    fixtures: [{
+      name: "minimal lookup",
+      tool: "lookup",
+      arguments: { query: "example" },
+      sideEffect: "read-only",
+      source: "minimal-valid",
+    }],
+  }],
+});
+```
+
+Snapshot changes are explicit review artifacts. `diffMcpFnClientProfileSnapshots`
+classifies added, removed, and modified advertised tools; removed tools are
+incompatible and modified tools can be made CI-failing with
+`mcpfn diff-profiles --fail-on-behavioral`. Portability warnings are
+policy-configurable, while invalid dialects and unresolved schemas always fail.
 
 ## Semantic scenarios
 
@@ -79,7 +125,7 @@ Keep application-specific UI selectors, real-provider secrets, workspace authori
 
 | Level | What it proves | What it does not prove |
 | --- | --- | --- |
-| Workspace | Source, focused tests, and builds pass in this checkout. | Packed-package resolution or any live environment. |
+| Workspace | Source, focused tests, profile contracts, and builds pass in this checkout. | Packed-package resolution or any live environment. |
 | Installed | Packed tarballs install and execute in a clean consumer. | Registry publication or live-provider behavior. |
 | Published | A named registry version resolves and executes. | A particular deployment or host authorization. |
 | Controlled live | A controlled endpoint completes protocol and OAuth checks. | Production deployment, production data, or end-user host acceptance. |

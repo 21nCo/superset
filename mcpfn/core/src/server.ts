@@ -4,7 +4,10 @@ import {
   WebStandardStreamableHTTPServerTransport,
   type HandleRequestOptions,
 } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import type { TaskMessageQueue, TaskStore } from "@modelcontextprotocol/sdk/experimental/tasks/interfaces.js";
+import type {
+  TaskMessageQueue,
+  TaskStore,
+} from "@modelcontextprotocol/sdk/experimental/tasks/interfaces.js";
 import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
@@ -29,7 +32,17 @@ import {
   type ServerCapabilities,
 } from "@modelcontextprotocol/sdk/types.js";
 
-import { errorResult } from "./errors.js";
+import {
+  buildMcpFnEffectiveCatalog,
+  enrichMcpFnClientProfileCall,
+  resolveMcpFnClientProfile,
+  validateMcpFnClientProfiles,
+  type McpFnClientProfileEvidence,
+  type McpFnClientProfileLifecycleStage,
+  type McpFnClientProfilesOptions,
+  type McpFnResolvedClientProfile,
+} from "./client-profiles.js";
+import { errorResult, McpFnError, McpFnClientProfileError, McpFnValidationError, McpFnOutputValidationError } from "./errors.js";
 import { assertMcpAppContracts } from "./apps.js";
 import { createManifest, type CreateManifestOptions } from "./manifest.js";
 import type { McpFnRegistry } from "./registry.js";
@@ -65,6 +78,8 @@ export interface McpFnServerOptions<TContext> extends CreateManifestOptions {
   toolVisibility?: (
     input: McpFnToolVisibilityInput<TContext>,
   ) => boolean | Promise<boolean>;
+  /** Authenticated client catalog projection and trusted call enrichment. */
+  clientProfiles?: McpFnClientProfilesOptions<TContext>;
   /** Maximum entries returned by each list request. Defaults to 100. */
   pageSize?: number;
   additionalCapabilities?: ServerCapabilities;
@@ -75,19 +90,20 @@ export interface McpFnServerOptions<TContext> extends CreateManifestOptions {
   enforceStrictCapabilities?: boolean;
 }
 
-export type McpFnWebStandardHandlerOptions<TContext> =
-  ConstructorParameters<typeof WebStandardStreamableHTTPServerTransport>[0] & {
-    /**
-     * Configure the live isolated server before its transport connects. This
-     * runs once per stateless request, or once per session initialization
-     * attempt before the SDK validates the request. Rejected attempts may
-     * therefore invoke it without retaining a session. This is the correct
-     * place to attach protocol instrumentation.
-     */
-    configureRequestServer?: (
-      server: McpFnServer<TContext>,
-    ) => void | Promise<void>;
-  };
+export type McpFnWebStandardHandlerOptions<TContext> = ConstructorParameters<
+  typeof WebStandardStreamableHTTPServerTransport
+>[0] & {
+  /**
+   * Configure the live isolated server before its transport connects. This
+   * runs once per stateless request, or once per session initialization
+   * attempt before the SDK validates the request. Rejected attempts may
+   * therefore invoke it without retaining a session. This is the correct
+   * place to attach protocol instrumentation.
+   */
+  configureRequestServer?: (
+    server: McpFnServer<TContext>,
+  ) => void | Promise<void>;
+};
 
 function mergeCapabilities(
   base: ServerCapabilities,
@@ -130,17 +146,26 @@ function page<T>(
   let offset = 0;
   if (cursor !== undefined) {
     const match = /^mcpfn:(\d+)$/.exec(cursor);
-    if (!match) throw new McpError(ErrorCode.InvalidParams, "Invalid McpFn pagination cursor");
+    if (!match)
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        "Invalid McpFn pagination cursor",
+      );
     offset = Number(match[1]);
     if (!Number.isSafeInteger(offset) || offset > values.length) {
-      throw new McpError(ErrorCode.InvalidParams, "Expired McpFn pagination cursor");
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        "Expired McpFn pagination cursor",
+      );
     }
   }
   const selected = values.slice(offset, offset + pageSize);
   const nextOffset = offset + selected.length;
   return {
     values: selected,
-    ...(nextOffset < values.length ? { nextCursor: `mcpfn:${nextOffset}` } : {}),
+    ...(nextOffset < values.length
+      ? { nextCursor: `mcpfn:${nextOffset}` }
+      : {}),
   };
 }
 
@@ -148,7 +173,10 @@ async function releaseAfterResponse(
   response: Response,
   release: () => Promise<void>,
 ): Promise<Response> {
-  if (!response.body || !response.headers.get("content-type")?.includes("text/event-stream")) {
+  if (
+    !response.body ||
+    !response.headers.get("content-type")?.includes("text/event-stream")
+  ) {
     await release();
     return response;
   }
@@ -193,6 +221,7 @@ export class McpFnServer<TContext = undefined> {
     extra: McpFnRequestExtra,
   ) => TContext | Promise<TContext>;
   private readonly toolVisibility?: McpFnServerOptions<TContext>["toolVisibility"];
+  private readonly clientProfiles?: McpFnClientProfilesOptions<TContext>;
   private readonly manifestOptions: CreateManifestOptions;
   private readonly pageSize: number;
   private readonly serverOptions: McpFnServerOptions<TContext>;
@@ -206,6 +235,8 @@ export class McpFnServer<TContext = undefined> {
     assertMcpAppContracts(this.registry);
     this.contextFactory = options.context ?? (() => undefined as TContext);
     this.toolVisibility = options.toolVisibility;
+    this.clientProfiles = options.clientProfiles;
+    if (this.clientProfiles) validateMcpFnClientProfiles(this.clientProfiles);
     this.pageSize = options.pageSize ?? 100;
     if (!Number.isInteger(this.pageSize) || this.pageSize < 1) {
       throw new Error("McpFn pageSize must be a positive integer");
@@ -231,154 +262,320 @@ export class McpFnServer<TContext = undefined> {
       clientRequirements: options.clientRequirements,
     };
     const { instructions, ...implementation } = options.info;
-    this.protocol = new Server(
-      implementation,
-      {
-        capabilities: this.capabilities,
-        instructions,
-        taskStore: options.taskStore,
-        taskMessageQueue: options.taskMessageQueue,
-        defaultTaskPollInterval: options.defaultTaskPollInterval,
-        maxTaskQueueSize: options.maxTaskQueueSize,
-        enforceStrictCapabilities: options.enforceStrictCapabilities,
-        debouncedNotificationMethods: [
-          "notifications/tools/list_changed",
-          "notifications/resources/list_changed",
-          "notifications/prompts/list_changed",
-        ],
-      },
-    );
+    this.protocol = new Server(implementation, {
+      capabilities: this.capabilities,
+      instructions,
+      taskStore: options.taskStore,
+      taskMessageQueue: options.taskMessageQueue,
+      defaultTaskPollInterval: options.defaultTaskPollInterval,
+      maxTaskQueueSize: options.maxTaskQueueSize,
+      enforceStrictCapabilities: options.enforceStrictCapabilities,
+      debouncedNotificationMethods: [
+        "notifications/tools/list_changed",
+        "notifications/resources/list_changed",
+        "notifications/prompts/list_changed",
+      ],
+    });
     this.installHandlers();
   }
 
   private installHandlers(): void {
     if (this.capabilities.tools) {
-      this.protocol.setRequestHandler(ListToolsRequestSchema, async (request, extra) => {
-        const tools = this.registry.listTools();
-        const visibleTools = this.toolVisibility
-          ? await this.filterVisibleTools(tools, await this.contextFactory(extra), extra)
-          : tools;
-        const result = page(visibleTools, request.params?.cursor, this.pageSize);
-        return { tools: result.values, ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}) };
-      });
-      this.protocol.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
-        const context = await this.contextFactory(extra);
-        const listedTool = this.registry.listTools().find((tool) => tool.name === request.params.name);
-        if (!listedTool || (this.toolVisibility
-          && !(await this.toolVisibility({ tool: listedTool, context, extra })))) {
-          throw new McpError(ErrorCode.MethodNotFound, `Tool ${request.params.name} not found`);
-        }
-        const taskSupport = this.registry.taskSupport(request.params.name);
-        const isTaskRequest = Boolean(request.params.task);
-        if (taskSupport === "required" && !isTaskRequest) {
-          throw new McpError(
-            ErrorCode.MethodNotFound,
-            `Tool ${request.params.name} requires task augmentation`,
-          );
-        }
-        if (taskSupport === "forbidden" && isTaskRequest) {
-          throw new McpError(
-            ErrorCode.MethodNotFound,
-            `Tool ${request.params.name} does not support task augmentation`,
-          );
-        }
-        try {
-          if (isTaskRequest) {
-            if (!extra.taskStore) throw new Error("No task store is available");
-            return await this.registry.createToolTask(
-              request.params.name,
-              request.params.arguments,
-              context,
-              extra as McpFnTaskRequestExtra,
-            );
+      this.protocol.setRequestHandler(
+        ListToolsRequestSchema,
+        async (request, extra) => {
+          const tools = this.registry.listTools();
+          if (!this.toolVisibility && !this.clientProfiles) {
+            const result = page(tools, request.params?.cursor, this.pageSize);
+            return {
+              tools: result.values,
+              ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
+            };
           }
-          return await this.registry.callTool(
+          const context = await this.contextFactory(extra);
+          const visibleTools = await this.filterVisibleTools(
+            tools,
+            context,
+            extra,
+          );
+          const resolved = await this.resolveProfile(context, extra);
+          const effective = await this.buildEffectiveCatalog(
+            visibleTools,
+            resolved,
+            tools,
+          );
+          const result = page(effective, request.params?.cursor, this.pageSize);
+          return {
+            tools: result.values,
+            ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
+          };
+        },
+      );
+      this.protocol.setRequestHandler(
+        CallToolRequestSchema,
+        async (request, extra) => {
+          const context = await this.contextFactory(extra);
+          const isTaskRequest = Boolean(request.params.task);
+          let resolved: McpFnResolvedClientProfile<TContext> | undefined;
+          let currentStage: McpFnClientProfileLifecycleStage =
+            "profile-resolution";
+          let taskOutputReported = false;
+          try {
+            resolved = await this.resolveProfile(context, extra);
+            currentStage = "catalog-projection";
+            const canonicalTools = this.registry.listTools();
+            const visibleTools = await this.filterVisibleTools(
+              canonicalTools,
+              context,
+              extra,
+            );
+            const effectiveTools = await this.buildEffectiveCatalog(
+              visibleTools,
+              resolved,
+              canonicalTools,
+            );
+            const listedTool = effectiveTools.find(
+              (tool) => tool.name === request.params.name,
+            );
+            if (!listedTool) {
+              throw new McpError(
+                ErrorCode.MethodNotFound,
+                `Tool ${request.params.name} not found`,
+              );
+            }
+            const taskSupport = this.registry.taskSupport(request.params.name);
+            if (taskSupport === "required" && !isTaskRequest) {
+              throw new McpError(
+                ErrorCode.MethodNotFound,
+                `Tool ${request.params.name} requires task augmentation`,
+              );
+            }
+            if (taskSupport === "forbidden" && isTaskRequest) {
+              throw new McpError(
+                ErrorCode.MethodNotFound,
+                `Tool ${request.params.name} does not support task augmentation`,
+              );
+            }
+            currentStage = "argument-enrichment";
+            await this.emitProfileEvidence({
+              stage: currentStage,
+              outcome: "started",
+              profile: this.profileReference(resolved),
+              tool: request.params.name,
+            });
+            const enrichedArguments = await enrichMcpFnClientProfileCall({
+              resolved,
+              tool: listedTool,
+              arguments: request.params.arguments,
+            });
+            await this.emitProfileEvidence({
+              stage: currentStage,
+              outcome: "succeeded",
+              profile: this.profileReference(resolved),
+              tool: request.params.name,
+            });
+            const completedStages = new Set<McpFnClientProfileLifecycleStage>();
+            const observer = {
+              onTaskOutput: async (outcome: "succeeded" | "failed", error?: unknown) => {
+                taskOutputReported = true;
+                completedStages.delete("output-validation");
+                await this.emitProfileEvidence({
+                  stage: "output-validation", outcome,
+                  profile: this.profileReference(resolved),
+                  tool: request.params.name,
+                  ...(outcome === "failed" ? { code: "MCPFN_INVALID_OUTPUT",
+                    ...(error instanceof McpFnOutputValidationError ? { issues: (error.details as { issues?: McpFnClientProfileEvidence["issues"] } | undefined)?.issues } : {}),
+                  } : {}),
+                });
+              },
+              onStage: (
+                stage: "input-validation" | "handler" | "output-validation",
+              ) => {
+                currentStage = stage;
+                completedStages.add(stage);
+              },
+            };
+            if (isTaskRequest) {
+              if (!extra.taskStore)
+                throw new Error("No task store is available");
+              const result = await this.registry.createToolTask(
+                request.params.name,
+                enrichedArguments,
+                context,
+                extra as McpFnTaskRequestExtra,
+                observer,
+              );
+              await this.emitCompletedToolStages(
+                completedStages,
+                resolved,
+                request.params.name,
+              );
+              return result;
+            }
+            const result = await this.registry.callTool(
+              request.params.name,
+              enrichedArguments,
+              context,
+              extra,
+              observer,
+            );
+            await this.emitCompletedToolStages(
+              completedStages,
+              resolved,
+              request.params.name,
+            );
+            return result;
+          } catch (error) {
+            const profile = this.profileReference(resolved);
+            const details =
+              error instanceof McpFnError &&
+              error.details &&
+              typeof error.details === "object" &&
+              !Array.isArray(error.details)
+                ? (error.details as Record<string, unknown>)
+                : {};
+            const issues = (error instanceof McpFnValidationError || error instanceof McpFnOutputValidationError) && ["input-validation", "output-validation"].includes(currentStage) && Array.isArray(details.issues)
+              ? (details.issues as McpFnClientProfileEvidence["issues"])
+              : undefined;
+            if (!((currentStage as McpFnClientProfileLifecycleStage) === "output-validation" && taskOutputReported) && !["profile-resolution", "catalog-projection"].includes(currentStage)) await this.emitProfileEvidence({
+              stage: currentStage,
+              outcome: "failed",
+              profile,
+              tool: request.params.name,
+              code:
+                error instanceof McpFnError ? error.code : "MCPFN_TOOL_ERROR",
+              ...(issues ? { issues } : {}),
+            });
+            if (error instanceof McpError) throw error;
+            const lifecycleError =
+              error instanceof McpFnError
+                ? new McpFnError(error.code, error.message, {
+                    ...details,
+                    lifecycleStage: currentStage,
+                    ...(profile ? { profile } : {}),
+                  })
+                : error;
+            if (isTaskRequest) throw lifecycleError;
+            return errorResult(lifecycleError, {
+              includeStructuredContent: !this.registry.hasOutputSchema(
+                request.params.name,
+              ),
+            });
+          }
+        },
+      );
+    }
+
+    if (this.capabilities.resources) {
+      this.protocol.setRequestHandler(
+        ListResourcesRequestSchema,
+        async (request, extra) => {
+          const context = await this.contextFactory(extra);
+          const result = page(
+            await this.registry.listResources(context, extra),
+            request.params?.cursor,
+            this.pageSize,
+          );
+          return {
+            resources: result.values,
+            ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
+          };
+        },
+      );
+      this.protocol.setRequestHandler(
+        ListResourceTemplatesRequestSchema,
+        async (request) => {
+          const result = page(
+            this.registry.listResourceTemplates(),
+            request.params?.cursor,
+            this.pageSize,
+          );
+          return {
+            resourceTemplates: result.values,
+            ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
+          };
+        },
+      );
+      this.protocol.setRequestHandler(
+        ReadResourceRequestSchema,
+        async (request, extra) => {
+          const context = await this.contextFactory(extra);
+          return this.registry.readResource(request.params.uri, context, extra);
+        },
+      );
+      if (this.capabilities.resources.subscribe) {
+        this.protocol.setRequestHandler(
+          SubscribeRequestSchema,
+          async (request, extra) => {
+            const context = await this.contextFactory(extra);
+            await this.registry.changeSubscription(
+              request.params.uri,
+              true,
+              context,
+              extra,
+            );
+            return {};
+          },
+        );
+        this.protocol.setRequestHandler(
+          UnsubscribeRequestSchema,
+          async (request, extra) => {
+            const context = await this.contextFactory(extra);
+            await this.registry.changeSubscription(
+              request.params.uri,
+              false,
+              context,
+              extra,
+            );
+            return {};
+          },
+        );
+      }
+    }
+
+    if (this.capabilities.prompts) {
+      this.protocol.setRequestHandler(
+        ListPromptsRequestSchema,
+        async (request) => {
+          const result = page(
+            this.registry.listPrompts(),
+            request.params?.cursor,
+            this.pageSize,
+          );
+          return {
+            prompts: result.values,
+            ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
+          };
+        },
+      );
+      this.protocol.setRequestHandler(
+        GetPromptRequestSchema,
+        async (request, extra) => {
+          const context = await this.contextFactory(extra);
+          return this.registry.getPrompt(
             request.params.name,
             request.params.arguments,
             context,
             extra,
           );
-        } catch (error) {
-          if (isTaskRequest) throw error;
-          return errorResult(error, {
-            includeStructuredContent: !this.registry.hasOutputSchema(request.params.name),
-          });
-        }
-      });
-    }
-
-    if (this.capabilities.resources) {
-      this.protocol.setRequestHandler(ListResourcesRequestSchema, async (request, extra) => {
-        const context = await this.contextFactory(extra);
-        const result = page(
-          await this.registry.listResources(context, extra),
-          request.params?.cursor,
-          this.pageSize,
-        );
-        return {
-          resources: result.values,
-          ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
-        };
-      });
-      this.protocol.setRequestHandler(ListResourceTemplatesRequestSchema, async (request) => {
-        const result = page(
-          this.registry.listResourceTemplates(),
-          request.params?.cursor,
-          this.pageSize,
-        );
-        return {
-          resourceTemplates: result.values,
-          ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
-        };
-      });
-      this.protocol.setRequestHandler(ReadResourceRequestSchema, async (request, extra) => {
-        const context = await this.contextFactory(extra);
-        return this.registry.readResource(request.params.uri, context, extra);
-      });
-      if (this.capabilities.resources.subscribe) {
-        this.protocol.setRequestHandler(SubscribeRequestSchema, async (request, extra) => {
-          const context = await this.contextFactory(extra);
-          await this.registry.changeSubscription(request.params.uri, true, context, extra);
-          return {};
-        });
-        this.protocol.setRequestHandler(UnsubscribeRequestSchema, async (request, extra) => {
-          const context = await this.contextFactory(extra);
-          await this.registry.changeSubscription(request.params.uri, false, context, extra);
-          return {};
-        });
-      }
-    }
-
-    if (this.capabilities.prompts) {
-      this.protocol.setRequestHandler(ListPromptsRequestSchema, async (request) => {
-        const result = page(this.registry.listPrompts(), request.params?.cursor, this.pageSize);
-        return {
-          prompts: result.values,
-          ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
-        };
-      });
-      this.protocol.setRequestHandler(GetPromptRequestSchema, async (request, extra) => {
-        const context = await this.contextFactory(extra);
-        return this.registry.getPrompt(
-          request.params.name,
-          request.params.arguments,
-          context,
-          extra,
-        );
-      });
+        },
+      );
     }
 
     if (this.capabilities.completions) {
-      this.protocol.setRequestHandler(CompleteRequestSchema, async (request, extra) => {
-        const context = await this.contextFactory(extra);
-        return this.registry.complete(
-          request.params.ref,
-          request.params.argument,
-          request.params.context?.arguments,
-          context,
-          extra,
-        );
-      });
+      this.protocol.setRequestHandler(
+        CompleteRequestSchema,
+        async (request, extra) => {
+          const context = await this.contextFactory(extra);
+          return this.registry.complete(
+            request.params.ref,
+            request.params.argument,
+            request.params.context?.arguments,
+            context,
+            extra,
+          );
+        },
+      );
     }
   }
 
@@ -388,9 +585,122 @@ export class McpFnServer<TContext = undefined> {
     extra: McpFnRequestExtra,
   ): Promise<McpFnListedTool[]> {
     if (!this.toolVisibility) return tools;
-    const decisions = await Promise.all(tools.map((tool) =>
-      this.toolVisibility!({ tool, context, extra })));
+    const decisions = await Promise.all(
+      tools.map((tool) => this.toolVisibility!({ tool, context, extra })),
+    );
     return tools.filter((_, index) => decisions[index]);
+  }
+
+  private profileReference(
+    resolved: McpFnResolvedClientProfile<TContext> | undefined,
+  ) {
+    return resolved?.profile
+      ? { id: resolved.profile.id, version: resolved.profile.version }
+      : undefined;
+  }
+
+  private async resolveProfile(
+    context: TContext,
+    extra: McpFnRequestExtra,
+  ): Promise<McpFnResolvedClientProfile<TContext>> {
+    const reportedClient = {
+      info: this.protocol.getClientVersion(),
+      capabilities: this.protocol.getClientCapabilities(),
+    };
+    if (!this.clientProfiles) return { context, extra, reportedClient };
+    await this.emitProfileEvidence({
+      stage: "profile-resolution",
+      outcome: "started",
+    });
+    try {
+      const resolved = await resolveMcpFnClientProfile(this.clientProfiles, {
+        context,
+        extra,
+        reportedClient,
+      });
+      await this.emitProfileEvidence({
+        stage: "profile-resolution",
+        outcome: "succeeded",
+        profile: this.profileReference(resolved),
+      });
+      return resolved;
+    } catch (error) {
+      await this.emitProfileEvidence({
+        stage: "profile-resolution",
+        outcome: "failed",
+        code:
+          error instanceof McpFnError
+            ? error.code
+            : "MCPFN_PROFILE_RESOLUTION_FAILED",
+      });
+      throw error;
+    }
+  }
+
+  private async buildEffectiveCatalog(
+    tools: McpFnListedTool[],
+    resolved: McpFnResolvedClientProfile<TContext>,
+    knownTools: McpFnListedTool[] = tools,
+  ): Promise<McpFnListedTool[]> {
+    await this.emitProfileEvidence({
+      stage: "catalog-projection",
+      outcome: "started",
+      profile: this.profileReference(resolved),
+    });
+    try {
+      const result = await buildMcpFnEffectiveCatalog({
+        canonicalTools: tools,
+        knownTools,
+        resolved,
+      });
+      await this.emitProfileEvidence({
+        stage: "catalog-projection",
+        outcome: "succeeded",
+        profile: this.profileReference(resolved),
+      });
+      return result.tools;
+    } catch (error) {
+      await this.emitProfileEvidence({
+        stage: "catalog-projection",
+        outcome: "failed",
+        profile: this.profileReference(resolved),
+        code:
+          error instanceof McpFnError
+            ? error.code
+            : "MCPFN_CATALOG_PROJECTION_FAILED",
+      });
+      throw error;
+    }
+  }
+
+  private async emitCompletedToolStages(
+    stages: Set<McpFnClientProfileLifecycleStage>,
+    resolved: McpFnResolvedClientProfile<TContext>,
+    tool: string,
+  ): Promise<void> {
+    for (const stage of [
+      "input-validation",
+      "handler",
+      "output-validation",
+    ] as const) {
+      if (!stages.has(stage)) continue;
+      await this.emitProfileEvidence({
+        stage,
+        outcome: "succeeded",
+        profile: this.profileReference(resolved),
+        tool,
+      });
+    }
+  }
+
+  private async emitProfileEvidence(
+    event: Omit<McpFnClientProfileEvidence, "formatVersion">,
+  ): Promise<void> {
+    try {
+      await this.clientProfiles?.evidence?.({ formatVersion: 1, ...event });
+    } catch {
+      // Evidence sinks are observational and must never alter request behavior.
+    }
   }
 
   manifest(): McpFnManifest {
@@ -398,7 +708,8 @@ export class McpFnServer<TContext = undefined> {
   }
 
   async connect(transport: Transport): Promise<void> {
-    if (this.connected) throw new Error("McpFnServer is already connected to a transport");
+    if (this.connected)
+      throw new Error("McpFnServer is already connected to a transport");
     await this.protocol.connect(transport);
     this.connected = true;
   }
@@ -409,12 +720,19 @@ export class McpFnServer<TContext = undefined> {
 
   async createWebStandardHandler(
     options: McpFnWebStandardHandlerOptions<TContext> = {},
-  ): Promise<(request: Request, options?: HandleRequestOptions) => Promise<Response>> {
+  ): Promise<
+    (request: Request, options?: HandleRequestOptions) => Promise<Response>
+  > {
     const { configureRequestServer, ...transportOptions } = options;
     if (!transportOptions.sessionIdGenerator) {
+      if (this.clientProfiles?.profiles.some((profile) => profile.requiresReportedClient !== false)) {
+        throw new McpFnClientProfileError("MCPFN_PROFILE_REQUIRES_SESSION", "Client profiles require sessionIdGenerator to retain initialize metadata; stateless-independent profiles must declare requiresReportedClient: false");
+      }
       return async (request: Request, handleOptions?: HandleRequestOptions) => {
         const requestServer = new McpFnServer(this.serverOptions);
-        const transport = new WebStandardStreamableHTTPServerTransport(transportOptions);
+        const transport = new WebStandardStreamableHTTPServerTransport(
+          transportOptions,
+        );
         this.requestServers.add(requestServer);
         let released = false;
         const release = async () => {
@@ -427,7 +745,10 @@ export class McpFnServer<TContext = undefined> {
         try {
           await configureRequestServer?.(requestServer);
           await requestServer.connect(transport);
-          const response = await transport.handleRequest(request, handleOptions);
+          const response = await transport.handleRequest(
+            request,
+            handleOptions,
+          );
           return releaseAfterResponse(response, release);
         } catch (error) {
           await release();
@@ -436,23 +757,29 @@ export class McpFnServer<TContext = undefined> {
       };
     }
 
-    const sessions = new Map<string, {
-      server: McpFnServer<TContext>;
-      transport: WebStandardStreamableHTTPServerTransport;
-    }>();
+    const sessions = new Map<
+      string,
+      {
+        server: McpFnServer<TContext>;
+        transport: WebStandardStreamableHTTPServerTransport;
+      }
+    >();
     return async (request: Request, handleOptions?: HandleRequestOptions) => {
       const sessionId = request.headers.get("mcp-session-id");
       if (sessionId) {
         const session = sessions.get(sessionId);
         if (!session) {
-          return new Response(JSON.stringify({
-            jsonrpc: "2.0",
-            error: { code: -32001, message: "Session not found" },
-            id: null,
-          }), {
-            status: 404,
-            headers: { "content-type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              error: { code: -32001, message: "Session not found" },
+              id: null,
+            }),
+            {
+              status: 404,
+              headers: { "content-type": "application/json" },
+            },
+          );
         }
         return session.transport.handleRequest(request, handleOptions);
       }
@@ -555,7 +882,10 @@ export class McpFnServer<TContext = undefined> {
     );
   }
 
-  sendLoggingMessage(params: LoggingMessageNotification["params"], sessionId?: string) {
+  sendLoggingMessage(
+    params: LoggingMessageNotification["params"],
+    sessionId?: string,
+  ) {
     return this.protocol.sendLoggingMessage(params, sessionId);
   }
 

@@ -4,11 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  McpFnRegistry,
-  createManifest,
-  structuredResult,
-} from "@mcpfn/core";
+import { McpFnRegistry, createManifest, structuredResult } from "@mcpfn/core";
 
 import {
   loadManifestSource,
@@ -16,6 +12,7 @@ import {
   MCPFN_CLI_VERSION,
   runCli,
 } from "../src/index.js";
+import { createMcpFnClientProfileSnapshot } from "@mcpfn/testing";
 
 const testRequire = createRequire(import.meta.url);
 
@@ -23,7 +20,9 @@ describe("mcpfn CLI", () => {
   const roots: string[] = [];
 
   afterEach(async () => {
-    await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+    await Promise.all(
+      roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+    );
   });
 
   it("keeps the reported CLI version aligned with the package manifest", async () => {
@@ -35,22 +34,36 @@ describe("mcpfn CLI", () => {
 
   it("returns usage exit code 2 when a command is missing or unknown", async () => {
     let errors = "";
-    expect(await runCli([], { stderr: (value) => { errors += value; } })).toBe(2);
+    expect(
+      await runCli([], {
+        stderr: (value) => {
+          errors += value;
+        },
+      }),
+    ).toBe(2);
     expect(errors).toContain("A command is required");
 
     errors = "";
-    expect(await runCli(["not-a-command"], {
-      stderr: (value) => { errors += value; },
-    })).toBe(2);
+    expect(
+      await runCli(["not-a-command"], {
+        stderr: (value) => {
+          errors += value;
+        },
+      }),
+    ).toBe(2);
     expect(errors).toContain("Unknown command: not-a-command");
 
     errors = "";
-    expect(await runCli([
-      "auth-diagnose",
-      "https://mcp.example.com/mcp",
-      "--timeout",
-      "10ms",
-    ], { stderr: (value) => { errors += value; } })).toBe(2);
+    expect(
+      await runCli(
+        ["auth-diagnose", "https://mcp.example.com/mcp", "--timeout", "10ms"],
+        {
+          stderr: (value) => {
+            errors += value;
+          },
+        },
+      ),
+    ).toBe(2);
     expect(errors).toContain("--timeout must be a positive integer");
   });
 
@@ -70,19 +83,153 @@ describe("mcpfn CLI", () => {
       });
       return createManifest({ name: "test", version: "1.0.0" }, registry);
     };
-    await writeFile(path.join(root, "before.json"), JSON.stringify(make(["value"])));
-    await writeFile(path.join(root, "after.json"), JSON.stringify(make(["value", "label"])));
+    await writeFile(
+      path.join(root, "before.json"),
+      JSON.stringify(make(["value"])),
+    );
+    await writeFile(
+      path.join(root, "after.json"),
+      JSON.stringify(make(["value", "label"])),
+    );
     let output = "";
-    expect(await runCli(["validate", "before.json"], { cwd: root, stdout: (value) => { output += value; } })).toBe(0);
+    expect(
+      await runCli(["validate", "before.json"], {
+        cwd: root,
+        stdout: (value) => {
+          output += value;
+        },
+      }),
+    ).toBe(0);
     expect(output).toContain("Valid McpFn manifest");
-    expect(await runCli(["diff", "before.json", "after.json", "--json"], { cwd: root, stdout: (value) => { output += value; } })).toBe(1);
-    expect(JSON.parse(await readFile(path.join(root, "before.json"), "utf8")).formatVersion).toBe(1);
+    expect(
+      await runCli(["diff", "before.json", "after.json", "--json"], {
+        cwd: root,
+        stdout: (value) => {
+          output += value;
+        },
+      }),
+    ).toBe(1);
+    expect(
+      JSON.parse(await readFile(path.join(root, "before.json"), "utf8"))
+        .formatVersion,
+    ).toBe(1);
+  });
+
+  it("validates, diffs, and executes client-profile contracts", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mcpfn-cli-profiles-"));
+    roots.push(root);
+    const before = createMcpFnClientProfileSnapshot(
+      { id: "generic", version: "1" },
+      [
+        {
+          name: "echo",
+          description: "Echo.",
+          inputSchema: { type: "object" },
+        },
+      ],
+    );
+    const after = createMcpFnClientProfileSnapshot(
+      { id: "generic", version: "2" },
+      [
+        {
+          name: "echo",
+          description: "Changed echo.",
+          inputSchema: { type: "object" },
+        },
+      ],
+    );
+    await writeFile(path.join(root, "before.json"), JSON.stringify(before));
+    await writeFile(path.join(root, "after.json"), JSON.stringify(after));
+    let output = "";
+    expect(
+      await runCli(["validate-profile", "before.json"], {
+        cwd: root,
+        stdout: (value) => {
+          output += value;
+        },
+      }),
+    ).toBe(0);
+    expect(output).toContain("Valid McpFn client profile generic@1");
+    output = "";
+    expect(
+      await runCli(
+        ["diff-profiles", "before.json", "after.json", "--fail-on-behavioral"],
+        {
+          cwd: root,
+          stdout: (value) => {
+            output += value;
+          },
+        },
+      ),
+    ).toBe(1);
+    expect(output).toContain("modified=1");
+
+    const coreUrl = pathToFileURL(testRequire.resolve("@mcpfn/core")).href;
+    const clientUrl = pathToFileURL(testRequire.resolve("@mcpfn/client")).href;
+    const transportUrl = pathToFileURL(
+      testRequire.resolve("@modelcontextprotocol/sdk/inMemory.js"),
+    ).href;
+    await writeFile(
+      path.join(root, "profiles.mjs"),
+      `import { McpFnRegistry, createMcpFnServer, structuredResult } from ${JSON.stringify(coreUrl)};
+       import { customTarget } from ${JSON.stringify(clientUrl)};
+       import { InMemoryTransport } from ${JSON.stringify(transportUrl)};
+       export default {
+         profiles: [{
+           id: "generic",
+           version: "canonical",
+           target: customTarget({
+             kind: "cli-profile",
+             open: async () => {
+               const server = createMcpFnServer({
+                 info: { name: "cli-profile", version: "1.0.0" },
+                 registry: new McpFnRegistry().register({
+                   name: "echo",
+                   description: "Echo.",
+                   inputSchema: { type: "object", additionalProperties: false },
+                   handler: async () => structuredResult({ ok: true })
+                 })
+               });
+               const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+               await server.connect(serverTransport);
+               return { transport: clientTransport, close: () => server.close() };
+             }
+           }),
+           fixtures: [{
+             name: "minimal call",
+             tool: "echo",
+             sideEffect: "read-only",
+             expect: { structuredContent: { ok: true } }
+           }]
+         }]
+       };`,
+    );
+    output = "";
+    expect(
+      await runCli(
+        ["test-profiles", "profiles.mjs", "--max-report-bytes", "4096"],
+        {
+          cwd: root,
+          stdout: (value) => {
+            output += value;
+          },
+        },
+      ),
+    ).toBe(0);
+    expect(Buffer.byteLength(output, "utf8")).toBeLessThanOrEqual(4096);
+    expect(JSON.parse(output)).toMatchObject({
+      kind: "mcpfn.client-profile-contract-report",
+      ok: true,
+    });
   });
 
   it("loads a server by public shape across package-instance boundaries", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mcpfn-cli-server-"));
     roots.push(root);
-    const manifest = createManifest({ name: "foreign", version: "1.0.0" }, new McpFnRegistry());
+    const manifest = createManifest(
+      { name: "foreign", version: "1.0.0" },
+      new McpFnRegistry(),
+    );
     await writeFile(
       path.join(root, "server.mjs"),
       `export default {
@@ -92,10 +239,12 @@ describe("mcpfn CLI", () => {
       };`,
     );
 
-    await expect(loadManifestSource("server.mjs", root)).resolves.toMatchObject({
-      manifest: { server: { name: "foreign" } },
-      server: expect.any(Object),
-    });
+    await expect(loadManifestSource("server.mjs", root)).resolves.toMatchObject(
+      {
+        manifest: { server: { name: "foreign" } },
+        server: expect.any(Object),
+      },
+    );
 
     const coreUrl = pathToFileURL(testRequire.resolve("@mcpfn/core")).href;
     await writeFile(
@@ -108,7 +257,9 @@ describe("mcpfn CLI", () => {
       manifest: { server: { name: "declared" } },
     });
     expect(declarationOnly).not.toHaveProperty("server");
-    await expect(loadManifestSource("declaration.mjs", root, undefined, {})).resolves.toMatchObject({
+    await expect(
+      loadManifestSource("declaration.mjs", root, undefined, {}),
+    ).resolves.toMatchObject({
       manifest: { server: { name: "declared" } },
       server: expect.any(Object),
     });
@@ -128,14 +279,18 @@ describe("mcpfn CLI", () => {
          async callTool() { return { content: [] }; }
        };`,
     );
-    await expect(loadManifestSource("registry.mjs", root, {
-      name: "foreign",
-      version: "1.0.0",
-    })).rejects.toThrow(/sorted and unique/);
+    await expect(
+      loadManifestSource("registry.mjs", root, {
+        name: "foreign",
+        version: "1.0.0",
+      }),
+    ).rejects.toThrow(/sorted and unique/);
   });
 
   it("loads task-capable declaration manifests without constructing a runtime", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "mcpfn-cli-task-manifest-"));
+    const root = await mkdtemp(
+      path.join(os.tmpdir(), "mcpfn-cli-task-manifest-"),
+    );
     roots.push(root);
     const coreUrl = pathToFileURL(testRequire.resolve("@mcpfn/core")).href;
     await writeFile(
@@ -153,10 +308,14 @@ describe("mcpfn CLI", () => {
     );
     let output = "";
 
-    expect(await runCli(["manifest", "tasks.mjs"], {
-      cwd: root,
-      stdout: (value) => { output += value; },
-    })).toBe(0);
+    expect(
+      await runCli(["manifest", "tasks.mjs"], {
+        cwd: root,
+        stdout: (value) => {
+          output += value;
+        },
+      }),
+    ).toBe(0);
     expect(JSON.parse(output)).toMatchObject({
       server: { name: "tasks" },
       capabilities: { tasks: { requests: { tools: { call: {} } } } },
@@ -180,22 +339,28 @@ describe("mcpfn CLI", () => {
     );
     await writeFile(
       path.join(root, "scenarios.json"),
-      JSON.stringify(Array.from({ length: 30 }, (_, index) => ({
-        name: `initialize ${index} ${"x".repeat(80)}`,
-        kind: "initialize",
-      }))),
+      JSON.stringify(
+        Array.from({ length: 30 }, (_, index) => ({
+          name: `initialize ${index} ${"x".repeat(80)}`,
+          kind: "initialize",
+        })),
+      ),
     );
     let output = "";
-    const exitCode = await runCli([
-      "test",
-      "server.mjs",
-      "scenarios.json",
-      "--max-report-bytes",
-      "1025",
-    ], { cwd: root, stdout: (value) => { output += value; } });
+    const exitCode = await runCli(
+      ["test", "server.mjs", "scenarios.json", "--max-report-bytes", "1025"],
+      {
+        cwd: root,
+        stdout: (value) => {
+          output += value;
+        },
+      },
+    );
 
     expect(exitCode).toBe(1);
-    expect(new TextEncoder().encode(output).byteLength).toBeLessThanOrEqual(1_025);
+    expect(new TextEncoder().encode(output).byteLength).toBeLessThanOrEqual(
+      1_025,
+    );
     expect(JSON.parse(output)).toMatchObject({ status: "incomplete" });
   });
 
@@ -228,7 +393,9 @@ describe("mcpfn CLI", () => {
     let errors = "";
     const exitCode = await runCli(["test", "server.mjs", "scenarios.mjs"], {
       cwd: root,
-      stderr: (value) => { errors += value; },
+      stderr: (value) => {
+        errors += value;
+      },
     });
     expect(errors).toContain("Tool inventory mismatch");
     expect(exitCode).toBe(1);
@@ -256,7 +423,9 @@ describe("mcpfn CLI", () => {
   });
 
   it("rejects an incomplete portable scenario artifact before either test command runs", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "mcpfn-cli-incomplete-scenarios-"));
+    const root = await mkdtemp(
+      path.join(os.tmpdir(), "mcpfn-cli-incomplete-scenarios-"),
+    );
     roots.push(root);
     await writeFile(
       path.join(root, "scenarios.json"),
@@ -279,16 +448,23 @@ describe("mcpfn CLI", () => {
     roots.push(root);
     await writeFile(path.join(root, "scenarios.json"), "[]\n");
     let errors = "";
-    const exitCode = await runCli([
-      "test-target",
-      "mcpfn-command-that-does-not-exist",
-      "scenarios.json",
-      "--stdio",
-    ], {
-      cwd: root,
-      stderr: (value) => { errors += value; },
-    });
+    const exitCode = await runCli(
+      [
+        "test-target",
+        "mcpfn-command-that-does-not-exist",
+        "scenarios.json",
+        "--stdio",
+      ],
+      {
+        cwd: root,
+        stderr: (value) => {
+          errors += value;
+        },
+      },
+    );
     expect(exitCode).toBe(1);
-    expect(errors).toContain("Failed to connect and initialize the MCP session");
+    expect(errors).toContain(
+      "Failed to connect and initialize the MCP session",
+    );
   });
 });
