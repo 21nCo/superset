@@ -1,0 +1,25 @@
+.codex/hooks.json
+  s_17a024200075c7::t_dd734beec1301d 1-88
+.entire/.gitignore
+  s_17a024200075c7::t_dd734beec1301d 1-5
+.gitignore
+  s_17a024200075c7::t_dd734beec1301d 94-96
+.entire/settings.json
+  s_17a024200075c7::t_dd734beec1301d 1-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d4f0448caab0e10004a4be668c9d04140b0cf6eb",
+  "prompts": {},
+  "sessions": {
+    "s_17a024200075c7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09963-fdd0-77b3-9935-2c7561cf9f6c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Aravind Samala <samalaaravind02@gmail.com>"
+    }
+  }
+}
