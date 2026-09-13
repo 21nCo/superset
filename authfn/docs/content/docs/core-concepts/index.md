@@ -57,7 +57,7 @@ flowchart LR
 
 ### Operations
 
-- [Regions](./regions) — multi-region lookup, runtime overlays, wrong-authority correction.
+- [Regions](./regions) — multi-region lookup, runtime overlays, wrong-authority correction, and placement-bound downstream context.
 - [Observability](./observability) — every event that fires, request correlation, redaction.
 - [Rate limiting](./rate-limiting) — what's covered, where to add limits.
 - [Security](./security) — threat model, what authfn defends against, what it doesn't, your responsibilities.

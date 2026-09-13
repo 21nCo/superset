@@ -97,6 +97,7 @@
 - [Native mobile handoff](https://authfn.superfunctions.dev/docs/recipes/native-mobile-handoff) — Sign in via a system browser, hand the session off to your iOS / Android app as a bearer credential.
 - [OpenTelemetry instrumentation](https://authfn.superfunctions.dev/docs/recipes/observability-otel) — Wire authfn's observability events into OpenTelemetry spans for full distributed tracing.
 - [Password reset](https://authfn.superfunctions.dev/docs/recipes/password-reset) — Full password-reset flow — start, verify, change. Two routes, three UI screens.
+- [Placement-bound auth context](https://authfn.superfunctions.dev/docs/recipes/placement-bound-auth-context) — Trusted in-process and private-service AuthFn context for regional application data planes.
 - [Rotating 2FA encryption keys](https://authfn.superfunctions.dev/docs/recipes/rotate-2fa-encryption) — Move every 2FA enrollment from one key to a new one, with zero user-visible downtime.
 - [Changelog](https://authfn.superfunctions.dev/docs/reference/changelog) — Release history of @authfn/* packages.
 - [Configuration](https://authfn.superfunctions.dev/docs/reference/configuration) — Every option you can pass to createAuthFn.

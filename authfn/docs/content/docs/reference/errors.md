@@ -36,6 +36,7 @@ The table below covers every code the kernel emits across all plugins.
 | `AUTHFN_PLACEMENT_MOVING` | 503 | yes | The identity is fenced during a cell move. No auth side effect started. |
 | `AUTHFN_ROUTING_ASSERTION_INVALID` | 401 | no | A cell rejected a missing, expired, replayed, or request-mismatched gateway assertion. |
 | `AUTHFN_ROUTING_CELL_UNAVAILABLE` | 503 | no | The selected private cell target was absent or dispatch failed. Dispatch failure may occur after side effects, so generic retries are unsafe. |
+| `AUTHFN_PLACEMENT_CONTEXT_INVALID` | 401 | no | A signed placement-bound auth context failed signature, audience, issuer, or expiry verification. |
 | `AUTHFN_DELIVERY_FAILED` | 502 | yes | OTP/email delivery provider returned an error. |
 | `AUTHFN_PLUGIN_ABORTED` | 400 | no | A `before*` hook threw `AuthFnPluginAbortedError` to reject the operation. `details.reason`. |
 | `AUTHFN_CONFLICT` | 409 | no | Duplicate primary email, duplicate OAuth identity, etc. |

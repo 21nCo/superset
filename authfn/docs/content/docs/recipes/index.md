@@ -22,6 +22,8 @@ Solutions for the things you'll actually do in a real app. Each page is a small,
 ## Operations
 
 - [Multi-region deployment](./multi-region-deployment) — two regions, lookup store, runtime overlays.
+- [Canonical-gateway multi-region](./canonical-gateway-multi-region) — one public AuthFn authority with signed cell forwarding.
+- [Placement-bound auth context](./placement-bound-auth-context) — trusted downstream routing context for Nucleum/DataFn.
 - [Rotate 2FA encryption keys](./rotate-2fa-encryption) — re-encrypt enrollments under a new key.
 
 ## Integrations

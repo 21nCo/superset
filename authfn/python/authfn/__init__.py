@@ -29,6 +29,13 @@ from .plugins.multi_region import (
     MultiRegionRegionConfig,
     MultiRegionService,
 )
+from .plugins.placement_context import (
+    PlacementBoundAuthContext,
+    PlacementContextIssuer,
+    PlacementContextVerifier,
+    create_placement_context_issuer,
+    create_placement_context_verifier,
+)
 from .plugins.social_oauth import (
     SocialOAuthPluginConfig,
     SocialOAuthService,
@@ -73,6 +80,7 @@ from .types import (
     OtpExpiredError,
     OtpInvalidError,
     OtpReplayedError,
+    PlacementContextInvalidError,
     PlacementDirectoryUnavailableError,
     PlacementMovingError,
     PluginAbortedError,
@@ -128,6 +136,11 @@ __all__ = [
     "classify_route",
     "create_cell_routing_middleware",
     "move_identity_placement",
+    "PlacementBoundAuthContext",
+    "PlacementContextIssuer",
+    "PlacementContextVerifier",
+    "create_placement_context_issuer",
+    "create_placement_context_verifier",
     "SocialOAuthPluginConfig",
     "SocialOAuthService",
     "SocialProviderConfig",
@@ -173,6 +186,7 @@ __all__ = [
     "PluginAbortedError",
     "RateLimitedError",
     "RedirectUriDisallowedError",
+    "PlacementContextInvalidError",
     "PlacementDirectoryUnavailableError",
     "PlacementMovingError",
     "RegionMismatchError",

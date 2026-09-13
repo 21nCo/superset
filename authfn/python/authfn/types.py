@@ -597,6 +597,20 @@ class RoutingCellUnavailableError(AuthFnError):
         super().__init__(message, details)
 
 
+class PlacementContextInvalidError(AuthFnError):
+    """A signed placement-bound auth context failed verification."""
+
+    code = "AUTHFN_PLACEMENT_CONTEXT_INVALID"
+    status = 401
+
+    def __init__(
+        self,
+        message: str = "Placement-bound auth context is invalid",
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(message, details)
+
+
 class AuthFnSchemaConflictError(AuthFnError):
     """Deterministic schema composition conflict."""
 
@@ -728,6 +742,7 @@ __all__ = [
     "RegionNotFoundError",
     "PlacementDirectoryUnavailableError",
     "PlacementMovingError",
+    "PlacementContextInvalidError",
     "RoutingAssertionInvalidError",
     "RoutingCellUnavailableError",
     "Request",

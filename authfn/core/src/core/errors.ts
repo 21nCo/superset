@@ -30,6 +30,7 @@ export type AuthFnErrorCode =
   | 'AUTHFN_PLACEMENT_MOVING'
   | 'AUTHFN_ROUTING_ASSERTION_INVALID'
   | 'AUTHFN_ROUTING_CELL_UNAVAILABLE'
+  | 'AUTHFN_PLACEMENT_CONTEXT_INVALID'
   | 'AUTHFN_SESSION_EXPIRED'
   | 'AUTHFN_SESSION_REVOKED'
   | 'AUTHFN_UNAUTHENTICATED'
@@ -189,6 +190,16 @@ export class AuthFnRoutingCellUnavailableError extends AuthFnError {
       details
     });
     this.name = 'AuthFnRoutingCellUnavailableError';
+  }
+}
+
+export class AuthFnPlacementContextInvalidError extends AuthFnError {
+  constructor(message: string = 'Placement-bound auth context is invalid', details?: Record<string, unknown>) {
+    super('AUTHFN_PLACEMENT_CONTEXT_INVALID', message, {
+      status: 401,
+      details
+    });
+    this.name = 'AuthFnPlacementContextInvalidError';
   }
 }
 

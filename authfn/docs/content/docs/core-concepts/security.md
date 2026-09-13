@@ -30,6 +30,7 @@ authfn assumes:
 | **Token leakage in logs** | The observability sink runs through a redactor that strips anything keyed `token`, `secret`, `bearer`, `password`, `key`, `authorization` from event metadata. |
 | **OAuth secret leakage in errors** | OAuth error details are sanitized before being wrapped in `AuthFn*Error`. |
 | **Wrong-region credential reuse** | Multi-region plugin pre-routes by email and rejects mismatches with `AUTHFN_REGION_MISMATCH`. |
+| **Placement spoofing** | Placement-bound consumer context is derived only from a verified session and the placement directory. Client-supplied subject, region, epoch, issuer, or `x-authfn-routing-*` headers are ignored. |
 | **API key leakage in storage** | API keys are hashed at rest; only the hash is persisted. The plaintext is shown once at creation. |
 | **Password storage compromise** | Passwords are hashed with a vetted algorithm (argon2id under the hood). Hashes are never logged. |
 | **CSRF token leakage in logs** | Tokens are not logged; only their hashes are persisted. |

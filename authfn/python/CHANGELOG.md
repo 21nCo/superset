@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Nothing yet
+- Placement-bound auth context issuer (`create_placement_context_issuer`) for trusted in-process and private-service consumers.
 
 ### Changed
 - Nothing yet

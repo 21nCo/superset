@@ -33,6 +33,7 @@ export {
   AuthFnRedirectUriDisallowedError,
   AuthFnRegionMismatchError,
   AuthFnRegionNotFoundError,
+  AuthFnPlacementContextInvalidError,
   AuthFnRoutingAssertionInvalidError,
   AuthFnRoutingCellUnavailableError,
   AuthFnSessionExpiredError,
@@ -246,6 +247,10 @@ export type AuthFnEventType =
   | 'authfn.routing.assertion_rejected'
   | 'authfn.routing.directory_unavailable'
   | 'authfn.routing.cell_unavailable'
+  | 'authfn.placement_context.issued'
+  | 'authfn.placement_context.rejected'
+  | 'authfn.placement_context.verified'
+  | 'authfn.placement_context.verification_failed'
   | 'authfn.handoff.started'
   | 'authfn.handoff.exchanged'
   | 'authfn.handoff.failed'

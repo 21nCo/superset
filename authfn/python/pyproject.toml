@@ -26,6 +26,7 @@ classifiers = [
 dependencies = [
   "pydantic>=2.5.0",
   "cryptography>=41.0.0",
+  "idna>=3.4",
   "superfunctions>=0.1.0",
 ]
 

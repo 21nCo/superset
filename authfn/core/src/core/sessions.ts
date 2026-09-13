@@ -173,7 +173,8 @@ export async function authenticateRequest(
 
 export async function getCookieSessionState(
   config: AuthFnRuntimeConfig,
-  request: Request
+  request: Request,
+  options?: { touch?: boolean; now?: () => Date }
 ): Promise<AuthenticatedRequestState> {
   const runtime = await resolveEnvironment(config, request);
   const cookiePolicy = resolveCookiePolicy(config, request, runtime);
@@ -213,7 +214,8 @@ export async function getCookieSessionState(
     };
   }
 
-  if (record.expiresAt.getTime() <= Date.now()) {
+  const nowMs = options?.now?.().getTime() ?? Date.now();
+  if (record.expiresAt.getTime() <= nowMs) {
     return {
       ...state,
       sessionRecord: record,
@@ -233,6 +235,15 @@ export async function getCookieSessionState(
   const session = buildUserSession(record, user, {
     regionId: runtime.regionId
   });
+
+  if (options?.touch === false) {
+    return {
+      ...state,
+      session,
+      sessionRecord: record,
+      user
+    };
+  }
 
   const now = new Date();
   await config.database.update<AuthFnSessionRecord>({

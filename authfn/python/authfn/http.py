@@ -197,7 +197,12 @@ async def authenticate_request(config: AuthFnConfig, request: Any) -> Optional[A
     return await ApiKeyService(config, api_key_config).authenticate(request)
 
 
-async def get_cookie_session_state(config: AuthFnConfig, request: Any) -> SessionState:
+async def get_cookie_session_state(
+    config: AuthFnConfig,
+    request: Any,
+    *,
+    touch: bool = True,
+) -> SessionState:
     runtime = resolve_runtime(config, request)
     cookie_policy = resolve_cookie_policy(config, request, runtime)
     cookies = _parse_cookies(_headers_dict(request).get("cookie", ""))
@@ -238,6 +243,12 @@ async def get_cookie_session_state(config: AuthFnConfig, request: Any) -> Sessio
     )
     if user is None:
         state.failure_reason = "missing"
+        return state
+
+    if not touch:
+        state.session_record = record
+        state.user = user
+        state.session = _build_user_session(record, user, runtime.region_id)
         return state
 
     now = _utcnow()
@@ -416,6 +427,31 @@ async def issue_session(
         "cookies": issue_session_cookies(cookie_policy, session_token, csrf_token),
         "cookiePolicy": cookie_policy,
     }
+
+
+async def revoke_session_by_id(
+    config: AuthFnConfig,
+    session_id: str,
+    *,
+    user_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    record = await config.database.find_one(
+        model="sessions",
+        where=[{"field": "id", "operator": "eq", "value": session_id}],
+        namespace=config.namespace,
+    )
+    if record is None or (user_id is not None and record.get("userId") != user_id):
+        raise NotFoundError("Session not found", {"sessionId": session_id})
+    if record.get("revokedAt") is not None:
+        return record
+    revoked_at = _utcnow()
+    await config.database.update(
+        model="sessions",
+        where=[{"field": "id", "operator": "eq", "value": record["id"]}],
+        data={"revokedAt": revoked_at, "updatedAt": revoked_at},
+        namespace=config.namespace,
+    )
+    return {**record, "revokedAt": revoked_at, "updatedAt": revoked_at}
 
 
 def _create_base_routes(config: AuthFnConfig) -> List[Route]:
@@ -1673,6 +1709,7 @@ __all__ = [
     "get_cookie_session_state",
     "issue_session",
     "issue_session_cookies",
+    "revoke_session_by_id",
     "json_error",
     "json_success",
     "resolve_cookie_policy",

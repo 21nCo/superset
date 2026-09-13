@@ -10,6 +10,7 @@
     "account-deletion",
     "multi-region-deployment",
     "canonical-gateway-multi-region",
+    "placement-bound-auth-context",
     "native-mobile-handoff",
     "custom-oauth-provider",
     "google-one-tap",

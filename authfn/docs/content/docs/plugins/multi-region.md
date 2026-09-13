@@ -184,4 +184,6 @@ const client = createAuthFnClient({
 - [Concepts → Regions](../core-concepts/regions)
 - [Concepts → Runtime](../core-concepts/runtime)
 - [Recipes → Multi-region deployment](../recipes/multi-region-deployment)
+- [Recipes → Canonical-gateway multi-region](../recipes/canonical-gateway-multi-region)
+- [Recipes → Placement-bound auth context](../recipes/placement-bound-auth-context)
 - [Examples → multi-region-routing](../examples/multi-region-routing)

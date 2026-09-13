@@ -154,8 +154,28 @@ A common pattern is a Python data-science backend that uses a Node-served authfn
 
 If you go this route, lock the kernel versions on both sides to versions that share the same wire contract. The [changelog](../reference/changelog) documents wire-contract bumps.
 
+## Placement-bound auth context
+
+Trusted gateway code can derive an immutable routing context after a valid session. This is opt-in and is not a public AuthFn route. See [Placement-bound auth context](../recipes/placement-bound-auth-context).
+
+```python
+from authfn import create_placement_context_issuer
+
+issuer = create_placement_context_issuer(
+    region_id="us-east-1",  # region owning config.database
+    config=config,
+    public_authority="https://account.example.com",
+    placement_directory=directory,
+    identity_key_for_user_id=identity_keys.from_user_id,
+    subject_secret=subject_secret,
+    audiences=["nucleum-datafn"],
+)
+context = await issuer.derive(request)
+```
+
 ## Related
 
 - [Quickstart → Python](../quickstart/python)
 - [Frameworks → FastAPI / Flask / Starlette](../frameworks)
 - [Adapters → Database](../adapters/database)
+- [Recipes → Placement-bound auth context](../recipes/placement-bound-auth-context)

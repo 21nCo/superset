@@ -177,4 +177,6 @@ The plugin contributes one table:
 - [Runtime](./runtime) — how region overlays compose with `runtime.resolve`.
 - [Cookies](./cookies) — region-scoped cookie domains.
 - [Recipes → Multi-region deployment](../recipes/multi-region-deployment) — end-to-end walkthrough.
+- [Recipes → Canonical-gateway multi-region](../recipes/canonical-gateway-multi-region) — signed cell forwarding.
+- [Recipes → Placement-bound auth context](../recipes/placement-bound-auth-context) — trusted downstream routing context.
 - [Examples → multi-region-routing](../examples/multi-region-routing) — runnable example.

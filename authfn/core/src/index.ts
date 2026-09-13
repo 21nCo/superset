@@ -65,6 +65,7 @@ export {
   AuthFnOAuthProviderUnsupportedError,
   AuthFnOAuthStateInvalidError,
   AuthFnOAuthStateReplayedError,
+  AuthFnPlacementContextInvalidError,
   AuthFnPlacementDirectoryUnavailableError,
   AuthFnPlacementMovingError,
   AuthFnPluginAbortedError,
@@ -87,6 +88,20 @@ export {
   getSchema
 } from './schema.js';
 export { createAuthFnOpenApiDocument } from './openapi.js';
+export {
+  createAuthFnPlacementContextIssuer,
+  createAuthFnPlacementContextVerifier,
+  freezeAuthFnPlacementContext
+} from './core/placement-context.js';
+export type {
+  AuthFnPlacementBoundAuthContext,
+  AuthFnPlacementContextDeriveInput,
+  AuthFnPlacementContextIssuer,
+  AuthFnPlacementContextIssuerOptions,
+  AuthFnPlacementContextVerifier,
+  AuthFnPlacementContextVerifierOptions,
+  AuthFnSignedPlacementContext
+} from './core/placement-context.js';
 
 /**
  * Preserves exact plugin identity so AuthFn can infer runtime dependencies.

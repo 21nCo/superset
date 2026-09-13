@@ -54,6 +54,10 @@ type AuthFnEvent = {
 | `authfn.routing.assertion_rejected` | A cell rejected a missing, expired, replayed, or request-mismatched assertion. | rejected | `errorType` |
 | `authfn.routing.directory_unavailable` | Placement storage failed closed. | rejected | `errorType` |
 | `authfn.routing.cell_unavailable` | Cell resolution or internal dispatch failed. | rejected / unknown | `regionId`, `epoch`, `errorType` |
+| `authfn.placement_context.issued` | Trusted consumer code derived placement-bound auth context. | success | `epoch`, `audience`, `actorType`, hashed `subjectDigest` |
+| `authfn.placement_context.rejected` | Context derivation failed closed. | rejected | `errorType` |
+| `authfn.placement_context.verified` | A private-service assertion verified. | success | `epoch`, `audience`, hashed `subjectDigest` |
+| `authfn.placement_context.verification_failed` | Signed context failed signature, audience, issuer, or expiry checks. | rejected | `errorType`, `audience` |
 | `authfn.handoff.started` | A handoff code was issued. | success | `kind` (`native` / `web`) |
 | `authfn.handoff.exchanged` | A handoff code was exchanged for a session. | success | `kind` |
 | `authfn.handoff.failed` | Handoff exchange failed. | failure | `kind`, `errorCode` |

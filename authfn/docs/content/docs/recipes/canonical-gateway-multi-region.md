@@ -97,6 +97,8 @@ An AuthFn runtime configured for gateway mode without `routing.cell` is gateway-
 
 Python exposes the equivalent `CanonicalGateway`, `CanonicalRoutingConfig`, `InMemoryIdentityPlacementDirectory`, `InMemoryRoutingReplayStore`, `RoutingKeyring`, `create_cell_routing_middleware`, and `move_identity_placement` contracts from `authfn.plugins.gateway_routing`.
 
+After a request is authenticated at the canonical authority, trusted application code can derive placement-bound context for a downstream data plane. See [Placement-bound auth context](./placement-bound-auth-context). AuthFn still does not mint DataFn tickets or expose regional AuthFn URLs to clients.
+
 ## Route ownership matrix
 
 | Route family | Gateway action | Identity source | Cell behavior |
