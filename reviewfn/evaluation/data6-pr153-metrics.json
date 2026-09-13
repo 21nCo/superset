@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "sampleSize": 1,
+  "requirementExtractionRecall": { "numerator": 9, "denominator": 9, "value": 1 },
+  "gapDetectionRecall": { "numerator": 1, "denominator": 1, "value": 1 },
+  "findingPrecision": { "numerator": 1, "denominator": 1, "value": 1 },
+  "falseBlockRate": { "numerator": 0, "denominator": 0, "value": null },
+  "evidenceValidity": { "numerator": 9, "denominator": 9, "value": 1 },
+  "completionRate": { "numerator": 1, "denominator": 1, "value": 1 },
+  "runtimeMs": { "observed": 0, "mean": null },
+  "tokens": { "observedCases": 0, "total": null },
+  "costUsd": { "observedCases": 0, "total": null },
+  "limitations": [
+    "data6-pr153-at-4efa97a8: Linear has no contemporaneous source-version endpoint, so the source digest represents the current issue and two linked documents.",
+    "data6-pr153-at-4efa97a8: This outcome is a human-adjudicated schema smoke test, not a live-model ReviewFn run, and must not be used as a model-quality claim.",
+    "data6-pr153-at-4efa97a8: The downstream Skillplane repository was not inspected; absence is based only on the exact PR change set and the issue's explicit cross-repository verification requirement.",
+    "data6-pr153-at-4efa97a8: historical source version was unavailable; case is retrospective."
+  ]
+}

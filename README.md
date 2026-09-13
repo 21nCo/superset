@@ -31,6 +31,7 @@
 | authFn | Drop-in authentication and user management. Social logins, magic links, session handling, AI agent authentication and more.<br><br>**Packages:** [npm](https://www.npmjs.com/package/@authfn/client) · [PyPI](https://pypi.org/project/authfn/) |
 | billFn | Complete billing infrastructure. Subscriptions, one-time payments, usage-based billing, analytics, store integrations and invoicing.<br><br>**Packages:** [npm](https://www.npmjs.com/package/billfn) |
 | [mcpFn](./mcpfn/README.md) | Build and regression-test MCP servers with protocol contracts, OAuth/API-key testkits, Playwright auth fixtures, host profiles, official conformance, and safe DataFn exposure.<br><br>**Packages:** `@mcpfn/core` · `@mcpfn/auth` · `@mcpfn/testing` · `@mcpfn/datafn` · `@mcpfn/cli` |
+| [reviewFn](./reviewfn/README.md) | Portable, evidence-backed pull-request review with requirement traceability, explicit incomplete states, isolated verification and configurable harnesses.<br><br>**Packages:** `@superfunctions/reviewfn-core` · `@superfunctions/reviewfn-cli` · `@superfunctions/reviewfn-harness-codex` · `@superfunctions/reviewfn-context-composio` · `@superfunctions/reviewfn-github` · `@superfunctions/reviewfn-testing` |
 | plugFn | Universal API integration SDK. Connect to third-party services with a standardized interface and automatic auth handling.<br><br>**Packages:** [npm](https://www.npmjs.com/package/plugfn) |
 
 ## User Interface

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "mode": "advisory",
+  "requiredCategories": ["behavior", "architecture", "compatibility", "test"],
+  "blockingSeverities": ["critical", "high"],
+  "allowRepositoryTightening": true,
+  "sourceAuthority": { "acceptedTypes": ["issue", "comment", "document", "repository_markdown"], "commentsMayClarify": true, "waiverAuthorities": [] },
+  "limits": { "contextMaxSources": 100, "contextMaxBytes": 2000000, "contextMaxDepth": 4, "harnessTimeoutMs": 1800000, "testTimeoutMs": 900000, "maxOutputBytes": 10000000, "maxFindings": 100 },
+  "retention": { "reportDays": 30, "transcriptDays": 7, "testLogDays": 7 }
+}
