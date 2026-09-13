@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "profile": "requirements",
+  "harness": { "adapter": "codex", "version": "1", "executable": "codex" },
+  "inference": { "provider": "openai", "model": "configured", "auth": "chatgpt" },
+  "context": [{ "adapter": "repository-markdown", "paths": ["README.md", "docs/**/*.md"] }],
+  "review": { "categories": ["behavior", "architecture", "compatibility", "test", "documentation"], "evidenceRequired": true },
+  "execution": { "adapter": "local-isolated", "tests": [["npm", "test"]], "timeoutMs": 900000, "maxOutputBytes": 10000000 },
+  "output": { "destinations": ["local"], "mode": "advisory" },
+  "retention": { "reportDays": 30, "transcriptDays": 7, "testLogDays": 7 },
+  "fallback": []
+}

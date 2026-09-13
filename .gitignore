@@ -112,6 +112,8 @@ venv
 docsfn/.tmp/
 .tmp/browsefn-*/
 .tmp/jscpd/langfn/
+.reviewfn/artifacts/
+.reviewfn/output/
 
 # Apple / Xcode user artifacts
 DerivedData/

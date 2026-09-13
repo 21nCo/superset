@@ -1,0 +1,25 @@
+{
+  "name": "@superfunctions/reviewfn-github",
+  "version": "0.1.0",
+  "description": "Exact-head GitHub source and advisory publication adapters for ReviewFn",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist", "README.md", "LICENSE", "action.yml"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "tsc --noEmit -p tsconfig.json",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "dependencies": { "@superfunctions/reviewfn-core": "0.1.0" },
+  "devDependencies": { "@types/node": "^22.0.0", "typescript": "^5.6.0", "vitest": "^3.2.4" },
+  "engines": { "node": ">=22" },
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/21nCo/super-functions.git", "directory": "reviewfn/github" },
+  "bugs": { "url": "https://github.com/21nCo/super-functions/issues" },
+  "sideEffects": false,
+  "publishConfig": { "access": "public" }
+}

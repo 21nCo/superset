@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "method": "retrospective-manual-adjudication",
+  "capturedAt": "2026-09-12T17:59:23.000Z",
+  "pullRequest": {
+    "url": "https://github.com/21nCo/super-functions/pull/153",
+    "base": "e1b6a55209191fdc909c4e633982657b21096e9a",
+    "head": "4efa97a895556b745ea679250c0f77a9d432b04e",
+    "mergeBase": "e1b6a55209191fdc909c4e633982657b21096e9a"
+  },
+  "cases": [
+    {
+      "id": "data6-pr153-at-4efa97a8",
+      "sourceSnapshotDigest": "7aecfeb09d558b64fbb258076cd5072dd4aa149bdee3013f895c6ba6f503a24f",
+      "changeSnapshotDigest": "dda4484c5e49e162e651d142ad7e9b9ba6c4f5c7a56feec36fb7a8fdb84b4765",
+      "adjudicatedRequirementIds": [
+        "DATA6-STRUCTURAL-ONLY",
+        "DATA6-ALL-OPERATIONS",
+        "DATA6-PARSER-ALIGNED",
+        "DATA6-NORMALIZED",
+        "DATA6-VERSIONED-FAILURE",
+        "DATA6-POLICY-NEUTRAL",
+        "DATA6-CONFORMANCE",
+        "DATA6-INTEGRATION-DOCS",
+        "DATA6-DOWNSTREAM-MIGRATION"
+      ],
+      "knownGapRequirementIds": ["DATA6-DOWNSTREAM-MIGRATION"],
+      "validFindingFingerprints": ["data6-downstream-migration-evidence-missing"],
+      "acceptable": false,
+      "retrospective": true,
+      "limitations": [
+        "Linear has no contemporaneous source-version endpoint, so the source digest represents the current issue and two linked documents.",
+        "This outcome is a human-adjudicated schema smoke test, not a live-model ReviewFn run, and must not be used as a model-quality claim.",
+        "The downstream Skillplane repository was not inspected; absence is based only on the exact PR change set and the issue's explicit cross-repository verification requirement."
+      ]
+    }
+  ],
+  "outcomes": [
+    {
+      "caseId": "data6-pr153-at-4efa97a8",
+      "completed": true,
+      "extractedRequirementIds": [
+        "DATA6-STRUCTURAL-ONLY",
+        "DATA6-ALL-OPERATIONS",
+        "DATA6-PARSER-ALIGNED",
+        "DATA6-NORMALIZED",
+        "DATA6-VERSIONED-FAILURE",
+        "DATA6-POLICY-NEUTRAL",
+        "DATA6-CONFORMANCE",
+        "DATA6-INTEGRATION-DOCS",
+        "DATA6-DOWNSTREAM-MIGRATION"
+      ],
+      "identifiedGapRequirementIds": ["DATA6-DOWNSTREAM-MIGRATION"],
+      "findingFingerprints": ["data6-downstream-migration-evidence-missing"],
+      "blocked": true,
+      "evidenceReferences": 9,
+      "validEvidenceReferences": 9
+    }
+  ]
+}

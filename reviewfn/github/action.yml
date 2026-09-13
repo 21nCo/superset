@@ -1,0 +1,52 @@
+name: ReviewFn advisory review
+description: Run a bounded evidence-backed ReviewFn review
+inputs:
+  version:
+    description: Pinned @superfunctions/reviewfn-cli version
+    required: true
+  base:
+    description: Trusted base ref or commit
+    required: true
+  head:
+    description: Exact head commit
+    required: true
+  pull-request:
+    description: Pull request number
+    required: true
+  issue:
+    description: Optional issue identifier
+    required: false
+  codex-api-base-url:
+    description: URL of a credential-isolating Responses API proxy; trusted base config must select action-proxy auth
+    required: true
+  github-token:
+    description: Narrowly scoped publication token
+    required: false
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "22"
+    - name: ReviewFn preflight
+      shell: bash
+      env:
+        OPENAI_BASE_URL: ${{ inputs.codex-api-base-url }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GITHUB_EVENT_PULL_REQUEST_NUMBER: ${{ inputs.pull-request }}
+      run: >-
+        npx --yes --package "@superfunctions/reviewfn-cli@${{ inputs.version }}" reviewfn preflight
+        --base "${{ inputs.base }}" --head "${{ inputs.head }}"
+        --issue "${{ inputs.issue }}" --pull-request "${{ inputs.pull-request }}"
+        --trusted-config-from-base
+    - name: ReviewFn review
+      shell: bash
+      env:
+        OPENAI_BASE_URL: ${{ inputs.codex-api-base-url }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GITHUB_EVENT_PULL_REQUEST_NUMBER: ${{ inputs.pull-request }}
+      run: >-
+        npx --yes --package "@superfunctions/reviewfn-cli@${{ inputs.version }}" reviewfn review
+        --base "${{ inputs.base }}" --head "${{ inputs.head }}"
+        --issue "${{ inputs.issue }}" --pull-request "${{ inputs.pull-request }}"
+        --trusted-config-from-base

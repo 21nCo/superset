@@ -26,6 +26,7 @@
     "datafn/server",
     "datafn/svelte",
     "mcpfn/*",
+    "reviewfn/*",
     "mailfn/*",
     "mdfn/*",
     "mdfn/examples/*",
@@ -118,6 +119,7 @@
     "deploy:uifn-catalogs:production": "node scripts/deploy-uifn-catalogs.mjs production",
     "gate:mailfn-release": "node scripts/gate-mailfn-release.mjs",
     "gate:mcpfn-release": "node scripts/gate-mcpfn-release.mjs",
+    "gate:reviewfn-release": "node scripts/gate-reviewfn-release.mjs",
     "test:watch": "turbo run test:watch",
     "test:coverage": "turbo run test:coverage",
     "clean": "turbo run clean && rm -rf node_modules"
