@@ -122,8 +122,8 @@ async function runTargetSuite(options: RunMcpFnTargetSuiteOptions): Promise<McpF
       });
     }
     if (!options.manifest && options.expectedToolNames) {
-      const actual = (await client.listTools()).map((tool) => tool.name).sort();
-      const expected = [...options.expectedToolNames].sort();
+      const actual = (await client.listTools()).map((tool) => tool.name).sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
+      const expected = [...options.expectedToolNames].sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
       if (stableJson(actual) !== stableJson(expected)) {
         throw new McpFnAssertionError(`Tool inventory mismatch: expected ${stableJson(expected)}, actual ${stableJson(actual)}`);
       }

@@ -167,7 +167,13 @@ async function runVerification(command, args, options) {
   const killTree = (signal) => {
     if (!child.pid) return;
     if (process.platform === "win32") {
-      spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+      // Resolve the OS utility explicitly; never search npm's augmented PATH.
+      const systemRoot = process.env.SystemRoot;
+      if (!systemRoot || !path.win32.isAbsolute(systemRoot)) {
+        throw new Error("Windows process cleanup requires an absolute SystemRoot");
+      }
+      const taskkill = path.win32.join(systemRoot, "System32", "taskkill.exe");
+      spawnSync(taskkill, ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" });
     } else {
       try { process.kill(-child.pid, signal); }
       catch (error) { if (error.code !== "ESRCH") throw error; }
