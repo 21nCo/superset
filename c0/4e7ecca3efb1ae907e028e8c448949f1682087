@@ -1,0 +1,241 @@
+reviewfn/cli/src/config.ts
+  s_7694bf60075b6f::t_270d6712359990 1-5,7-41
+reviewfn/core/LICENSE
+  s_7694bf60075b6f::t_204121450cdc4c 1-21
+reviewfn/core/vitest.config.ts
+  s_7694bf60075b6f::t_08c01475489055 1-2
+reviewfn/cli/package.json
+  s_7694bf60075b6f::t_08c01475489055 1,3-9,11-18,24-27,31-32
+  s_7694bf60075b6f::t_84cc9e83249241 2,10,19-23,28-30
+reviewfn/github/package.json
+  s_7694bf60075b6f::t_93f26dd6090269 2,9,17,21-23
+  s_7694bf60075b6f::t_08c01475489055 1,3-8,10-16,18-20,24-25
+reviewfn/github/vitest.config.ts
+  s_7694bf60075b6f::t_08c01475489055 1-2
+reviewfn/context-composio/src/adapter.ts
+  s_7694bf60075b6f::t_5525db52e37708 66-75,80,83-92,126-131,150-153
+  s_7694bf60075b6f::t_05a8b7b45e7627 1-2,4-65,76-79,81-82,93-125,132-149,154-182
+reviewfn/cli/README.md
+  s_7694bf60075b6f::t_7be27189d9021f 2-3
+reviewfn/core/src/policy.ts
+  s_7694bf60075b6f::t_ae4ebbe4b8ca85 56,76
+  s_7694bf60075b6f::t_443da76d53aa67 24
+  s_7694bf60075b6f::t_7de5183fb6240e 1-7,18-23,25-32,34-37,39,41,47,49,51-54,58,60-63,68-72,74-75,77-78,82-101
+  s_7694bf60075b6f::t_2faed4f31b4ad7 8-17,33,38,40,42-46,48,50,55,57,59,64-67,73,79-81
+reviewfn/examples/markdown-only/.reviewfn/policy.json
+  s_7694bf60075b6f::t_330401167be342 1-10
+reviewfn/evaluation/data6-pr153-baseline.md
+  s_7694bf60075b6f::t_cb97b151a1a96d 1-32
+reviewfn/core/src/render.ts
+  s_7694bf60075b6f::t_fe2abcec1bd41d 1-36
+reviewfn/harness-codex/README.md
+  s_7694bf60075b6f::t_ca48ac6d3042f5 2-3
+reviewfn/harness-codex/src/index.ts
+  s_7694bf60075b6f::t_8bbc7dde61f551 1
+reviewfn/context-composio/test/adapter.test.ts
+  s_7694bf60075b6f::t_7a6341599119c2 1-35,54
+  s_7694bf60075b6f::t_a88f0895788919 36-53
+package.json
+  s_7694bf60075b6f::t_f8fc6355a80f2c 122
+  s_7694bf60075b6f::t_2c2a319a4de8a6 29
+reviewfn/context-composio/README.md
+  s_7694bf60075b6f::t_df38a77cbcf2fa 2-3
+reviewfn/examples/markdown-only/README.md
+  s_7694bf60075b6f::t_4a1355deda380b 1-3
+reviewfn/core/tsconfig.json
+  s_7694bf60075b6f::t_08c01475489055 1-4
+reviewfn/harness-codex/src/adapter.ts
+  s_7694bf60075b6f::t_96c3d9200c1bee 1-5,7-78,80-85,89-150
+  s_7694bf60075b6f::t_83f584b895cbf1 6,86-88
+  s_7694bf60075b6f::t_3b2fd1cdbed382 79
+reviewfn/context-composio/src/index.ts
+  s_7694bf60075b6f::t_647020caa98d8d 1
+reviewfn/github/src/api.ts
+  s_7694bf60075b6f::t_11984e61df7079 1-25
+reviewfn/testing/vitest.config.ts
+  s_7694bf60075b6f::t_08c01475489055 1-2
+reviewfn/core/src/coordinator.ts
+  s_7694bf60075b6f::t_a982d5fdbff198 94,131
+  s_7694bf60075b6f::t_ec29c14b3eaa99 3,107
+  s_7694bf60075b6f::t_d89318ba5f1896 1-2,4-93,95,98-106,114-130,132-173
+  s_7694bf60075b6f::t_169280f687caaa 108-113
+  s_7694bf60075b6f::t_3fc976e0f6dbf9 96-97
+reviewfn/testing/src/evaluation.ts
+  s_7694bf60075b6f::t_8d3710ae028d53 1-95
+reviewfn/context-composio/vitest.config.ts
+  s_7694bf60075b6f::t_08c01475489055 1-2
+reviewfn/core/package.json
+  s_7694bf60075b6f::t_08c01475489055 1,3-8,10-19,23-24
+  s_7694bf60075b6f::t_3c9caba750174c 2,9,20-22
+reviewfn/core/src/artifacts.ts
+  s_7694bf60075b6f::t_7de5183fb6240e 1-77
+reviewfn/testing/src/fakes.ts
+  s_7694bf60075b6f::t_b039fa02accbc6 2-46
+reviewfn/testing/test/evaluation.test.ts
+  s_7694bf60075b6f::t_bda5d13c924b27 2,21-27
+  s_7694bf60075b6f::t_1404070b66d06f 1,3-20
+reviewfn/ADR-0001-FIRST-RELEASE.md
+  s_7694bf60075b6f::t_a8626f51f21ddb 5
+  s_7694bf60075b6f::t_ea9be0e793a0dd 8,12
+  s_7694bf60075b6f::t_98858be6045ae2 1-4,6-7,9-11,13-15
+reviewfn/core/src/prompt.ts
+  s_7694bf60075b6f::t_edcc3f17a801e5 1-26
+reviewfn/README.md
+  s_7694bf60075b6f::t_26e1cdf22344b1 1-10,17-24,26-45
+reviewfn/docs/evaluation.md
+  s_7694bf60075b6f::t_7f0abcdbfa41e5 1-10
+  s_7694bf60075b6f::t_0ea514ccac6bdf 11
+reviewfn/evaluation/data6-pr153.json
+  s_7694bf60075b6f::t_fac95791c7a91f 1-60
+reviewfn/evaluation/data6-pr153-metrics.json
+  s_7694bf60075b6f::t_d055191e19079e 1-19
+reviewfn/context-composio/LICENSE
+  s_7694bf60075b6f::t_45cf7cc461d4ba 1-21
+reviewfn/github/README.md
+  s_7694bf60075b6f::t_fc1124fa7d6480 2-3
+reviewfn/harness-codex/LICENSE
+  s_7694bf60075b6f::t_00cd230ddbb8fa 1-21
+reviewfn/testing/LICENSE
+  s_7694bf60075b6f::t_fd183c7c07b51a 1-21
+reviewfn/context-composio/tsconfig.json
+  s_7694bf60075b6f::t_08c01475489055 1-4
+reviewfn/testing/src/fixtures.ts
+  s_7694bf60075b6f::t_97a5a15639cc03 1-59
+reviewfn/cli/vitest.config.ts
+  s_7694bf60075b6f::t_08c01475489055 1-2
+reviewfn/core/src/errors.ts
+  s_7694bf60075b6f::t_a0e95a529c1cff 1-2,4-21
+  s_7694bf60075b6f::t_823dc0f85fe043 3
+reviewfn/cli/tsconfig.json
+  s_7694bf60075b6f::t_08c01475489055 1-4
+reviewfn/github/test/github.test.ts
+  s_7694bf60075b6f::t_38b795fa67aa1c 2,6
+  s_7694bf60075b6f::t_e9e9dcbf70078e 16
+  s_7694bf60075b6f::t_6ce4cba486fb88 1,3-5,7-15,17-60
+reviewfn/harness-codex/vitest.config.ts
+  s_7694bf60075b6f::t_08c01475489055 1-2
+reviewfn/examples/markdown-only/.reviewfn/config.json
+  s_7694bf60075b6f::t_46617a1ed66743 1-12
+reviewfn/github/action.yml
+  s_7694bf60075b6f::t_d8f4f0aec4e239 1-4,6-18,22-33,35-37,39-44,46-48,50-52
+  s_7694bf60075b6f::t_7d1879e8ca79c8 5,19-21,34,38,45,49
+.github/workflows/reviewfn-release.yml
+  s_7694bf60075b6f::t_77d109d9e45921 1-41
+reviewfn/cli/src/main.ts
+  s_7694bf60075b6f::t_f54eaddb2b3a93 1-4,10-66,68-141
+  s_7694bf60075b6f::t_b9f9d25b80d85c 5-9,67
+reviewfn/harness-codex/test/adapter.test.ts
+  s_7694bf60075b6f::t_ac3330be6a073f 1-2,4-35,49-55
+  s_7694bf60075b6f::t_924c4ef9220cc5 3,36-48
+reviewfn/github/tsconfig.json
+  s_7694bf60075b6f::t_08c01475489055 1-4
+reviewfn/testing/test/coordinator.test.ts
+  s_7694bf60075b6f::t_93908d0ce3640c 2,21
+  s_7694bf60075b6f::t_b8090ec7d056b8 1,3-20,22-41
+reviewfn/core/src/canonical.ts
+  s_7694bf60075b6f::t_a0e95a529c1cff 1-40
+reviewfn/core/src/validator.ts
+  s_7694bf60075b6f::t_7de5183fb6240e 1-86
+reviewfn/cli/src/execution.ts
+  s_7694bf60075b6f::t_56929a09e37ae9 6
+  s_7694bf60075b6f::t_d462824db3ef76 1-5,7-103
+reviewfn/core/src/identity.ts
+  s_7694bf60075b6f::t_cd8151b51d3f24 1-12
+reviewfn/github/src/index.ts
+  s_7694bf60075b6f::t_8a7d7160467fab 1-3
+reviewfn/core/test/core.test.ts
+  s_7694bf60075b6f::t_eb4f533da07743 3,22-32
+  s_7694bf60075b6f::t_2cf111874752fc 14
+  s_7694bf60075b6f::t_705451d36bf7b5 54
+  s_7694bf60075b6f::t_a572abd6f7ada2 1-2,5-13,15-21,33-34,51-53,55-83
+  s_7694bf60075b6f::t_be82ef7192dd92 4,35-50
+reviewfn/docs/configuration.md
+  s_7694bf60075b6f::t_8824589895471f 1-18
+  s_7694bf60075b6f::t_90d520fa00abdf 19
+reviewfn/cli/src/index.ts
+  s_7694bf60075b6f::t_a06709ea13d17b 1-2
+reviewfn/github/LICENSE
+  s_7694bf60075b6f::t_8a29041c144caf 1-21
+reviewfn/cli/LICENSE
+  s_7694bf60075b6f::t_11e0360b20dec0 1-21
+reviewfn/core/README.md
+  s_7694bf60075b6f::t_13d044fad94ca1 2-3
+reviewfn/testing/src/index.ts
+  s_7694bf60075b6f::t_61451f87745028 1-2
+  s_7694bf60075b6f::t_83aa8d08a5f77d 3
+reviewfn/docs/security.md
+  s_7694bf60075b6f::t_3de8d0e6cc040d 13
+  s_7694bf60075b6f::t_06dd42fbc1ce4c 1-12,14-15
+scripts/gate-reviewfn-release.mjs
+  s_7694bf60075b6f::t_29c0fad2ae80f3 37,41
+  s_7694bf60075b6f::t_795657b3daf502 28,35-36,38-40
+  s_7694bf60075b6f::t_b69f38cabfcfca 3
+  s_7694bf60075b6f::t_22bd55322f6ba2 1-2,4-8,10-27,29-34,42-47,51-56,59-65,67-74
+  s_7694bf60075b6f::t_b698df914188a8 57
+  s_7694bf60075b6f::t_6f48b0901a0e83 9,48-50,58,66
+reviewfn/github/src/publisher.ts
+  s_7694bf60075b6f::t_83242053f09a99 2-7,10-65,71-72,74-76,79-80
+  s_7694bf60075b6f::t_4e3515a2563d27 1,66
+  s_7694bf60075b6f::t_fe2c6751e4dae1 8-9,67-70,73,77-78
+reviewfn/core/src/defaults.ts
+  s_7694bf60075b6f::t_a0e95a529c1cff 1-37
+reviewfn/testing/tsconfig.json
+  s_7694bf60075b6f::t_08c01475489055 1-4
+reviewfn/testing/package.json
+  s_7694bf60075b6f::t_e87dd71480ac2d 2,9,17,21-23
+  s_7694bf60075b6f::t_08c01475489055 1,3-8,10-16,18-20,24-25
+reviewfn/core/src/index.ts
+  s_7694bf60075b6f::t_36b9c220aaf0d0 1-5,7-14
+  s_7694bf60075b6f::t_6146938cd861c9 6
+reviewfn/testing/README.md
+  s_7694bf60075b6f::t_c31d58eaa88270 2-3
+reviewfn/cli/test/cli.test.ts
+  s_7694bf60075b6f::t_56de01807a541a 1-6,8-20,30-47
+  s_7694bf60075b6f::t_1322d45fdb441a 7,22-23,27-29
+  s_7694bf60075b6f::t_71b1e532424ec4 21,24-26
+reviewfn/harness-codex/package.json
+  s_7694bf60075b6f::t_08c01475489055 1,3-8,10-16,18-20,24-25
+  s_7694bf60075b6f::t_5d74491693b823 2,9,17,21-23
+reviewfn/core/src/repository-context.ts
+  s_7694bf60075b6f::t_b89a58f43c9256 1-101
+reviewfn/core/src/types.ts
+  s_7694bf60075b6f::t_c2218c0a152665 145
+  s_7694bf60075b6f::t_f81b25c50f65e5 234
+  s_7694bf60075b6f::t_a0e95a529c1cff 1-144,146-233,235-322
+reviewfn/context-composio/package.json
+  s_7694bf60075b6f::t_08c01475489055 1,3-8,10-16,18-20,24-25
+  s_7694bf60075b6f::t_1a1747ebf63ce8 2,9,17,21-23
+reviewfn/harness-codex/tsconfig.json
+  s_7694bf60075b6f::t_08c01475489055 1-4
+reviewfn/github/src/git.ts
+  s_7694bf60075b6f::t_ffb35c8fe5cf49 1-3,5-21,23-25,27,29-68
+  s_7694bf60075b6f::t_5985139829fed3 22,26,28
+reviewfn/core/src/redaction.ts
+  s_7694bf60075b6f::t_7de5183fb6240e 1-14
+reviewfn/docs/github-action.md
+  s_7694bf60075b6f::t_7a58a8c4c19e25 1-4,6,9-13
+  s_7694bf60075b6f::t_0328e502946d6a 5,7-8
+reviewfn/core/src/schema.ts
+  s_7694bf60075b6f::t_1d5d0b67b107cd 1-21
+.gitignore
+  s_7694bf60075b6f::t_cad57bde671f7c 115-116
+reviewfn/docs/report-schema.md
+  s_7694bf60075b6f::t_4f6fd2795a7698 13,15
+  s_7694bf60075b6f::t_ad8dc914d4f408 1-12,14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "c04e7ecca3efb1ae907e028e8c448949f1682087",
+  "prompts": {},
+  "sessions": {
+    "s_7694bf60075b6f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09695-2d29-7642-a4b9-eb548abdfa81",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Aravind Samala <samalaaravind02@gmail.com>"
+    }
+  }
+}
