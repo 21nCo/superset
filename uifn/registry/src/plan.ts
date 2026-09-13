@@ -56,6 +56,8 @@ export interface PlanInstallOptions {
   artifacts: string[];
   framework: string;
   registry?: BuiltRegistry;
+  /** Read-only planning for a new scaffold; does not create its root. */
+  allowMissingRoot?: boolean;
 }
 
 function failure(code: string, message: string, extras: Record<string, unknown> = {}): RegistryPlanResult {
@@ -176,7 +178,7 @@ export function planInstall(options: PlanInstallOptions): RegistryPlanResult {
   if (!manifests) return failure('UIFN_REGISTRY_ARTIFACT_NOT_FOUND', `Unknown registry artifact in: ${options.artifacts.join(', ')}`);
 
   const rootDir = path.resolve(options.rootDir);
-  if (!existsSync(rootDir)) return failure('UIFN_REGISTRY_PROJECT_ROOT_MISSING', 'Consumer project root does not exist.');
+  if (!existsSync(rootDir) && !options.allowMissingRoot) return failure('UIFN_REGISTRY_PROJECT_ROOT_MISSING', 'Consumer project root does not exist.');
   try { assertContainedPath(rootDir, 'package.json'); } catch (cause) {
     return failure(typeof cause === 'object' && cause && 'code' in cause ? String(cause.code) : 'UIFN_REGISTRY_PATH_ESCAPE', cause instanceof Error ? cause.message : String(cause));
   }

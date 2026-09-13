@@ -75,7 +75,14 @@ uifn update button --cwd . --dry-run --json
 uifn doctor --cwd . --json
 uifn remove button --cwd . --dry-run --json
 uifn validate --json
+uifn preset encode --style atlas --base-color mauve --json
+uifn preset decode <code> --json
+uifn preset resolve --cwd . --json
+uifn init --preset <code> --dry-run --json
+uifn apply --preset <code> --only theme,font --dry-run --json
 ```
+
+Versioned presets are documented in `docs/PRESET.md`. `init` and `apply` reuse the same transaction, dirty-conflict, and rollback machinery as `add`. The first approved mutation matrix is `react-vite` with `package` or `source` install.
 
 `add` validates the complete plan before writing. It rejects unsupported frameworks, dependency conflicts, dirty tracked files, traversal, symlink escapes, checksum failures, invalid signatures, dependency cycles, and license/provenance failures. Successful writes are staged on the consumer filesystem and committed atomically; an interruption restores the original bytes.
 
@@ -87,6 +94,7 @@ Source installs write:
 
 - `components/uifn/<framework>/...` — generated source owned by the consumer.
 - `.uifn/registry.lock` — schema v2 lock entries with framework, version, dependencies, per-file source/output/installed hashes, canonical/generator versions, and provenance.
+- `.uifn/preset.json` — normalized `UIFnPresetV1` code plus managed-file hashes used by `uifn apply` and `uifn preset resolve`.
 - `.uifn/selected-components.json` — the selected source-mode component index.
 - dependency additions in `package.json`, only when they are not already compatible.
 

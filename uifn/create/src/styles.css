@@ -1,0 +1,88 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  color: #122033;
+  background: #f4f6fb;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, select, input { font: inherit; }
+
+.shell-header, .layout, .outputs article, .controls {
+  max-width: 1440px;
+}
+
+.shell-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #d7deea;
+  background: #fff;
+}
+
+.kicker {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  color: #5b6b80;
+}
+
+.header-actions, .preview-toolbar, .segmented, .axis span {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  flex: 1;
+}
+
+.controls {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: #fff;
+  border-right: 1px solid #d7deea;
+  align-content: start;
+}
+
+.axis {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.axis select, .header-actions button, .segmented button {
+  min-height: 2.25rem;
+  border: 1px solid #c5d0df;
+  border-radius: 8px;
+  background: #fff;
+  padding: 0 0.7rem;
+}
+
+.preview-pane { padding: 1rem 1.25rem 2rem; overflow: auto; }
+.preview-toolbar { margin-bottom: 0.75rem; }
+.preview-frame {
+  max-width: 100%;
+  border: 1px solid #d7deea;
+  border-radius: 16px;
+  overflow: auto;
+  background: #fff;
+  margin-inline: auto;
+}
+.preview-root { min-height: 640px; }
+.segmented button[aria-pressed="true"] { background: #122033; color: #fff; }
+.outputs { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-top: 1.25rem; }
+.outputs pre { overflow: auto; background: #0f1724; color: #e8eef7; padding: 0.8rem; border-radius: 10px; font-size: 0.78rem; }
+.outputs a { color: #314edb; }
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .controls { border-right: 0; border-bottom: 1px solid #d7deea; }
+}
+
+#app { min-height: 100vh; display: flex; flex-direction: column; }

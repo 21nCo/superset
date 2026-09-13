@@ -1,0 +1,66 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "paths": {
+      "@uifn/registry/preset": [
+        "../registry/src/preset/index.ts"
+      ],
+      "@uifn/components-react/*": [
+        "../components-react/src/generated/*.ts"
+      ],
+      "@uifn/react/*": [
+        "../react/src/generated/*.tsx"
+      ],
+      "@uifn/recipes/component": [
+        "../recipes/src/component.ts"
+      ],
+      "@uifn/core/primitives/*": [
+        "../core/src/primitives/index.ts"
+      ],
+      "@uifn/core/*": [
+        "../core/src/*.ts"
+      ],
+      "@uifn/core": [
+        "../core/src/index.ts"
+      ],
+      "@uifn/dom": [
+        "../dom/src/index.ts"
+      ],
+      "@uifn/adapter-kit": [
+        "../adapter-kit/src/index.ts"
+      ],
+      "@uifn/core/primitives": [
+        "../core/src/primitives/index.ts"
+      ],
+      "react": [
+        "./node_modules/@types/react",
+        "../../node_modules/@types/react"
+      ],
+      "react/*": [
+        "./node_modules/@types/react/*",
+        "../../node_modules/@types/react/*"
+      ],
+      "react-dom": [
+        "./node_modules/@types/react-dom",
+        "../../node_modules/@types/react-dom"
+      ],
+      "react-dom/*": [
+        "./node_modules/@types/react-dom/*",
+        "../../node_modules/@types/react-dom/*"
+      ]
+    },
+    "jsx": "react-jsx"
+  },
+  "include": [
+    "src/**/*.ts"
+  ]
+}

@@ -17,6 +17,7 @@ export * from './schema';
 export * from './transaction';
 export * from './trust';
 export * from './update';
+export * from './preset';
 export {
   EXPECTED_COMPONENTS,
   EXPECTED_HOOKS,

@@ -19,7 +19,7 @@
     { "name": "@uifn/components-react", "path": "uifn/components-react", "layer": "components-framework", "owner": "uifn-maintainer", "framework": "react", "allowedDependencies": ["@uifn/components", "@uifn/react", "@uifn/recipes"], "allowedPeerDependencies": ["react", "react-dom"], "publicEntrypoints": ["."] },
     { "name": "@uifn/components-svelte", "path": "uifn/components-svelte", "layer": "components-framework", "owner": "uifn-maintainer", "framework": "svelte", "allowedDependencies": ["@uifn/components", "@uifn/svelte", "@uifn/recipes"], "allowedPeerDependencies": ["svelte"], "publicEntrypoints": ["."] },
     { "name": "@uifn/components-solid", "path": "uifn/components-solid", "layer": "components-framework", "owner": "uifn-maintainer", "framework": "solid", "allowedDependencies": ["@uifn/components", "@uifn/solid", "@uifn/recipes"], "allowedPeerDependencies": ["solid-js"], "publicEntrypoints": ["."] },
-    { "name": "@uifn/registry", "path": "uifn/registry", "layer": "registry", "owner": "uifn-maintainer", "allowedDependencies": [], "allowedPeerDependencies": [], "publicEntrypoints": ["."] },
+    { "name": "@uifn/registry", "path": "uifn/registry", "layer": "registry", "owner": "uifn-maintainer", "allowedDependencies": [], "allowedPeerDependencies": [], "publicEntrypoints": [".", "./preset"] },
     { "name": "@uifn/storybook", "path": "uifn/storybook", "layer": "storybook", "owner": "uifn-maintainer", "allowedDependencies": ["@uifn/registry", "@uifn/theme"], "allowedPeerDependencies": ["react", "storybook"], "publicEntrypoints": ["."] }
   ],
   "experimental": [
@@ -28,6 +28,7 @@
   ],
   "private": [
     { "name": "@uifn/catalog", "path": "uifn/catalog", "releaseLane": "tooling" },
+    { "name": "@uifn/create", "path": "uifn/create", "releaseLane": "tooling" },
     { "name": "@uifn/catalog-react", "path": "uifn/catalogs/react", "releaseLane": "experimental-demo" },
     { "name": "@uifn/catalog-svelte", "path": "uifn/catalogs/svelte", "releaseLane": "experimental-demo" },
     { "name": "@uifn/catalog-solid", "path": "uifn/catalogs/solid", "releaseLane": "experimental-demo" },

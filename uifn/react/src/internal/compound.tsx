@@ -28,6 +28,9 @@ import { toReactPartProps } from '../core-props';
 import { Portal } from '../portal';
 import { Slot, composeReactRefs } from '../utils/slot';
 
+const AUTOMATIC_PORTAL_PRIMITIVES = new Set(['Select', 'Menu', 'ContextMenu']);
+const PositionerOwner = React.createContext<ReactPrimitiveBridge<any> | null>(null);
+
 type AnyRecord = Record<string, unknown>;
 type AnyController = UIFnController<AnyRecord, AnyRecord, AnyRecord, AnyRecord>;
 type AnyStaticContract = UIFnStaticPrimitiveContract<AnyRecord, AnyRecord, AnyRecord>;
@@ -466,7 +469,7 @@ function useDomOwnership<TInputs extends object>(bridge: ReactPrimitiveBridge<TI
           positioner: () => bridge.getElement('positioner'),
           arrow: () => bridge.getElement('arrow'),
           portalNode: bridge.getElement('portal') ?? bridge.getElement('positioner') ?? content,
-          portalManagedExternally: bridge.getElement('portal') !== null,
+          portalManagedExternally: bridge.getElement('portal') !== null || AUTOMATIC_PORTAL_PRIMITIVES.has(bridge.definition.name),
           validateAccessibleName: true,
         }));
       }
@@ -482,7 +485,7 @@ function useDomOwnership<TInputs extends object>(bridge: ReactPrimitiveBridge<TI
           trigger,
           content,
           positioner: () => bridge.getElement('positioner'),
-          portalManagedExternally: bridge.getElement('portal') !== null,
+          portalManagedExternally: bridge.getElement('portal') !== null || AUTOMATIC_PORTAL_PRIMITIVES.has(bridge.definition.name),
           getItemElement: (id) => bridge.getElement('item', id),
         }));
       }
@@ -521,7 +524,7 @@ function useDomOwnership<TInputs extends object>(bridge: ReactPrimitiveBridge<TI
           content: () => bridge.getElement('content'),
           positioner: () => bridge.getElement('positioner'),
           portalNode: bridge.getElement('portal') ?? bridge.getElement('positioner'),
-          portalManagedExternally: bridge.getElement('portal') !== null,
+          portalManagedExternally: bridge.getElement('portal') !== null || AUTOMATIC_PORTAL_PRIMITIVES.has(bridge.definition.name),
           placement: 'bottom-start',
           matchReferenceWidth: ['Autocomplete', 'Combobox', 'Select'].includes(bridge.definition.name),
           getOpen: (state: Record<string, unknown>) => state.open === true,
@@ -716,7 +719,9 @@ export function ReactPrimitivePart({
   props,
 }: ReactPrimitivePartRuntimeProps): React.ReactElement | null {
   const bridge = React.useContext(definition.context);
+  const positionerOwner = React.useContext(PositionerOwner);
   if (!bridge) throw new TypeError(`${definition.name}.${part} MUST be rendered inside ${definition.name}.Root.`);
+  React.useSyncExternalStore(bridge.subscribeElements, bridge.getElementVersion, () => 0);
   React.useSyncExternalStore(bridge.subscribe, bridge.getSnapshot, bridge.getServerSnapshot);
   const { asChild, render, children, value, forceMount, container, ...userProps } = props as ReactPrimitivePartProps<unknown, ElementName, boolean> & AnyRecord;
   if (many && value === undefined) {
@@ -748,7 +753,21 @@ export function ReactPrimitivePart({
     counters: bridge.getLifecycleCounters(),
     bridge,
   });
-  return part === 'portal' ? <Portal container={container}>{rendered}</Portal> : rendered;
+  // These compounds have no Portal part. React must own their popup portal so
+  // delegated events continue to reach the root after the popup opens.
+  if (AUTOMATIC_PORTAL_PRIMITIVES.has(definition.name) && part === 'content' && positionerOwner === bridge && container != null) {
+    throw new Error('Pass container to Positioner when Content is nested inside Positioner.');
+  }
+  const automaticPortal = AUTOMATIC_PORTAL_PRIMITIVES.has(definition.name) &&
+    (part === 'positioner' || (part === 'content' && positionerOwner !== bridge));
+  const subtree = part === 'positioner' ? <PositionerOwner.Provider value={bridge}>{rendered}</PositionerOwner.Provider> : rendered;
+  if (part === 'portal' || automaticPortal) {
+    const ownerDocument = bridge.getElement(definition.rootPart)?.ownerDocument;
+    const ownerBody = ownerDocument?.body ?? ownerDocument?.documentElement;
+    if (container == null && !ownerBody) return null;
+    return <Portal container={container == null ? ownerBody : container}>{subtree}</Portal>;
+  }
+  return subtree;
 }
 
 export function useReactPrimitive<TInputs extends object>(

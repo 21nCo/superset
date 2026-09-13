@@ -20,10 +20,12 @@
 | `@uifn/components-react` | styled adapter | React styled-package boundary |
 | `@uifn/components-svelte` | styled adapter | Svelte styled-package boundary |
 | `@uifn/components-solid` | styled adapter | Solid styled-package boundary |
-| `@uifn/registry` | delivery | Source installation, locks, diff, and update tooling |
+| `@uifn/registry` | delivery | Source installation, locks, diff, update, versioned presets, and Create CLI |
 | `@uifn/storybook` | workshop | Storybook integration and documentation tooling |
 
 The authoritative machine-readable DAG is `uifn/package-graph.json`. React, Svelte, and Solid are equal stable targets. Stable packages cannot depend on examples, product demos, or experimental products.
+
+The private `@uifn/create` editor is a client of the same preset contract. Run `npm --workspace @uifn/create run dev` for the schema-driven configurator.
 
 ## Experimental products
 

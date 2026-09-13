@@ -13,13 +13,18 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
+    },
+    "./preset": {
+      "types": "./dist/preset/index.d.ts",
+      "import": "./dist/preset/index.mjs",
+      "require": "./dist/preset/index.js"
     }
   },
   "scripts": {
     "generate": "node ../../scripts/generate-uifn-registry.mjs --write",
     "generate:check": "node ../../scripts/generate-uifn-registry.mjs --check",
-    "build": "tsup src/index.ts --format esm,cjs --dts && tsup src/bin.ts --format esm,cjs",
-    "dev": "tsup src/index.ts --format esm,cjs --dts --watch",
+    "build": "tsup src/index.ts --format esm,cjs --dts && tsup src/bin.ts --format esm,cjs && tsup src/preset/index.ts --format esm,cjs --dts --out-dir dist/preset",
+    "dev": "tsup src/index.ts src/preset/index.ts --format esm,cjs --dts --watch",
     "test": "vitest run --config vitest.config.ts",
     "test:stable": "vitest run --config vitest.config.ts src/__tests__/stable-lane.test.ts",
     "lint": "tsc --noEmit -p tsconfig.json",
@@ -34,7 +39,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "docs"
   ],
   "author": "21n",
   "license": "MIT",

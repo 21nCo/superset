@@ -8,6 +8,7 @@ import { removeInstalled } from './remove';
 import { REQUIRED_FRAMEWORKS, type RegistryFramework, type RegistryManifest } from './schema';
 import { commitTransaction } from './transaction';
 import { updateInstalled } from './update';
+import { PRESET_HELP, runApplyCommand, runInitCommand, runPresetCommand } from './preset/cli';
 
 export interface CliResult { exitCode: number; result: unknown }
 export interface CliRunOptions { cwd?: string; registryRoot?: string; stdout?: (value: string) => void; stderr?: (value: string) => void }
@@ -59,7 +60,7 @@ export async function runCli(argv = process.argv.slice(2), options: CliRunOption
   const stderr = options.stderr ?? ((value) => console.error(value));
   try {
     if (parsed.command === 'help' || parsed.command === '--help') {
-      const result = '@uifn/registry commands: list, info, add, diff, update, validate, doctor, remove';
+      const result = PRESET_HELP;
       printResult(result, json, stdout); return { exitCode: 0, result };
     }
     if (parsed.command === 'list') { const result = listArtifacts(); printResult(result, json, result.ok ? stdout : stderr); return { exitCode: result.ok ? 0 : 1, result }; }
@@ -89,6 +90,18 @@ export async function runCli(argv = process.argv.slice(2), options: CliRunOption
       let diff;
       try { diff = diffInstalled(rootDir); } catch (cause) { const result = { ok: false, error: { code: 'UIFN_REGISTRY_LOCK_INVALID', message: cause instanceof Error ? cause.message : String(cause) } }; printResult(result, json, stderr); return { exitCode: 1, result }; }
       const result = { ok: registry.ok && diff.ok, catalogTrusted: registry.trust.ok, catalogSha256: registry.trust.catalogSha256, signatureKeyId: registry.trust.keyId, installedFiles: diff.entries.length, changed: diff.changed, errors: registry.errors };
+      printResult(result, json, result.ok ? stdout : stderr); return { exitCode: result.ok ? 0 : 1, result };
+    }
+    if (parsed.command === 'preset') {
+      const result = runPresetCommand({ action: parsed.positionals[0] ?? '', positionals: parsed.positionals.slice(1), flags: parsed.flags, rootDir, dryRun });
+      printResult(result, json, result.ok ? stdout : stderr); return { exitCode: result.ok ? 0 : 1, result };
+    }
+    if (parsed.command === 'init') {
+      const result = runInitCommand({ flags: parsed.flags, rootDir, dryRun });
+      printResult(result, json, result.ok ? stdout : stderr); return { exitCode: result.ok ? 0 : 1, result };
+    }
+    if (parsed.command === 'apply') {
+      const result = runApplyCommand({ flags: parsed.flags, rootDir, dryRun });
       printResult(result, json, result.ok ? stdout : stderr); return { exitCode: result.ok ? 0 : 1, result };
     }
     const result = { ok: false, error: { code: 'UIFN_REGISTRY_UNKNOWN_COMMAND', message: `Unknown uifn command: ${parsed.command}` } };

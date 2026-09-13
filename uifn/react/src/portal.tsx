@@ -18,17 +18,27 @@ export const Portal: React.FC<PortalProps> = ({ children, container }) => {
     [container, ownerDocument],
   );
 
+  const [fallbackHost, setFallbackHost] = React.useState<HTMLElement | null>(null);
+  const needsFallbackHost = !!ownerDocument && mountNode === ownerDocument.documentElement && !ownerDocument.body;
   React.useEffect(() => {
     setPortalReady(true);
-  }, []);
+    if (!needsFallbackHost || !ownerDocument || !mountNode) return;
+    // React 19 redirects an HTML-element portal to document.body. A real
+    // element host keeps body-less documents usable without creating a body.
+    const host = ownerDocument.createElement('div');
+    host.setAttribute('data-uifn-portal-host', '');
+    mountNode.appendChild(host);
+    setFallbackHost(host);
+    return () => { host.remove(); setFallbackHost(null); };
+  }, [needsFallbackHost, ownerDocument, mountNode]);
 
   // Portals have no server-rendered owner. Keeping descendants absent until
   // the portal is ready means they mount once under their final portal owner,
   // instead of first mounting in a fragment and then remounting after hydration.
-  if (!mountNode || !portalReady) return null;
+  if (!mountNode || !portalReady || (needsFallbackHost && fallbackHost?.parentNode !== mountNode)) return null;
 
   try {
-    return ReactDOM.createPortal(children, mountNode);
+    return ReactDOM.createPortal(children, needsFallbackHost ? fallbackHost! : mountNode);
   } catch (error) {
     if (error instanceof Error && error.message.includes('Portals are not currently supported')) {
       return null;
