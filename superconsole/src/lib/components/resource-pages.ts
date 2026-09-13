@@ -281,7 +281,7 @@ export async function loadResourceDetail(
   const result = await fetchAdmin<Partial<ResourceDetailViewModel> & { item?: unknown }>(
     input.fetcher,
     withAdminScope(base, input.url.searchParams),
-    method === 'GET' || method === 'HEAD'
+    method === 'GET'
       ? undefined
       : { method, body: JSON.stringify(operationInput.value) },
   );

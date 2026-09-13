@@ -11,6 +11,7 @@ npm install @datafn/core
 ## Features
 
 - **Type Definitions** — Complete TypeScript types for schemas, resources, fields, relations, events, signals, and plugins
+- **Const-Safe Field Builders** — Reusable field definitions that retain literal names, defaults, and enum members
 - **Schema Validation** — Runtime validation and normalization of DataFn schemas
 - **DFQL Types** — Query, mutation, and transaction type definitions
 - **DFQL Normalization** — Deterministic normalization for stable cache keys
@@ -23,6 +24,55 @@ npm install @datafn/core
 ## Schema Definition
 
 A DataFn schema describes your entire data model: resources (tables), their fields, and the relationships between them.
+
+Use `defineSchema` for the full schema and `field` when fields need to be
+reused. Both preserve literal names and metadata for typed clients:
+
+```typescript
+import { defineSchema, field } from "@datafn/core";
+
+const id = field.string("id", {
+  required: true,
+  unique: true,
+});
+
+const sharedFields = [
+  field.boolean("isStarred", { default: false }),
+  field.string("status", {
+    required: true,
+    enum: ["NOT_STARTED", "IN_PROGRESS", "COMPLETED"],
+  }),
+];
+
+export const schema = defineSchema({
+  resources: [
+    {
+      name: "tasks",
+      version: 1,
+      fields: [id, ...sharedFields],
+      indices: { base: ["id", "status"] },
+    },
+  ],
+});
+```
+
+Field builders always return plain schema objects and emit
+`required: false` and `nullable: false` when those options are omitted.
+Requiredness controls whether a property must exist. Nullability independently
+controls whether its value may be `null`.
+
+Inline object literals passed directly to `defineSchema` receive the same
+record inference. Avoid annotating a schema or reusable field collection as
+`DatafnSchema` or `DatafnFieldSchema[]` before calling `defineSchema`; those
+annotations widen literal field and resource names. Use `satisfies` when you
+only need an assignability check, or use the builders for reusable fields.
+
+Builder options are specific to each field kind. Defaults and enum members must
+match that kind, and options cannot override `name` or `type`. Constraint
+metadata such as `enum`, bounds, patterns, uniqueness, encryption, volatility,
+and read-only flags is preserved for adapters and generated schemas. Core
+mutation validation currently enforces field type and nullability, not every
+constraint metadata value.
 
 ### DatafnSchema
 
@@ -71,7 +121,15 @@ Every field has a name, type, and a rich set of optional validation constraints.
 ```typescript
 type DatafnFieldSchema = {
   name: string;
-  type: "string" | "number" | "boolean" | "object" | "array" | "date" | "file";
+  type:
+    | "string"
+    | "number"
+    | "boolean"
+    | "object"
+    | "array"
+    | "date"
+    | "file"
+    | "json";
   required: boolean;
   /** Allow explicit null values */
   nullable?: boolean;
@@ -106,15 +164,16 @@ type DatafnFieldSchema = {
 
 **Supported field types:**
 
-| Type | Description |
-|------|-------------|
-| `string` | Text values |
-| `number` | Numeric values (integer or float) |
-| `boolean` | `true` / `false` |
-| `object` | Arbitrary JSON objects (stored as JSONB / JSON) |
-| `array` | Arbitrary JSON arrays (stored as JSONB / JSON) |
-| `date` | Date/time values (stored as timestamps) |
-| `file` | File references |
+| Type      | Description                                     |
+| --------- | ----------------------------------------------- |
+| `string`  | Text values                                     |
+| `number`  | Numeric values (integer or float)               |
+| `boolean` | `true` / `false`                                |
+| `object`  | Arbitrary JSON objects (stored as JSONB / JSON) |
+| `array`   | Arbitrary JSON arrays (stored as JSONB / JSON)  |
+| `date`    | Date/time values (stored as timestamps)         |
+| `file`    | File references                                 |
+| `json`    | Any JSON-compatible value                       |
 
 ### DatafnRelationSchema
 
@@ -148,12 +207,12 @@ type DatafnRelationSchema = {
 
 **Relation types:**
 
-| Type | Description | Storage |
-|------|-------------|---------|
-| `one-many` | Parent has many children | FK on child |
-| `many-one` | Child belongs to parent | FK on child |
-| `many-many` | Both sides have many | Join table |
-| `htree` | Hierarchical tree | Materialized path |
+| Type        | Description              | Storage           |
+| ----------- | ------------------------ | ----------------- |
+| `one-many`  | Parent has many children | FK on child       |
+| `many-one`  | Child belongs to parent  | FK on child       |
+| `many-many` | Both sides have many     | Join table        |
+| `htree`     | Hierarchical tree        | Materialized path |
 
 ### DatafnPermissionsPolicy
 
@@ -176,18 +235,18 @@ Events represent lifecycle notifications for mutations and sync operations.
 ```typescript
 interface DatafnEvent {
   type:
-    | "mutation_applied"   // A mutation was successfully applied
-    | "mutation_rejected"  // A mutation was rejected (validation, conflict, etc.)
-    | "sync_applied"       // A sync operation completed successfully
-    | "sync_failed";       // A sync operation failed
-  resource?: string;       // Affected resource name
-  ids?: string[];          // Affected record IDs
-  mutationId?: string;     // Mutation identifier
-  clientId?: string;       // Originating client identifier
-  timestampMs: number;     // Event timestamp in milliseconds
-  context?: unknown;       // Arbitrary context data
-  action?: string;         // Mutation action (insert, merge, delete, etc.)
-  fields?: string[];       // Changed fields
+    | "mutation_applied" // A mutation was successfully applied
+    | "mutation_rejected" // A mutation was rejected (validation, conflict, etc.)
+    | "sync_applied" // A sync operation completed successfully
+    | "sync_failed"; // A sync operation failed
+  resource?: string; // Affected resource name
+  ids?: string[]; // Affected record IDs
+  mutationId?: string; // Mutation identifier
+  clientId?: string; // Originating client identifier
+  timestampMs: number; // Event timestamp in milliseconds
+  context?: unknown; // Arbitrary context data
+  action?: string; // Mutation action (insert, merge, delete, etc.)
+  fields?: string[]; // Changed fields
 }
 ```
 
@@ -245,14 +304,28 @@ interface DatafnPlugin {
   runsOn: Array<"client" | "server">;
 
   /** Intercept queries before execution. Return modified query or throw to reject. */
-  beforeQuery?: (ctx: DatafnHookContext, q: unknown) => Promise<unknown> | unknown;
+  beforeQuery?: (
+    ctx: DatafnHookContext,
+    q: unknown,
+  ) => Promise<unknown> | unknown;
   /** Process query results. Return modified result. */
-  afterQuery?: (ctx: DatafnHookContext, q: unknown, result: unknown) => Promise<unknown> | unknown;
+  afterQuery?: (
+    ctx: DatafnHookContext,
+    q: unknown,
+    result: unknown,
+  ) => Promise<unknown> | unknown;
 
   /** Intercept mutations before execution. Return modified mutation or throw to reject. */
-  beforeMutation?: (ctx: DatafnHookContext, m: unknown | unknown[]) => Promise<unknown> | unknown;
+  beforeMutation?: (
+    ctx: DatafnHookContext,
+    m: unknown | unknown[],
+  ) => Promise<unknown> | unknown;
   /** React to mutation results. */
-  afterMutation?: (ctx: DatafnHookContext, m: unknown | unknown[], result: unknown) => Promise<void> | void;
+  afterMutation?: (
+    ctx: DatafnHookContext,
+    m: unknown | unknown[],
+    result: unknown,
+  ) => Promise<void> | void;
 
   /** Intercept sync operations before execution. Return modified payload or throw to reject. */
   beforeSync?: (
@@ -292,18 +365,18 @@ DFQL (DataFn Query Language) defines the structure of queries, mutations, and tr
 type DfqlQuery = {
   resource: string;
   version: number;
-  select?: string[];          // Fields to include
-  omit?: string[];            // Fields to exclude
-  filters?: Record<string, unknown>;  // Where clause
-  search?: Record<string, unknown>;   // Full-text search
-  sort?: DfqlSort;            // Ordering (e.g. ["-createdAt", "name"])
-  limit?: number;             // Max results
-  offset?: number;            // Skip N results
-  cursor?: DfqlCursor;        // Cursor-based pagination
-  count?: boolean;            // Return count only
-  groupBy?: string[];         // Group by fields
-  aggregations?: Record<string, unknown>;  // Aggregate functions
-  having?: Record<string, unknown>;        // Having clause for groups
+  select?: string[]; // Fields to include
+  omit?: string[]; // Fields to exclude
+  filters?: Record<string, unknown>; // Where clause
+  search?: Record<string, unknown>; // Full-text search
+  sort?: DfqlSort; // Ordering (e.g. ["-createdAt", "name"])
+  limit?: number; // Max results
+  offset?: number; // Skip N results
+  cursor?: DfqlCursor; // Cursor-based pagination
+  count?: boolean; // Return count only
+  groupBy?: string[]; // Group by fields
+  aggregations?: Record<string, unknown>; // Aggregate functions
+  having?: Record<string, unknown>; // Having clause for groups
 };
 ```
 
@@ -321,16 +394,16 @@ type DfqlQueryFragment = Omit<DfqlQuery, "resource" | "version">;
 type DfqlMutation = {
   resource: string;
   version: number;
-  operation: string;           // "insert" | "merge" | "replace" | "delete" | "relate" | "unrelate" | "modifyRelation"
-  id?: string | string[];      // Target record ID(s)
+  operation: string; // "insert" | "merge" | "replace" | "delete" | "relate" | "unrelate" | "modifyRelation"
+  id?: string | string[]; // Target record ID(s)
   record?: Record<string, unknown>;
   records?: Array<Record<string, unknown>>;
-  clientId?: string;           // For idempotency
-  mutationId?: string;         // For idempotency
+  clientId?: string; // For idempotency
+  mutationId?: string; // For idempotency
   timestamp?: number | string;
   context?: unknown;
   relations?: Record<string, unknown>;
-  if?: Record<string, unknown>;   // Optimistic concurrency guards
+  if?: Record<string, unknown>; // Optimistic concurrency guards
   cascade?: unknown;
 };
 ```
@@ -393,6 +466,7 @@ const schema = unwrapEnvelope(
 ```
 
 **Normalization applied:**
+
 - Converts `indices: string[]` → `{ base: string[], search: [], vector: [] }`
 - Defaults `relations` to `[]` if omitted
 - Validates unique resource names, field names, and required properties
@@ -468,7 +542,7 @@ Converts a plain key string to the canonical KV record ID.
 ```typescript
 import { kvId } from "@datafn/core";
 
-kvId("theme");      // → "kv:theme"
+kvId("theme"); // → "kv:theme"
 kvId("user:prefs"); // → "kv:user:prefs"
 ```
 
@@ -522,20 +596,20 @@ type DatafnEnvelope<T> =
 ## Full Schema Example
 
 ```typescript
-import type { DatafnSchema } from "@datafn/core";
+import { defineSchema, field } from "@datafn/core";
 
-const schema: DatafnSchema = {
+const schema = defineSchema({
   resources: [
     {
       name: "project",
       version: 1,
       idPrefix: "proj",
       fields: [
-        { name: "id", type: "string", required: true, unique: true },
-        { name: "name", type: "string", required: true, maxLength: 200 },
-        { name: "description", type: "string", required: false },
-        { name: "ownerId", type: "string", required: true },
-        { name: "createdAt", type: "date", required: true },
+        field.string("id", { required: true, unique: true }),
+        field.string("name", { required: true, maxLength: 200 }),
+        field.string("description"),
+        field.string("ownerId", { required: true }),
+        field.date("createdAt", { required: true }),
       ],
       indices: { base: ["ownerId", "createdAt"] },
     },
@@ -544,12 +618,12 @@ const schema: DatafnSchema = {
       version: 1,
       idPrefix: "task",
       fields: [
-        { name: "id", type: "string", required: true, unique: true },
-        { name: "title", type: "string", required: true, minLength: 1 },
-        { name: "completed", type: "boolean", required: true, default: false },
-        { name: "priority", type: "number", required: false, min: 1, max: 5 },
-        { name: "dueDate", type: "date", required: false },
-        { name: "projectId", type: "string", required: true },
+        field.string("id", { required: true, unique: true }),
+        field.string("title", { required: true, minLength: 1 }),
+        field.boolean("completed", { required: true, default: false }),
+        field.number("priority", { min: 1, max: 5 }),
+        field.date("dueDate"),
+        field.string("projectId", { required: true }),
       ],
       indices: { base: ["projectId", "completed"] },
     },
@@ -558,9 +632,9 @@ const schema: DatafnSchema = {
       version: 1,
       idPrefix: "tag",
       fields: [
-        { name: "id", type: "string", required: true, unique: true },
-        { name: "name", type: "string", required: true, unique: true },
-        { name: "color", type: "string", required: false },
+        field.string("id", { required: true, unique: true }),
+        field.string("name", { required: true, unique: true }),
+        field.string("color"),
       ],
     },
   ],
@@ -587,7 +661,7 @@ const schema: DatafnSchema = {
       inverse: "project",
     },
   ],
-};
+});
 ```
 
 ## License

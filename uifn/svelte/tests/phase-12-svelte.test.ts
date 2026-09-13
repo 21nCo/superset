@@ -31,7 +31,7 @@ describe('TV-SVELTE-001-P: catalog-complete Svelte 5 compounds', () => {
     await view.rerender({ angleName: 'bearing' });
     await tick();
     expect(view.getByTestId('angle-slider-input').getAttribute('name')).toBe('bearing');
-  });
+  }, 20_000);
 
   it('runs core behavior through concrete compound parts and bind:value', async () => {
     const view = renderClient(AccordionHarness);

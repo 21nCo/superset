@@ -5,6 +5,7 @@ from typing import Optional
 import pytest
 
 from superfunctions.oauth import (
+    OAuthCoreError,
     OAuthFlowStartInput,
     OAuthProviderDescriptor,
     OAuthSecretResolverContext,
@@ -104,7 +105,7 @@ async def test_python_oauth_core_consume_state_or_throw_replays() -> None:
     consumed = await consume_state_or_throw(store, "state_02", "2026-03-22T08:05:00Z")
     assert consumed.provider_id == "github"
 
-    with pytest.raises(Exception) as exc_info:
+    with pytest.raises(OAuthCoreError) as exc_info:
         await consume_state_or_throw(store, "state_02", "2026-03-22T08:06:00Z")
 
     assert exc_info.value.code == "OAUTH_STATE_REPLAYED"

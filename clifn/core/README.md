@@ -98,8 +98,8 @@ process.exitCode = exitCode;
 
 The current repository already uses all three parser styles:
 
-- `contentfn/cli` and `hostfn/cli` use `commander`
-- `apifn/cli` and `docsfn/cli` use `cac`
+- `hostfn/cli`, `plugfn/cli`, and `extfn/cli` use `commander`
+- `apifn/cli` uses `cac`
 - `datafn/cli` uses raw `node:util.parseArgs`
 
 The parser canaries under `clifn/core/tests/fixtures/*` prove that `runAction()` and the shared output service work in each style without adding parser libraries to `clifn` runtime dependencies.
@@ -267,8 +267,8 @@ These module entrypoints are the generic surface that repository CLIs can share:
 `clifn` is the shared home for generic CLI-builder concerns that appear across existing repository CLIs such as:
 
 - `packages/cli` and `apifn/cli` for config loading patterns
-- `hostfn/cli`, `recfn/cli`, and `apifn/cli` for output and command-runner patterns
-- `docsfn/cli` and `plugfn/cli` for structured diagnostics and test/reporting surfaces
+- `hostfn/cli`, `plugfn/cli`, and `apifn/cli` for output and command-runner patterns
+- `plugfn/cli` and `mcpfn/cli` for structured diagnostics and test/reporting surfaces
 
 Responsibilities that belong in `clifn`:
 
@@ -321,15 +321,17 @@ Responsibilities that stay in the owning CLI:
 - Product-owned concerns that stay local:
   - deployment workflows, SSH/server orchestration, runtime adapters, and host-specific validation
 
-### `recfn/cli`
+### `plugfn/cli`
 
 - Repeated pattern today:
-  - text/json rendering and table-like formatting in `recfn/cli/src/output.ts`
+  - text/json rendering in `plugfn/cli/src/commands/runtime.ts`
+  - structured diagnostics in `plugfn/cli/src/commands/test.ts`
 - `clifn` adoption target:
   - `@clifn/core/output` for generic mode switching and transport
-  - keep domain-specific formatters local where they encode recording/bot semantics
+  - `@clifn/core/diagnostics` for stable diagnostic formatting
+  - keep domain-specific formatters local where they encode provider/runtime semantics
 - Product-owned concerns that stay local:
-  - recording analytics formatting, transcript search semantics, and recorder-specific data shapes
+  - provider diagnostics, webhook fixtures, and integration-specific data shapes
 
 ### extfn adoption contract
 

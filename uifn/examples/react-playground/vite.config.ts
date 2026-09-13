@@ -7,8 +7,16 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: /^@uifn\/core\/(.*)$/,
-        replacement: `${path.resolve(__dirname, "../../core/src")}/$1`,
+        find: /^@uifn\/core\/primitives\/overlay$/,
+        replacement: path.resolve(__dirname, "../../core/dist/primitives/overlay.mjs"),
+      },
+      {
+        find: /^@uifn\/core\/primitives\/(.+)$/,
+        replacement: path.resolve(__dirname, "../../core/dist/primitive-entries/$1.mjs"),
+      },
+      {
+        find: /^@uifn\/core\/(.+)$/,
+        replacement: path.resolve(__dirname, "../../core/src/$1.ts"),
       },
       {
         find: "@uifn/react",

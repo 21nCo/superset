@@ -13,6 +13,7 @@ import {
   relationTargetEndpoint,
   resolveEndpointResource,
   resourceNameFromId,
+  stripNullsForNonNullableFields,
 } from "@datafn/core";
 import type { DatafnStorageAdapter } from "../storage.js";
 
@@ -367,16 +368,20 @@ export async function materializeSelect(
     }
   }
 
+  const resourceSchema = schema.resources.find((r) => r.name === resource);
   const results = [];
   for (const record of records) {
+    // Persisted stores can hold null for non-nullable fields (nullable SQL
+    // columns, replace clears). Expose them as undefined in query results.
+    const source = stripNullsForNonNullableFields(record, resourceSchema);
     const result: Record<string, unknown> = {};
 
     // Copy fields
     if (baseFields.has("*")) {
-      Object.assign(result, record);
+      Object.assign(result, source);
     }
     if (!baseFields.has("*")) {
-      result.id = record.id;
+      result.id = source.id;
     }
     for (const key of baseFields) {
       if (key === "*") continue;
@@ -385,13 +390,13 @@ export async function materializeSelect(
           storage,
           schema,
           resource,
-          record,
+          source,
           key,
           [],
           metadata,
         );
-      } else if (!baseFields.has("*") && key in record) {
-        result[key] = record[key];
+      } else if (!baseFields.has("*") && key in source) {
+        result[key] = source[key];
       }
     }
 
@@ -401,7 +406,7 @@ export async function materializeSelect(
         storage,
         schema,
         resource,
-        record,
+        source,
         key,
         subSelect,
         metadata,

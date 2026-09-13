@@ -115,6 +115,29 @@ export {
   readDatafnCloudflarePlacementLocation,
   selectDatafnPlacementRegion,
 } from "./placement-policy.js";
+export {
+  DatafnNamespaceStorageError,
+  POSTGRES_NAMESPACE_STORAGE_CATALOG_SQL,
+  POSTGRES_NAMESPACE_STORAGE_INDEX_SQL,
+  assertInternalNamespaceStorageMetadataComplete,
+  composeNamespaceStoragePlan,
+  drainNamespaceStorage,
+  inspectPostgresNamespaceStorage,
+  namespacedInternalTableRoles,
+  quotePostgresIdentifier,
+  resolveNamespaceStoragePlan,
+  selectNamespaceStorageEntries,
+} from "./namespace-storage.js";
+export type {
+  ApplicationNamespaceStorageEntry,
+  DatafnNamespaceStorageErrorCode,
+  NamespaceStorageCatalog,
+  NamespaceStorageCatalogRelation,
+  NamespaceStorageEntry,
+  NamespaceStoragePlan,
+  PostgresNamespaceStorageQuery,
+} from "./namespace-storage.js";
+export { drainNamespacePermissionDirectoryOutbox } from "./execution/mutation/permission-directory-outbox.js";
 
 // Re-export SearchProvider for consumer use
 export type { SearchProvider } from "./search-provider.js";
@@ -136,3 +159,16 @@ export {
   DatabaseSequenceStore,
   ChainedSequenceStore,
 } from "./execution/sync/sequence-store.js";
+
+// Re-export inherited-inactivity recompute (one-shot backfill for existing rows)
+export {
+  recomputeAncestorInactive,
+  recomputeAncestorInactiveAll,
+  ancestorInactiveResources,
+} from "./execution/migration/ancestor-inactive.js";
+export type {
+  AncestorInactiveCursor,
+  RecomputeAncestorInactiveOptions,
+  RecomputeAncestorInactiveResult,
+  RecomputeAncestorInactiveAllResult,
+} from "./execution/migration/ancestor-inactive.js";

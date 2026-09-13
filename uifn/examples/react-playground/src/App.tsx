@@ -17,16 +17,16 @@ import {
   DialogClose,
   DialogContent,
   DialogDescription,
-  DialogOverlay,
+  DialogBackdrop,
   DialogPortal,
   DialogTitle,
   DialogTrigger,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  Menu as DropdownMenu,
+  MenuContent as DropdownMenuContent,
+  MenuItem as DropdownMenuItem,
+  MenuGroupLabel as DropdownMenuLabel,
+  MenuSeparator as DropdownMenuSeparator,
+  MenuTrigger as DropdownMenuTrigger,
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
@@ -42,21 +42,21 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
+  SelectValueText as SelectValue,
   Switch,
   SwitchThumb,
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
-  Toast,
   ToastClose,
   ToastDescription,
   ToastProvider,
+  ToastRoot,
   ToastTitle,
   ToastViewport,
-  VirtualizedList,
 } from "@uifn/react";
+import { VirtualizedList } from "./VirtualizedList";
 import {
   capabilitySupport,
   commandItems,
@@ -87,6 +87,18 @@ const scenarioComponentById: Record<ExampleScenarioId, React.FC<ScenarioComponen
 const reactCapabilityMatrix = capabilitySupport.filter(
   (entry) => entry.adapter === "react",
 );
+
+const memberActionItems = [
+  { id: "message", value: "message", label: "Message teammate", textValue: "Message teammate" },
+  { id: "review", value: "review", label: "Assign reviewer", textValue: "Assign reviewer" },
+  { id: "profile", value: "profile", label: "Open profile", textValue: "Open profile" },
+] as const;
+
+const commandMenuItems = [
+  { id: "run", value: "run", label: "Run selected command", textValue: "Run selected command" },
+  { id: "copy", value: "copy", label: "Copy route", textValue: "Copy route" },
+  { id: "pin", value: "pin", label: "Pin to favorites", textValue: "Pin to favorites" },
+] as const;
 
 function useNormalizedHashRoute(initialRoute?: ExampleRouteHash) {
   const readRoute = () =>
@@ -129,8 +141,7 @@ export function App({ initialRoute }: { initialRoute?: ExampleRouteHash } = {}) 
   const ScenarioComponent = scenarioComponentById[activeScenario.id];
 
   return (
-    <ToastProvider duration={3500}>
-      <main className="app-shell">
+    <main className="app-shell">
         <section className="hero-panel">
           <div>
             <p className="eyebrow">uifn examples</p>
@@ -189,7 +200,6 @@ export function App({ initialRoute }: { initialRoute?: ExampleRouteHash } = {}) 
           </aside>
         </div>
       </main>
-    </ToastProvider>
   );
 }
 
@@ -246,12 +256,28 @@ function SettingsConsoleScenario({ route }: ScenarioComponentProps) {
   };
 
   return (
-    <div className="scenario-stack" data-route={route}>
+    <ToastProvider
+      duration={3500}
+      toasts={
+        toastOpen
+          ? [
+              {
+                id: "settings-saved",
+                title: "Settings saved",
+                description: "Your React example preferences were applied successfully.",
+                duration: 3500,
+              },
+            ]
+          : []
+      }
+      onDismiss={() => setToastOpen(false)}
+    >
+      <div className="scenario-stack" data-route={route}>
       <div className="scenario-toolbar">
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger className="primary-button">Open settings console</DialogTrigger>
           <DialogPortal>
-            <DialogOverlay className="dialog-overlay" />
+            <DialogBackdrop className="dialog-overlay" />
             <DialogContent className="dialog-content">
               <div className="dialog-header">
                 <div>
@@ -355,17 +381,24 @@ function SettingsConsoleScenario({ route }: ScenarioComponentProps) {
         </p>
       </div>
 
-      <Toast open={toastOpen} onOpenChange={setToastOpen} className="toast-card">
-        <ToastTitle>Settings saved</ToastTitle>
-        <ToastDescription>
-          Your React example preferences were applied successfully.
-        </ToastDescription>
-        <ToastClose className="ghost-button" aria-label="Dismiss notification">
-          Dismiss
-        </ToastClose>
-      </Toast>
+      {toastOpen ? (
+        <ToastRoot value="settings-saved" className="toast-card">
+          <ToastTitle value="settings-saved">Settings saved</ToastTitle>
+          <ToastDescription value="settings-saved">
+            Your React example preferences were applied successfully.
+          </ToastDescription>
+          <ToastClose
+            value="settings-saved"
+            className="ghost-button"
+            aria-label="Dismiss notification"
+          >
+            Dismiss
+          </ToastClose>
+        </ToastRoot>
+      ) : null}
       <ToastViewport />
     </div>
+    </ToastProvider>
   );
 }
 
@@ -410,16 +443,16 @@ function TeamDirectoryScenario({ route }: ScenarioComponentProps) {
                 </PopoverContent>
               </Popover>
 
-              <DropdownMenu>
+              <DropdownMenu items={memberActionItems}>
                 <DropdownMenuTrigger className="ghost-button">
                   Actions
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  <DropdownMenuLabel>Quick actions</DropdownMenuLabel>
-                  <DropdownMenuItem>Message teammate</DropdownMenuItem>
-                  <DropdownMenuItem>Assign reviewer</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem>Open profile</DropdownMenuItem>
+                  <DropdownMenuLabel value={member.id}>Quick actions</DropdownMenuLabel>
+                  <DropdownMenuItem value="message">Message teammate</DropdownMenuItem>
+                  <DropdownMenuItem value="review">Assign reviewer</DropdownMenuItem>
+                  <DropdownMenuSeparator value={`${member.id}-separator`} />
+                  <DropdownMenuItem value="profile">Open profile</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -493,7 +526,7 @@ function CommandCenterScenario({ route }: ScenarioComponentProps) {
           </label>
         </div>
 
-        <ContextMenu>
+        <ContextMenu items={commandMenuItems}>
           <ContextMenuTrigger className="results-shell">
             <ScrollArea className="results-area">
               <ScrollAreaViewport className="results-viewport">
@@ -506,15 +539,15 @@ function CommandCenterScenario({ route }: ScenarioComponentProps) {
                   ))}
                 </ul>
               </ScrollAreaViewport>
-              <ScrollAreaScrollbar orientation="vertical" className="scrollbar">
-                <ScrollAreaThumb className="scroll-thumb" />
+              <ScrollAreaScrollbar orientation="vertical" value="vertical" className="scrollbar">
+                <ScrollAreaThumb value="vertical" className="scroll-thumb" />
               </ScrollAreaScrollbar>
             </ScrollArea>
           </ContextMenuTrigger>
           <ContextMenuContent>
-            <ContextMenuItem>Run selected command</ContextMenuItem>
-            <ContextMenuItem>Copy route</ContextMenuItem>
-            <ContextMenuItem>Pin to favorites</ContextMenuItem>
+            <ContextMenuItem value="run">Run selected command</ContextMenuItem>
+            <ContextMenuItem value="copy">Copy route</ContextMenuItem>
+            <ContextMenuItem value="pin">Pin to favorites</ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
       </div>

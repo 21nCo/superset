@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .core import (
     AuthorizationResult,
+    OAuthCoreError,
     OAuthProviderDescriptor,
     OAuthProviderRuntimeConfig,
     OAuthTokenSet,
@@ -22,7 +23,7 @@ from .core import (
     assert_redirect_uri_allowed,
     consume_state_or_throw,
 )
-from .http import OAuthHttpError, OAuthTokenEndpointRequest
+from .http import OAuthHttpError, OAuthHttpErrorCode, OAuthTokenEndpointRequest
 from .storage import (
     OAuthStateRecord,
     TokenRecord,
@@ -400,7 +401,7 @@ class DefaultOAuthFlowService:
             assert_redirect_uri_allowed(payload.redirect_uri, runtime.allowlisted_redirect_uris or [])
         except Exception as error:  # noqa: BLE001
             details = getattr(error, "details", None)
-            code = getattr(error, "code", "VALIDATION_ERROR")
+            code: OAuthHttpErrorCode = error.code if isinstance(error, (OAuthCoreError, OAuthHttpError)) else "VALIDATION_ERROR"
             if code == "OAUTH_REDIRECT_DISALLOWED":
                 details = {"redirectUri": payload.redirect_uri}
             await self._emit_event(

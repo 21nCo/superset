@@ -65,6 +65,11 @@ These fire on query, mutation, or transaction requests when the payload doesn't 
 | `INTERNAL` | Unclassified server error (database connection, plugin throwing, etc.). | Check server logs; this code is never thrown intentionally. |
 | `TRANSACTION_ROLLED_BACK` | A step in `transact` failed and the entire transaction was rolled back. | Inspect prior step error(s); the rollback itself is correct. |
 | `TRANSPORT_ERROR` | Client-side network error (timeout, connection refused, DNS). Never returned by the server. | Surface to the user; retry with backoff. |
+| `DATAFN_NAMESPACE_STORAGE_UNSUPPORTED` | Non-PostgreSQL catalog, unnamespaced schema, or a drain role without an implementation. | Use the PostgreSQL resolver, enable `namespaced: true`, or upgrade DataFn. |
+| `DATAFN_NAMESPACE_STORAGE_VERSION_MISMATCH` | Caller requested a manifest/schema version this DataFn build does not support. | Negotiate version `1` or block the tenant operation. |
+| `DATAFN_NAMESPACE_STORAGE_INCOMPLETE` | A required resource/join table or selector column is missing. | Finish schema install/migration, then retry. |
+| `DATAFN_NAMESPACE_STORAGE_UNKNOWN` | The database contains DataFn namespace storage that this build does not know about. | Upgrade DataFn before copy/backup/fence; do not ignore the table. |
+| `DATAFN_NAMESPACE_STORAGE_INVALID` | Identifier injection or an application relation colliding with DataFn storage. | Use `quotePostgresIdentifier` / `composeNamespaceStoragePlan` only with validated names. |
 
 ## Apple-only
 
