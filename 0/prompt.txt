@@ -1,0 +1,5 @@
+what is your home directory?
+
+---
+
+which MCPs do you have access to?
