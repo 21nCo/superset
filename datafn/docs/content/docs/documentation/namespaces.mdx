@@ -111,6 +111,8 @@ The `__ns` column is managed entirely by the framework. Your application code ne
 
 Internal CRUD operations (system tables like change tracking and idempotency) bypass the namespace wrapper. This ensures that server-managed infrastructure data is not scoped to individual namespaces.
 
+Those tables still store a `namespace` column. Use the [namespace storage contract](/docs/documentation/namespace-storage) to copy, verify, fence, and drain them together with resource rows (`__ns`) instead of querying PostgreSQL catalogs.
+
 ## Server: `namespaceProvider`
 
 The `namespaceProvider` on the server configuration maps incoming requests to a namespace string. It has two functions:

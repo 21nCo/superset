@@ -24,8 +24,10 @@ import {
   getJoinStoreKey,
   normalizeRelationPayload,
   resolveEndpointResource,
+  resourceRequiresAncestorInactive,
 } from "@datafn/core";
 import {
+  assertNoSystemFieldWrite,
   injectCapabilityFieldsForOptimisticRecord,
   sanitizeCapabilityReadonlyFields,
 } from "../capability-fields.js";
@@ -162,6 +164,7 @@ async function updateAncestorInactive(
   resource: string,
   record: Record<string, unknown>,
 ): Promise<Record<string, unknown> | null> {
+  if (!resourceRequiresAncestorInactive(schema.relations, resource)) return null;
   const next = await resolveAncestorInactive(storage, schema, resource, record);
   if (record.isAncestorInactive === next) return null;
   const updated = { ...record, isAncestorInactive: next };
@@ -854,6 +857,7 @@ export async function validateOfflineMutation(
   mutation: Record<string, unknown>,
 ): Promise<void> {
   const operation = mutation.operation as string;
+  assertNoSystemFieldWrite(schema, mutation);
   if (operation === "relate" || operation === "modifyRelation" || operation === "unrelate") {
     await validateRelationMutation(storage, schema, mutation);
   } else if (operation === "delete") {

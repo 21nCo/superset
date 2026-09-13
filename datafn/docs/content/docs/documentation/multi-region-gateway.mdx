@@ -121,6 +121,8 @@ When a move starts, call `fenceNamespace(namespace)` (or provide the new minimum
 
 ## Migration protocol
 
+Use `resolveNamespaceStoragePlan` from `@datafn/server` to copy, verify, fence, and drain every DataFn-owned namespace relation. Do not scan PostgreSQL catalogs or hard-code `__datafn_*` names in application code. See [Namespace storage contract](/docs/documentation/namespace-storage).
+
 `migrateDatafnNamespace` implements the minimal fenced order:
 
 1. CAS the active placement to `moving` at a newer epoch.

@@ -1,0 +1,28 @@
+---
+title: "Namespace storage manifest"
+description: "Logical roles and operations for DataFn-owned namespace storage."
+audience: reference
+applies_to: typescript
+---
+
+```typescript
+import {
+  DATAFN_NAMESPACE_STORAGE_MANIFEST,
+  DATAFN_NAMESPACE_STORAGE_MANIFEST_VERSION,
+  DATAFN_NAMESPACE_STORAGE_SCHEMA_VERSION,
+  namespaceStorageParticipates,
+} from "@datafn/core";
+```
+
+`DATAFN_NAMESPACE_STORAGE_MANIFEST_VERSION` and `DATAFN_NAMESPACE_STORAGE_SCHEMA_VERSION` are currently `"1"`.
+
+Logical roles:
+
+- `resource`, `join`
+- `permissions_global`, `permissions_legacy`, `principal_memberships`, `principal_hierarchy`
+- `sync_meta`, `sync_changes`, `idempotency`, `seed`
+- `permission_directory_outbox`
+
+Operations: `copy`, `verify`, `cleanup`, `fence`, `drain`, `backup`.
+
+Only `permission_directory_outbox` participates in `drain`. Physical names are resolved by `@datafn/server`.

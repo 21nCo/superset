@@ -14,7 +14,12 @@ import {
   validateRelationName,
   getRelation,
 } from "./schema.js";
-import { checkPrototypePollution, validateFieldValue } from "@datafn/core";
+import {
+  checkPrototypePollution,
+  validateFieldValue,
+  toBoundsEpochMs,
+  formatBoundEpochMs,
+} from "@datafn/core";
 
 /**
  * Options for mutation validation (VAL-006 through VAL-009)
@@ -376,6 +381,32 @@ export function validateMutation(
           `${basePath}.record.${fieldName}`,
         );
       }
+      // Enforce min/max bounds for date fields by comparing epoch milliseconds.
+      if (
+        fieldDef.type === "date" &&
+        (fieldDef.min !== undefined || fieldDef.max !== undefined)
+      ) {
+        // Timezone-less ISO datetimes compare as UTC so absolute bounds do
+        // not depend on the server's local timezone.
+        const epoch = toBoundsEpochMs(value);
+        // Non-finite epochs are e2ee envelopes or already rejected above.
+        if (Number.isFinite(epoch)) {
+          if (fieldDef.min !== undefined && epoch < fieldDef.min) {
+            return vErr(
+              "DFQL_INVALID",
+              `Field '${fieldName}' must be on or after ${formatBoundEpochMs(fieldDef.min)}`,
+              `${basePath}.record.${fieldName}`,
+            );
+          }
+          if (fieldDef.max !== undefined && epoch > fieldDef.max) {
+            return vErr(
+              "DFQL_INVALID",
+              `Field '${fieldName}' must be on or before ${formatBoundEpochMs(fieldDef.max)}`,
+              `${basePath}.record.${fieldName}`,
+            );
+          }
+        }
+      }
     }
 
     // Check required fields for insert/replace
@@ -386,7 +417,11 @@ export function validateMutation(
             if (field.required && field.default === undefined && field.name !== "id" && !field.readonly) {
                 // If required, no default, not id, not readonly (system)
                 // Must be present
-                if (!(field.name in record) || record[field.name] === null || record[field.name] === undefined) {
+                if (
+                  !(field.name in record) ||
+                  record[field.name] === undefined ||
+                  (record[field.name] === null && !field.nullable)
+                ) {
                      return vErr(
                         "DFQL_INVALID",
                         `Required field missing: ${field.name}`,

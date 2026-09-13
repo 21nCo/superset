@@ -1,1 +1,0 @@
-/Users/ar/dev/functions/searchfn/_conduct/AGENTS.md

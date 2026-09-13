@@ -36,7 +36,6 @@
     "test": "vitest",
     "test:watch": "vitest watch",
     "typecheck": "tsc --noEmit",
-    "benchmark": "tsx benchmarks/indexing-benchmark.ts",
     "prepublishOnly": "npm run lint && npm run build"
   },
   "engines": {
@@ -81,7 +80,6 @@
     "fake-indexeddb": "^6.2.4",
     "prettier": "^3.6.2",
     "tsup": "^8.5.0",
-    "tsx": "^4.19.1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   }

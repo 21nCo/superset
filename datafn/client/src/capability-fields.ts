@@ -1,8 +1,10 @@
 import {
+  findSystemFieldWrite,
   normalizeRelationFkRecord,
   resolveCapabilities,
   type DatafnSchema,
 } from "@datafn/core";
+import { createClientError } from "./errors.js";
 
 type CapabilityMutationOp = "insert" | "merge" | "replace";
 
@@ -85,6 +87,35 @@ function applySchemaDefaults(
     }
   }
   return next;
+}
+
+/**
+ * Throws DFQL_INVALID when a record mutation writes a DataFn system field
+ * (e.g. `isAncestorInactive`) that only the runtime may maintain.
+ */
+export function assertNoSystemFieldWrite(
+  schema: DatafnSchema | undefined,
+  mutation: Record<string, unknown>,
+): void {
+  if (!schema) return;
+  if (!isRecordOperation(mutation.operation)) return;
+  if (typeof mutation.record !== "object" || mutation.record === null || Array.isArray(mutation.record)) {
+    return;
+  }
+  const resourceName = mutation.resource;
+  if (typeof resourceName !== "string") return;
+  const systemField = findSystemFieldWrite(
+    schema.relations,
+    resourceName,
+    mutation.record as Record<string, unknown>,
+  );
+  if (systemField) {
+    throw createClientError(
+      "DFQL_INVALID",
+      `Field is read-only: ${systemField} on ${resourceName}`,
+      { path: `record.${systemField}` },
+    );
+  }
 }
 
 export function sanitizeCapabilityReadonlyFields(

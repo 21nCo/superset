@@ -400,3 +400,72 @@ export async function drainPermissionDirectoryOutbox(
   }
   return { processed, pending: tasks.length - processed };
 }
+
+/**
+ * Drain every permission-directory outbox row for one namespace.
+ * Used by tenant move/backup tooling after writes are fenced.
+ */
+export async function drainNamespacePermissionDirectoryOutbox(
+  db: Adapter,
+  namespace: string,
+  runtime: DatafnMultiRegionRuntimeConfig,
+  logger?: DatafnLogger,
+  options: { limit?: number; maxRounds?: number } = {},
+): Promise<{ processed: number; pending: number }> {
+  await ensurePermissionDirectoryOutbox(db);
+  const limit = options.limit ?? 100;
+  const maxRounds = options.maxRounds ?? 32;
+  let processed = 0;
+  for (let round = 0; round < maxRounds; round += 1) {
+    const tasks = await db.internal.findMany(OUTBOX_TABLE, [
+      { field: "namespace", op: "eq", value: namespace },
+      { field: "region_id", op: "eq", value: runtime.regionId },
+      { field: "next_attempt_at", op: "lte", value: new Date().toISOString() },
+    ], {
+      orderBy: "next_attempt_at",
+      limit,
+    });
+    if (tasks.length === 0) {
+      break;
+    }
+    let roundProcessed = 0;
+    for (const task of tasks) {
+      const taskId = String(task.id);
+      const selectedNextAttemptAt = String(task.next_attempt_at);
+      const claimedNextAttemptAt = new Date(
+        Date.now() + DRAIN_CLAIM_LEASE_MS,
+      ).toISOString();
+      const claimed = await db.internal.update(OUTBOX_TABLE, [
+        { field: "id", op: "eq", value: taskId },
+        { field: "namespace", op: "eq", value: namespace },
+        { field: "region_id", op: "eq", value: runtime.regionId },
+        { field: "next_attempt_at", op: "eq", value: selectedNextAttemptAt },
+      ], {
+        next_attempt_at: claimedNextAttemptAt,
+      });
+      if (claimed === 0) continue;
+      if (await drainPermissionDirectorySync(
+        db,
+        taskId,
+        runtime,
+        logger,
+        { expectedNextAttemptAt: claimedNextAttemptAt },
+      )) {
+        processed += 1;
+        roundProcessed += 1;
+      }
+    }
+    if (roundProcessed === 0) {
+      const remaining = await db.internal.findMany(OUTBOX_TABLE, [
+        { field: "namespace", op: "eq", value: namespace },
+        { field: "region_id", op: "eq", value: runtime.regionId },
+      ], { limit: 1 });
+      return { processed, pending: remaining.length };
+    }
+  }
+  const remaining = await db.internal.findMany(OUTBOX_TABLE, [
+    { field: "namespace", op: "eq", value: namespace },
+    { field: "region_id", op: "eq", value: runtime.regionId },
+  ], { limit: 1 });
+  return { processed, pending: remaining.length };
+}

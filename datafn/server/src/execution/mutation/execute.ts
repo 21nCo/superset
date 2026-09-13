@@ -7,7 +7,7 @@ import type { Adapter } from "@superfunctions/db";
 import { randomUUID } from "crypto";
 import { isRetryableMutationResult, type IdempotencyStore, type MutationResult } from "../idempotency.js";
 import { type DFQLMutation, buildReplaceRecord } from "./dfql.js";
-import { normalizeRelationFkRecord, resolveCapabilities } from "@datafn/core";
+import { findSystemFieldWrite, normalizeRelationFkRecord, resolveCapabilities } from "@datafn/core";
 import {
   applyInactivePropagation,
   applyRelationDeletePolicies,
@@ -231,6 +231,27 @@ async function executeMutationCore(
   // EXE-008: flag to skip change tracking when deleting a non-existent record
   let skipChangeTracking = false;
   let failedShareCompensation: FailedShareCompensation | null = null;
+
+  if (
+    (mutation.operation === "insert" || mutation.operation === "merge" || mutation.operation === "replace") &&
+    mutation.record
+  ) {
+    const systemField = findSystemFieldWrite(schema.relations, mutation.resource, mutation.record);
+    if (systemField) {
+      return {
+        ok: false,
+        mutationId: effectiveMutationId,
+        affectedIds: [],
+        errors: [{
+          code: "DFQL_INVALID",
+          message: `Field is read-only: ${systemField} on ${mutation.resource}`,
+          path: `record.${systemField}`,
+          retryable: false,
+        }],
+        deduped: false,
+      };
+    }
+  }
 
   try {
     switch (mutation.operation) {

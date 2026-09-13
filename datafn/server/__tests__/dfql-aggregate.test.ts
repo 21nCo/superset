@@ -250,3 +250,19 @@ describe("DFQL Aggregations (Phase 15)", () => {
     expect(res3.error.code).toBe("DFQL_INVALID");
   });
 });
+
+ describe("relation group null normalization", () => {
+  it.each([false, true])("preserves declared nullable=%s after having", async (nullable) => {
+    const { executeAggregateQuery } = await import("../src/execution/query/aggregate.js");
+    const schema = { resources: [
+      { name: "item", fields: [{ name: "catId" }] },
+      { name: "category", fields: [{ name: "description", nullable }] },
+    ], relations: [{ from: "item", to: "category", relation: "cat", inverse: "items", type: "many-one", fkField: "catId" }] };
+    const target = { id: "category:1", description: null };
+    const result = executeAggregateQuery({ resource: "item", groupBy: ["cat.description"],
+      aggregations: { count: { op: "count" } }, having: { count: { $eq: 1 } } },
+      [{ id: "item:1", catId: target.id }], schema, { getRecord: () => target });
+    expect(result.groups).toEqual([nullable ? { "cat.description": null, count: 1 } : { count: 1 }]);
+    expect(target.description).toBeNull();
+  });
+ });

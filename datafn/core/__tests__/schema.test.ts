@@ -577,3 +577,129 @@ describe("isNamespaced() helper", () => {
     expect(isNamespaced({ resources: [] })).toBe(true);
   });
 });
+
+describe("validateSchema date bounds", () => {
+  const schemaWithDateField = (field: Record<string, unknown>) => ({
+    resources: [
+      { name: "event", version: 1, fields: [field] },
+    ],
+  });
+
+  it("rejects a non-finite min bound", () => {
+    const result = validateSchema(
+      schemaWithDateField({ name: "startsAt", type: "date", required: false, min: Number.NaN }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("SCHEMA_INVALID");
+  });
+
+  it("rejects min greater than max", () => {
+    const result = validateSchema(
+      schemaWithDateField({ name: "startsAt", type: "date", required: false, min: 200, max: 100 }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("SCHEMA_INVALID");
+  });
+
+  it("rejects an out-of-range default that replace would otherwise apply unvalidated", () => {
+    const result = validateSchema(
+      schemaWithDateField({
+        name: "startsAt",
+        type: "date",
+        required: false,
+        min: 100,
+        max: 200,
+        default: 0,
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("SCHEMA_INVALID");
+  });
+
+  it("accepts an in-range ISO-string default and a null default", () => {
+    const inRange = validateSchema(
+      schemaWithDateField({
+        name: "startsAt",
+        type: "date",
+        required: false,
+        min: Date.parse("2026-01-01T00:00:00.000Z"),
+        max: Date.parse("2026-12-31T23:59:59.999Z"),
+        default: "2026-06-15T12:00:00.000Z",
+      }),
+    );
+    expect(inRange.ok).toBe(true);
+
+    const nullDefault = validateSchema(
+      schemaWithDateField({
+        name: "startsAt",
+        type: "date",
+        required: false,
+        nullable: true,
+        min: 100,
+        max: 200,
+        default: null,
+      }),
+    );
+    expect(nullDefault.ok).toBe(true);
+  });
+
+  it("rejects parseable non-ISO defaults using the mutation date contract", () => {
+    const result = validateSchema(schemaWithDateField({
+      name: "startsAt", type: "date", required: false,
+      min: 0, default: "June 15, 2026",
+    }));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("SCHEMA_INVALID");
+  });
+
+  it("rejects an unparseable string default on a bounded date field", () => {
+    const result = validateSchema(
+      schemaWithDateField({
+        name: "startsAt",
+        type: "date",
+        required: false,
+        min: 100,
+        max: 200,
+        default: "not-a-date",
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("SCHEMA_INVALID");
+  });
+
+  it("rejects a non-date object default on a bounded date field", () => {
+    const result = validateSchema(
+      schemaWithDateField({
+        name: "startsAt",
+        type: "date",
+        required: false,
+        min: 100,
+        max: 200,
+        default: { when: "soon" },
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("SCHEMA_INVALID");
+  });
+
+  it("keeps the e2ee-envelope default exception on a bounded date field", () => {
+    const result = validateSchema(
+      schemaWithDateField({
+        name: "startsAt",
+        type: "date",
+        required: false,
+        encrypt: true,
+        min: 100,
+        max: 200,
+        default: {
+          __datafnE2ee: 1,
+          alg: "AES-GCM",
+          keyRef: "key-1",
+          iv: "aXY=",
+          data: "ZGF0YQ==",
+        },
+      }),
+    );
+    expect(result.ok).toBe(true);
+  });
+});

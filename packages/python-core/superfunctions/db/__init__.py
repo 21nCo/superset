@@ -13,9 +13,9 @@ Example:
 """
 
 from .errors import (
+    AdapterConnectionError,
     AdapterError,
     AdapterErrorCode,
-    AdapterConnectionError,
     AdapterTimeoutError,
     ConstraintViolationError,
     DuplicateKeyError,

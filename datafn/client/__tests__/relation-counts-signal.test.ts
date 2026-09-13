@@ -18,7 +18,6 @@ const schema: DatafnSchema = {
         { name: "isArchived", type: "boolean", required: false },
         { name: "trashedAt", type: "number", required: false },
         { name: "trashInformation", type: "object", required: false },
-        { name: "isAncestorInactive", type: "boolean", required: false },
       ],
     },
     {
@@ -29,7 +28,6 @@ const schema: DatafnSchema = {
         { name: "isArchived", type: "boolean", required: false },
         { name: "trashedAt", type: "number", required: false },
         { name: "trashInformation", type: "object", required: false },
-        { name: "isAncestorInactive", type: "boolean", required: false },
       ],
     },
   ],
