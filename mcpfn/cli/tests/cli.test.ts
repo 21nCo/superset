@@ -1,8 +1,10 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import readline from "node:readline";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   McpFnRegistry,
@@ -52,6 +54,19 @@ describe("mcpfn CLI", () => {
       "10ms",
     ], { stderr: (value) => { errors += value; } })).toBe(2);
     expect(errors).toContain("--timeout must be a positive integer");
+  });
+
+  it("rejects invalid conformance report options before launching a runner", async () => {
+    let errors = "";
+    expect(await runCli(["conformance", "http://127.0.0.1:1/mcp", "--max-report-bytes", "12", "--report", "never-created.json"], {
+      stderr: (text) => { errors += text; },
+    })).toBe(2);
+    expect(errors).toContain("at least 1025");
+    errors = "";
+    expect(await runCli(["conformance", "http://127.0.0.1:1/mcp", "--max-report-bytes", "2048"], {
+      stderr: (text) => { errors += text; },
+    })).toBe(2);
+    expect(errors).toContain("requires --report");
   });
 
   it("validates and diffs manifests with stable exit codes", async () => {
@@ -278,7 +293,7 @@ describe("mcpfn CLI", () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mcpfn-cli-runtime-"));
     roots.push(root);
     await writeFile(path.join(root, "scenarios.json"), "[]\n");
-    let errors = "";
+    let output = "";
     const exitCode = await runCli([
       "test-target",
       "mcpfn-command-that-does-not-exist",
@@ -286,9 +301,81 @@ describe("mcpfn CLI", () => {
       "--stdio",
     ], {
       cwd: root,
-      stderr: (value) => { errors += value; },
+      stdout: (value) => { output += value; },
     });
     expect(exitCode).toBe(1);
-    expect(errors).toContain("Failed to connect and initialize the MCP session");
+    expect(JSON.parse(output)).toMatchObject({
+      ok: false,
+      status: "incomplete",
+      failure: { phase: expect.any(String), layer: expect.any(String) },
+    });
+  });
+
+  it("uses environment-backed API keys and writes bounded JSON and JUnit target artifacts", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mcpfn-cli-external-"));
+    roots.push(root);
+    const scenarios = path.join(root, "scenarios.mjs");
+    const json = path.join(root, "report.json");
+    const junit = path.join(root, "report.xml");
+    await writeFile(scenarios, `export default [{
+      name: "external identity", kind: "tools.call", tool: "external_identity",
+      expect: { structuredContent: { authenticated: true }, structuredTextParity: true }
+    }];\n`);
+    const serverSource = fileURLToPath(
+      new URL("../../examples/external-http-server.mjs", import.meta.url),
+    );
+    const server = spawn(process.execPath, [serverSource], {
+      env: { ...process.env, MCPFN_EXTERNAL_API_KEY: "cli-external-secret" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    try {
+      const lines = readline.createInterface({ input: server.stdout });
+      const url = await new Promise<string>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("fixture startup timeout")), 10_000);
+        lines.once("line", (line) => {
+          clearTimeout(timer);
+          lines.close();
+          resolve(line.trim());
+        });
+        server.once("error", reject);
+      });
+      process.env.MCPFN_CLI_TEST_KEY = "cli-external-secret";
+      let output = "";
+      expect(await runCli([
+        "test-target",
+        url,
+        scenarios,
+        "--api-key-env",
+        "MCPFN_CLI_TEST_KEY",
+        "--output",
+        json,
+        "--junit",
+        junit,
+        "--max-report-bytes",
+        "1048576",
+      ], { cwd: root, stdout: (value) => { output += value; } })).toBe(0);
+      expect(JSON.parse(output)).toMatchObject({ ok: true, passed: 1 });
+      expect(JSON.parse(await readFile(json, "utf8"))).toMatchObject({ ok: true });
+      const junitText = await readFile(junit, "utf8");
+      expect(junitText).toContain("external identity");
+      expect(junitText).not.toContain("cli-external-secret");
+
+      process.env.MCPFN_CLI_TEST_KEY = "";
+      let errors = "";
+      expect(await runCli([
+        "test-target",
+        url,
+        scenarios,
+        "--api-key-env",
+        "MCPFN_CLI_TEST_KEY",
+      ], { cwd: root, stderr: (value) => { errors += value; } })).toBe(2);
+      expect(errors).toContain("missing or empty");
+    } finally {
+      delete process.env.MCPFN_CLI_TEST_KEY;
+      server.kill("SIGTERM");
+      if (server.exitCode === null && server.signalCode === null) {
+        await new Promise((resolve) => server.once("exit", resolve));
+      }
+    }
   });
 });

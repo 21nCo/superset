@@ -118,3 +118,15 @@ describe("McpFn target suite", () => {
     });
   });
 });
+
+it("marks otherwise successful suites incomplete when custom close rejects", async () => {
+  const server = createMcpFnServer({ info: { name: "close-failure", version: "1" }, registry: new McpFnRegistry() });
+  const report = await runMcpFnTargetSuite({ target: customTarget({ kind: "fixture", open: async () => {
+    const [client, remote] = InMemoryTransport.createLinkedPair();
+    await server.connect(remote);
+    return { transport: client, close: async () => { await server.close(); throw new Error("opaque-cleanup-value"); } };
+  } }) });
+  expect(report.ok).toBe(false);
+  expect(report.incompleteReason).toContain("Target cleanup failed");
+  expect(JSON.stringify(report)).not.toContain("opaque-cleanup-value");
+});

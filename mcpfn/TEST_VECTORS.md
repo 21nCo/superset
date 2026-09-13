@@ -1,4 +1,4 @@
-# MCP-2 deterministic test vectors
+# McpFn deterministic test vectors
 
 These matrices define the maintained compatibility fixtures. Each vector is
 implemented by the auth, client, testing, inspector, CLI, or release-gate test
@@ -53,14 +53,22 @@ suites. Named host data is synthetic and contains no provider credential.
 | Inspector-exported tool/resource/prompt operation | executable by the shared runner |
 | Target open or authorization runtime failure | CLI exit 1 |
 | Invalid CLI usage or configuration | CLI exit 2 |
+| SDK-only authenticated Streamable HTTP target | initialize, list, and tool call pass without McpFn server imports |
+| Credential provider open/close and failed initialization | acquire once; revoke then dispose exactly once |
+| Credential-bearing redirect | rejected before the credential can reach another origin |
+| JSON/JUnit artifact containing secret-shaped values | redacted after serialization and bounded to the configured cap |
+| Target connection, resource rejection, and initialize failure | distinct failure layer and phase |
+| Authenticated official conformance | credential absent from child argv, environment, stdout, stderr, and report |
 
 ## Named provider-shaped fixtures
 
 The ChatGPT fixture uses a pre-registered client identifier and the configured
 ChatGPT connector callback shape. The Claude fixture uses an HTTPS URL-based
 client identifier and an independently supplied Claude callback shape. Each
-test performs authorization request, state, PKCE, code exchange, protected MCP
-initialization, a tool call, and revocation through the production client.
+test performs authorization request, state, PKCE, code exchange, refresh,
+protected MCP initialization, a tool call, and revocation through the
+production client. Registration metadata is not reused to generate the
+authorization request, so redirect and deployment drift remain observable.
 
 Fixture changes require a source note in the change description, review by an
 McpFn owner, and a full release-gate run. Provider-controlled production URLs

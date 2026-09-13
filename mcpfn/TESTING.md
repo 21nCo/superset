@@ -65,6 +65,15 @@ can be passed directly to `runScenarios()` or saved in a scenario module for
 `mcpfn test`; the CLI validates tool, resource, prompt, inventory, and
 initialization shapes before execution.
 
+Remote targets may be third-party servers built only with the official SDK.
+Configure the endpoint explicitly and inject a bearer token or API key through
+a named environment variable; never place a credential in the URL, scenario,
+manifest, or command line. The external fixture in this repository proves that
+an SDK-only Streamable HTTP server can initialize, list tools, execute an
+authenticated tool call, emit bounded JSON/JUnit artifacts, and fail
+unauthenticated requests without importing `@mcpfn/core` or
+`McpFnRegistry`.
+
 For tools with a declared success `outputSchema`, assert error codes by parsing the JSON text block: McpFn intentionally omits structured error content so it cannot be rejected against the success schema.
 
 ## Authentication
@@ -95,7 +104,19 @@ Start a real Streamable HTTP endpoint, then run:
 mcpfn conformance http://127.0.0.1:3000/mcp --suite active
 ```
 
-McpFn delegates to the pinned official conformance npm package and returns its exit code. The current pinned runner requires Node.js 22 or newer. Use an expected-failures file only for reviewed, time-bounded exceptions; do not turn new failures into a silent baseline update.
+For a protected endpoint, add `--bearer-token-env NAME` or
+`--api-key-env NAME --api-key-header HEADER`, and add `--report PATH` for a
+bounded redacted machine artifact. McpFn delegates to the pinned official
+`@modelcontextprotocol/conformance@0.1.16` package and returns its exit code.
+The runner requires Node.js 22 or newer. Use an expected-failures file only for
+reviewed, time-bounded exceptions; do not turn new failures into a silent
+baseline update.
+
+The conformance pin is intentional. Upgrade it in a dedicated change that
+records the old and new versions, runs the full release gate, and reviews every
+new failure against the MCP specification. Roll back the pin if the new runner
+cannot produce a deterministic workspace result; do not preserve a passing
+build by weakening scenarios or expanding expected failures without review.
 
 ## Superfunctions release gate
 
@@ -117,3 +138,9 @@ versions, then `@mcpfn/core`, `@mcpfn/client`, and `@mcpfn/auth`, followed by
 `@mcpfn/testing`, `@mcpfn/inspector`, `@mcpfn/datafn`, and `@mcpfn/cli`. The
 repository's package release workflow publishes one selected package at a time;
 it does not infer dependency order.
+
+After publishing `@mcpfn/testing` or `@mcpfn/cli`, the package workflow installs
+the exact published version into a clean temporary consumer using the configured
+npm registry and runs the SDK-only external server fixture. Registry propagation
+is retried within a fixed window. This post-publication check is the published
+proof level; pull requests and the local gate remain workspace/packed proof.

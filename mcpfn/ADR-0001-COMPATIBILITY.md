@@ -41,6 +41,12 @@ version 1 envelope on the next save. Memory stores are process-local and need
 no persistence migration. Inspector exports use secret variable references;
 raw credential values are never an artifact feature.
 
+Target-suite JSON and JUnit reports also carry a semantic report-schema version,
+the producing `@mcpfn/testing` package version, and the Node runtime version.
+Failure-layer identifiers are additive within report schema 1.x. A meaning
+change, removal, or incompatible shape requires a report-schema major version
+and a testing-package minor release during 0.x.
+
 ## Optional AuthFn integration
 
 The provider adapter is structurally typed in `@mcpfn/auth`. AuthFn is an
@@ -72,3 +78,9 @@ pinned official conformance runner. It does not prove npm registry publication,
 provider-controlled configuration, a downstream branch, or production
 deployment. Those claims require separately recorded evidence for the exact
 published version or deployed revision.
+
+The official conformance dependency is an exact reviewed pin. Its upgrades use
+a dedicated change and the complete Node 22 release gate; new results are
+reviewed rather than silently absorbed into expected failures. Consumers pin
+`@mcpfn/testing` and `@mcpfn/cli` and may restore their previous pins as the
+rollback boundary.

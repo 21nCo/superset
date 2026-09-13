@@ -105,6 +105,8 @@ export interface McpFnTarget {
   readonly kind: string;
   describe(): McpFnTargetDescriptor;
   open(context: McpFnTargetContext): Promise<McpFnTransportHandle>;
+  /** Retry cleanup for resources retained by failed opens; live handles are separate. */
+  cleanup?(): Promise<void>;
 }
 
 export type McpFnClientState =

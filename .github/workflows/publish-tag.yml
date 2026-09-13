@@ -61,3 +61,9 @@ jobs:
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Verify published McpFn consumer from configured registry
+        if: steps.resolve.outputs.pkg_name == '@mcpfn/testing' || steps.resolve.outputs.pkg_name == '@mcpfn/cli'
+        run: node ./scripts/test-mcpfn-registry-install.mjs "${{ steps.resolve.outputs.pkg_name }}" "${{ steps.resolve.outputs.pkg_version }}" "${NPM_CONFIG_REGISTRY}"
+        env:
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org
