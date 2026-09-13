@@ -1,0 +1,56 @@
+---
+title: "Signal API"
+description: "Reactive signal system reference."
+audience: reference
+applies_to: typescript
+---
+
+## DatafnSignal\<T\>
+
+Reactive container for query results that automatically refreshes when relevant mutations occur.
+
+```typescript
+interface DatafnSignal<T> {
+  /** Get the current value. */
+  get(): T;
+
+  /** Subscribe to value changes. Returns an unsubscribe function. */
+  subscribe(handler: (value: T) => void): () => void;
+
+  /** True while the initial query is loading. */
+  readonly loading: boolean;
+
+  /** Error from the most recent query execution, or null. */
+  readonly error: DatafnError | null;
+
+  /** True while a background refresh is in progress. */
+  readonly refreshing: boolean;
+
+  /** Cursor for pagination, or null/undefined if no more pages. */
+  readonly nextCursor: string | null | undefined;
+
+  /** Dispose the signal, removing all subscriptions and event listeners. */
+  dispose(): void;
+}
+```
+
+## Signal Registry
+
+The client maintains a `SignalRegistry` that tracks all active signals. Signals are cached by their `dfqlKey` -- two signals with the same normalized query share the same cache entry.
+
+## Footprint Derivation
+
+When a mutation event is emitted, the signal registry checks which signals need to refresh. This is determined by the signal's **footprint**:
+
+- **Primary resource** -- the resource being queried.
+- **Relation expansion targets** -- if the query uses `expand`, the target resources of expanded relations are included.
+
+A signal refreshes when a mutation event matches any resource in its footprint.
+
+## Lifecycle
+
+1. **Creation** -- `client.todos.signal(query)` creates a signal, registers it, and initiates the first query.
+2. **Auto-refresh** -- when a `mutation_applied` or `sync_applied` event matches the signal's footprint, the query re-executes in the background.
+3. **Disposal** -- `signal.dispose()` removes the signal from the registry, unsubscribes from events, and releases all references.
+
+Signals that are not disposed will continue to listen for events and refresh. Always call `dispose()` when a signal is no longer needed (e.g., when a component unmounts).

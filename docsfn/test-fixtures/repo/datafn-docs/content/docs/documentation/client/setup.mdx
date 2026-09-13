@@ -1,0 +1,178 @@
+---
+title: "Client Setup"
+description: "Create and configure a DataFn client instance."
+audience: guide
+applies_to: typescript
+---
+
+## Creating a Client
+
+Use `createDatafnClient()` to initialize a DataFn client. The client validates your schema at creation time and sets up table handles, event bus, sync engine, and KV store.
+
+```typescript
+import { createDatafnClient } from "@datafn/client";
+import { IndexedDbStorageAdapter } from "@datafn/client";
+import { defineSchema } from "@datafn/core";
+
+const schema = defineSchema({
+  resources: [
+    {
+      name: "todos",
+      version: 1,
+      idPrefix: "td",
+      fields: [
+        { name: "title", type: "string", required: true },
+        { name: "completed", type: "boolean", required: true },
+      ],
+    },
+  ],
+});
+
+const client = createDatafnClient({
+  schema,
+  clientId: "device-abc-123",
+  storage: new IndexedDbStorageAdapter("my-app-db"),
+  sync: {
+    remote: "https://api.example.com/datafn",
+    ws: true,
+    offlinability: true,
+    mode: "sync",
+    hydration: {
+      bootResources: ["todos"],
+      clonePageSize: 500,
+    },
+  },
+});
+```
+
+## Configuration Reference
+
+### Top-Level Options
+
+| Option | Type | Description |
+|---|---|---|
+| `schema` | `DatafnSchema` | Required. Your application schema created with `defineSchema()`. |
+| `clientId` | `string` | Required. Stable device/client identifier used for idempotency and offline changelogs. |
+| `storage` | `DatafnStorageAdapter \| DatafnStorageFactory` | Local persistence adapter. Pass an instance directly or a factory function `(namespace: string) => DatafnStorageAdapter` for multi-namespace isolation. |
+| `namespace` | `string` | Namespace string for data isolation. Required when `storage` is a factory function. Use the `ns()` helper to compose from segments. |
+| `sync` | `DatafnSyncConfig` | Sync and connectivity configuration. See below. |
+| `plugins` | `DatafnPlugin[]` | Client-side plugins for hook execution (beforeQuery, afterMutation, etc.). |
+| `generateId` | `(params: { resource: string; idPrefix?: string }) => string` | Custom ID generator for insert operations. Defaults to `crypto.randomUUID()` with resource prefix. |
+
+### Sync Configuration
+
+The `sync` object controls how the client communicates with the server and handles offline scenarios.
+
+```typescript
+sync: {
+  // Connection
+  remote: "https://api.example.com/datafn",
+  ws: true,
+  wsUrl: "wss://api.example.com/datafn/ws",   // optional, derived from remote
+
+  // Mode
+  mode: "sync",            // "sync" (default) or "local-only"
+  offlinability: true,     // enable offline mutation queue
+
+  // Push tuning
+  pushInterval: 5000,      // ms between push cycles
+  pushBatchSize: 100,      // mutations per push batch
+  pushMaxRetries: 3,       // max retries per push round
+
+  // Hydration
+  hydration: {
+    bootResources: ["todos", "users"],     // must clone before app is ready
+    backgroundResources: ["analytics"],     // clone in background after boot
+    clonePageSize: 500,                     // page size for paginated clone
+  },
+
+  // WebSocket reconnection
+  wsReconnect: {
+    enabled: true,
+    baseDelayMs: 1000,
+    maxDelayMs: 60000,
+    multiplier: 2,
+    jitterMs: 500,
+  },
+
+  // Cross-tab coordination
+  crossTab: true,
+}
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `remote` | -- | Server URL. Required in `"sync"` mode unless `remoteAdapter` is provided. |
+| `remoteAdapter` | -- | Injected remote adapter, used instead of the built-in HTTP transport. |
+| `ws` | `false` | Enable WebSocket for real-time server push. |
+| `wsUrl` | derived | WebSocket URL. Auto-derived from `remote` when `ws` is enabled. |
+| `mode` | `"sync"` | `"sync"` requires a remote. `"local-only"` marks all tables as ready immediately with no server. |
+| `offlinability` | `false` | Queue mutations locally when offline and push when reconnected. Requires `storage`. |
+| `pushInterval` | -- | Milliseconds between automatic push cycles. |
+| `pushBatchSize` | `100` | Max mutations sent per push batch. |
+| `pushMaxRetries` | `3` | Max retry attempts per push round. |
+| `hydration` | -- | Controls initial data clone strategy. See below. |
+| `wsReconnect` | enabled | Exponential backoff config for WebSocket reconnection. |
+| `crossTab` | `false` | Relay mutation events to other same-origin browser tabs via BroadcastChannel. |
+
+### Hydration
+
+Hydration controls how the client populates local storage from the server on first load.
+
+- **`bootResources`** -- Resources that must finish cloning before the app is considered hydrated. The client blocks on these during `sync.start()`.
+- **`backgroundResources`** -- Resources that clone in the background after boot resources are ready.
+- **`clonePageSize`** -- Page size for paginated clone requests. Can be a single number or a per-resource map: `{ todos: 500, users: 200 }`.
+
+### Storage Adapters
+
+DataFn ships two built-in storage adapters:
+
+```typescript
+import { MemoryStorageAdapter, IndexedDbStorageAdapter } from "@datafn/client";
+
+// In-memory (useful for tests)
+const memory = new MemoryStorageAdapter();
+
+// IndexedDB (browser persistence)
+const idb = new IndexedDbStorageAdapter("my-app-db");
+```
+
+For multi-namespace isolation, pass a factory function with a `namespace`:
+
+```typescript
+import { ns } from "@datafn/client";
+
+const client = createDatafnClient({
+  schema,
+  clientId: "device-abc",
+  namespace: ns("tenant-456", "user-123"),
+  storage: (namespace) =>
+    IndexedDbStorageAdapter.createForNamespace("my-app", namespace),
+  sync: { remote: "https://api.example.com/datafn" },
+});
+```
+
+The `ns()` helper composes namespace segments with `:` separators. See [Namespaces](/docs/documentation/concepts/multi-tenancy) for details.
+
+## Framework Integration
+
+DataFn provides framework-specific adapter packages that convert signals into native reactive primitives:
+
+- **Svelte**: `@datafn/svelte` — converts signals to Svelte readable stores via `toSvelteStore()`
+- **React, Vue, Solid, Angular**: Coming soon
+
+See [Framework Adapters](/docs/documentation/client/frameworks) for setup and usage.
+
+## Destroying the Client
+
+Call `destroy()` to tear down the client. This stops the sync engine, closes WebSocket connections, unsubscribes all event listeners, and releases resources.
+
+```typescript
+await client.destroy();
+```
+
+Call `clear()` to wipe all local data (IndexedDB stores, cursors, changelog, hydration state) without destroying the client:
+
+```typescript
+await client.clear();
+```

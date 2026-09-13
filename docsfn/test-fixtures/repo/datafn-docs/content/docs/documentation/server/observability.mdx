@@ -1,0 +1,132 @@
+---
+title: "Observability"
+description: "Monitor server performance with timing events."
+audience: guide
+applies_to: both
+---
+
+## Overview
+
+DataFn provides structured execution timing for monitoring server performance. When enabled, every query, mutation, and sync operation emits a timing event with phase-by-phase duration breakdowns.
+
+## Configuration
+
+Enable observability through the `observability` option:
+
+```typescript
+const server = await createDatafnServer({
+  schema,
+  db,
+  observability: {
+    timing: true,
+    onTiming: (event) => {
+      // Send to your metrics system
+      metrics.recordTiming(event.endpoint, event.totalMs, event.phases);
+    },
+  },
+});
+```
+
+### ObservabilityConfig
+
+```typescript
+interface ObservabilityConfig {
+  /** Enable execution timing events. Default: false. */
+  timing?: boolean;
+
+  /** Custom timing event handler. Default: logs via the server logger. */
+  onTiming?: (event: ExecutionTimingEvent) => void;
+}
+```
+
+When `timing` is `false` or omitted, no timing infrastructure is created and zero overhead is incurred.
+
+## ExecutionTimingEvent
+
+Each timing event contains the following fields:
+
+```typescript
+interface ExecutionTimingEvent {
+  /** The endpoint that was called (e.g., "query", "mutation", "pull"). */
+  endpoint: string;
+
+  /** The resource name, if applicable. */
+  resource?: string;
+
+  /** The operation type, if applicable (e.g., "insert", "merge"). */
+  operation?: string;
+
+  /** Phase-by-phase duration in milliseconds. */
+  phases: Record<string, number>;
+
+  /** Total operation duration in milliseconds. */
+  totalMs: number;
+
+  /** ISO 8601 timestamp of when the event was recorded. */
+  timestamp: string;
+}
+```
+
+### Example Event
+
+```json
+{
+  "endpoint": "mutation",
+  "resource": "tasks",
+  "operation": "merge",
+  "phases": {
+    "validate": 2,
+    "execute": 15,
+    "serialize": 1,
+    "total": 18
+  },
+  "totalMs": 18,
+  "timestamp": "2026-03-01T12:00:00.000Z"
+}
+```
+
+## ExecutionTimer
+
+Route handlers use `ExecutionTimer` internally to measure phases. Each phase is sequential -- starting a new phase automatically ends the previous one:
+
+```typescript
+const timer = new ExecutionTimer();
+
+timer.startPhase("validate");
+// ... validation logic ...
+
+timer.startPhase("execute");
+// ... execution logic ...
+
+timer.startPhase("serialize");
+// ... serialization logic ...
+
+const event = timer.build("mutation", "tasks", "merge");
+// event.phases = { validate: 2, execute: 15, serialize: 1, total: 18 }
+```
+
+Common phases measured by the built-in handlers:
+
+| Phase | Description |
+|-------|-------------|
+| `validate` | Schema validation, authorization, and limit checks. |
+| `execute` | Database operations, query execution, mutation application. |
+| `serialize` | Response serialization and JSON encoding. |
+
+## Default Handler
+
+When `onTiming` is not provided, timing events are logged via the server's logger at the `debug` level:
+
+```
+[DEBUG] [datafn:timing] { endpoint: "query", resource: "tasks", ... }
+```
+
+In production (`debug: false`), the default logger suppresses debug output, so timing events are effectively silent unless a custom `onTiming` handler is provided.
+
+## Error Handling
+
+If a custom `onTiming` handler throws, the error is caught and logged as a warning. Timing handler failures never affect request processing.
+
+## Security
+
+Timing events never include record data, filter values, or credentials. Only structural metadata (endpoint, resource, operation) and durations are emitted.

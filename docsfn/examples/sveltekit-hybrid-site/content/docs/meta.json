@@ -1,0 +1,9 @@
+{
+  "title": "Docs",
+  "root": true,
+  "pages": [
+    { "key": "index", "label": "Overview" },
+    { "key": "product", "label": "Product" },
+    { "key": "platform", "label": "Platform" }
+  ]
+}

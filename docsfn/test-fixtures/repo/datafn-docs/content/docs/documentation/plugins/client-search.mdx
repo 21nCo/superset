@@ -1,0 +1,116 @@
+---
+title: Client Search Plugin
+description: Built-in plugin for client-side full-text search with provider-backed or legacy MiniSearch mode.
+audience: guide
+applies_to: both
+---
+
+The `createClientSearchPlugin` function creates a DataFn plugin that intercepts DFQL queries containing `search` blocks and resolves them locally on the client. It supports two modes: **provider-backed** (recommended) and **legacy MiniSearch**.
+
+## Installation
+
+The plugin is included in `@datafn/client`:
+
+```typescript
+import { createClientSearchPlugin } from "@datafn/client";
+```
+
+## When to Use the Plugin vs Top-Level `searchProvider`
+
+DataFn offers two ways to wire client-side search:
+
+| Approach | When to use |
+| --- | --- |
+| Top-level `searchProvider` in `createDatafnClient()` config | Simplest option. Search is initialized and managed by the client automatically. |
+| `createClientSearchPlugin()` registered in `plugins` | When search needs to participate in the plugin lifecycle alongside other plugins, or when you need fine-grained control over storage and boost configuration. |
+
+Both approaches produce the same runtime behavior. The top-level config is syntactic sugar that internally uses the same search routing logic. Choose whichever fits your setup.
+
+## Usage (Provider-Backed)
+
+```typescript
+import { createDatafnClient, createClientSearchPlugin } from "@datafn/client";
+import { createSearchProvider } from "@searchfn/datafn-provider";
+import { IndexedDbAdapter } from "@searchfn/adapter-indexeddb";
+
+const searchProvider = createSearchProvider(
+  new IndexedDbAdapter({ dbName: "my-app-search" }),
+  { resourceFields: { tasks: ["title", "description"] } },
+);
+
+const client = createDatafnClient({
+  schema,
+  clientId,
+  storage,
+  plugins: [
+    createClientSearchPlugin({ searchProvider }),
+  ],
+});
+```
+
+## Usage (Legacy MiniSearch)
+
+```typescript
+import { createDatafnClient, createClientSearchPlugin } from "@datafn/client";
+
+const client = createDatafnClient({
+  schema,
+  clientId,
+  storage,
+  plugins: [
+    createClientSearchPlugin({
+      boost: { title: 2, body: 1 },
+    }),
+  ],
+});
+```
+
+Legacy MiniSearch mode is deprecated. Prefer provider-backed mode for unified local/server behavior.
+
+## ClientSearchConfig
+
+```typescript
+interface ClientSearchConfig {
+  /** Legacy MiniSearch-only boost map. Deprecated when searchProvider is configured. */
+  boost?: Record<string, number>;
+
+  /** Optional storage adapter (if not provided via sync payload). */
+  storage?: DatafnStorageAdapter;
+
+  /** Preferred provider-backed search/index implementation. */
+  searchProvider?: SearchProvider;
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `boost` | `Record<string, number>` | Legacy MiniSearch field boost map. Ignored when `searchProvider` is set. |
+| `storage` | `DatafnStorageAdapter` | Explicit storage adapter. Falls back to the adapter provided by sync payloads. |
+| `searchProvider` | [`SearchProvider`](/docs/reference/core/search-provider) | Provider implementation for search and index operations. |
+
+## Hook Lifecycle
+
+The plugin registers three hooks:
+
+### `afterSync` — Rebuild indices
+
+Runs after `clone` and `pull` sync phases. Rebuilds the full search index from storage records for all resources that declare `searchFields` in their schema indices.
+
+- **Provider mode**: calls `searchProvider.updateIndices({ resource, records, operation: "upsert" })` for each searchable resource.
+- **Legacy mode**: rebuilds in-memory MiniSearch indices from storage.
+
+### `afterMutation` — Incremental index update
+
+Runs after every mutation. Updates the search index incrementally for the affected resource and record.
+
+- **Provider mode**: calls `searchProvider.updateIndices()` with the mutated record for upsert operations, or a delete call for `delete` operations.
+- **Legacy mode**: updates the MiniSearch index entry for the mutated record.
+
+### `beforeQuery` — Search routing
+
+Intercepts queries that contain a `search` block. Executes the search locally and injects the resulting candidate IDs as a deterministic filter into the query pipeline.
+
+- **Provider mode**: calls `searchProvider.search()` and wraps results in an `id: { in: [...] }` filter.
+- **Legacy mode**: runs MiniSearch search and applies the same candidate ID filter.
+
+If the resource hydration state is not `"ready"`, the hook passes the query through unchanged (search falls back to server).

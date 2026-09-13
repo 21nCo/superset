@@ -1,0 +1,312 @@
+---
+title: "Filters"
+description: "Filter records with comparison, set, string, and logical operators."
+audience: reference
+applies_to: both
+---
+
+Filters are the primary mechanism for narrowing query results. A filter is a JSON object where keys are field names and values describe the conditions records must satisfy.
+
+## Shorthand Syntax
+
+For simple cases, DFQL supports shorthand filter values:
+
+```typescript
+// Scalar value becomes $eq
+{ completed: false }
+// Equivalent to: { completed: { $eq: false } }
+
+// Array value becomes $in
+{ status: ["active", "pending"] }
+// Equivalent to: { status: { $in: ["active", "pending"] } }
+```
+
+## Operator Normalization
+
+Operators can be written with or without the `$` prefix. Non-prefixed operators are automatically remapped:
+
+```typescript
+// These are equivalent:
+{ priority: { gte: 3 } }
+{ priority: { $gte: 3 } }
+```
+
+The full remap table:
+
+| Input | Normalized |
+|---|---|
+| `eq` | `$eq` |
+| `ne` | `$ne` |
+| `gt` | `$gt` |
+| `gte` | `$gte` |
+| `lt` | `$lt` |
+| `lte` | `$lte` |
+| `in` | `$in` |
+| `not_in` | `$nin` |
+| `like` | `$like` |
+| `ilike` | `$ilike` |
+| `not_like` | `$not_like` |
+| `not_ilike` | `$not_ilike` |
+| `is_null` | `$is_null` |
+| `is_not_null` | `$is_not_null` |
+| `is_empty` | `$is_empty` |
+| `is_not_empty` | `$is_not_empty` |
+| `before` | `$before` |
+| `after` | `$after` |
+| `between` | `$between` |
+| `not_between` | `$not_between` |
+
+You can normalize filters programmatically:
+
+```typescript
+import { normalizeFilterOps } from "@datafn/core";
+
+const normalized = normalizeFilterOps({ priority: { gte: 3 } });
+// { priority: { $gte: 3 } }
+```
+
+## Comparison Operators
+
+| Operator | Description | Example |
+|---|---|---|
+| `$eq` | Equal to | `{ status: { $eq: "active" } }` |
+| `$ne` | Not equal to | `{ status: { $ne: "archived" } }` |
+| `$gt` | Greater than | `{ priority: { $gt: 3 } }` |
+| `$gte` | Greater than or equal | `{ priority: { $gte: 3 } }` |
+| `$lt` | Less than | `{ priority: { $lt: 5 } }` |
+| `$lte` | Less than or equal | `{ priority: { $lte: 5 } }` |
+
+```typescript
+{
+  resource: "todos",
+  version: 1,
+  filters: {
+    priority: { $gte: 3, $lte: 8 },
+  },
+}
+```
+
+Multiple operators on the same field are ANDed together. The example above matches records where `3 <= priority <= 8`.
+
+## Set Operators
+
+| Operator | Description | Example |
+|---|---|---|
+| `$in` | Value is in array | `{ status: { $in: ["active", "pending"] } }` |
+| `$nin` | Value is not in array | `{ status: { $nin: ["archived", "deleted"] } }` |
+
+```typescript
+{
+  resource: "users",
+  version: 1,
+  filters: {
+    role: { $in: ["admin", "moderator"] },
+  },
+}
+```
+
+## String Operators
+
+| Operator | Description | Example |
+|---|---|---|
+| `$contains` | String contains substring | `{ title: { $contains: "urgent" } }` |
+| `$startsWith` | String starts with prefix | `{ email: { $startsWith: "admin" } }` |
+| `$endsWith` | String ends with suffix | `{ email: { $endsWith: ".com" } }` |
+| `$like` | SQL LIKE pattern (case-sensitive) | `{ title: { $like: "%shop%" } }` |
+| `$ilike` | SQL LIKE pattern (case-insensitive) | `{ title: { $ilike: "%SHOP%" } }` |
+| `$not_like` | Negated LIKE (case-sensitive) | `{ title: { $not_like: "%draft%" } }` |
+| `$not_ilike` | Negated LIKE (case-insensitive) | `{ title: { $not_ilike: "%DRAFT%" } }` |
+
+The `$like` and `$ilike` operators use SQL LIKE syntax: `%` matches any sequence of characters, `_` matches a single character. In the client-side evaluator, these patterns are converted to regular expressions via `likeToRegExp()`.
+
+```typescript
+{
+  resource: "articles",
+  version: 1,
+  filters: {
+    title: { $ilike: "%typescript%" },
+    slug: { $startsWith: "2024-" },
+  },
+}
+```
+
+The `$contains` operator also works on array fields, checking whether the array includes the specified value:
+
+```typescript
+// Match records where the tags array contains "important"
+{ tags: { $contains: "important" } }
+```
+
+## Null and Empty Operators
+
+| Operator | Description | Example |
+|---|---|---|
+| `$is_null` | Value is null or undefined | `{ deletedAt: { $is_null: true } }` |
+| `$is_not_null` | Value is not null/undefined | `{ assignedTo: { $is_not_null: true } }` |
+| `$is_empty` | Value is null, undefined, empty string, or empty array | `{ description: { $is_empty: true } }` |
+| `$is_not_empty` | Opposite of $is_empty | `{ description: { $is_not_empty: true } }` |
+
+These operators accept a boolean value. Pass `true` to assert the condition, `false` to negate it:
+
+```typescript
+// Records where deletedAt IS null
+{ deletedAt: { $is_null: true } }
+
+// Records where deletedAt IS NOT null (equivalent)
+{ deletedAt: { $is_null: false } }
+```
+
+## Range Operators
+
+| Operator | Description | Example |
+|---|---|---|
+| `$between` | Value is within [low, high] (inclusive) | `{ age: { $between: [18, 65] } }` |
+| `$not_between` | Value is outside [low, high] | `{ age: { $not_between: [18, 65] } }` |
+| `$before` | Value is strictly less than (alias for date/time semantics) | `{ createdAt: { $before: 1700000000000 } }` |
+| `$after` | Value is strictly greater than | `{ createdAt: { $after: 1700000000000 } }` |
+
+```typescript
+{
+  resource: "orders",
+  version: 1,
+  filters: {
+    total: { $between: [100, 500] },
+    createdAt: { $after: 1700000000000 },
+  },
+}
+```
+
+`$between` and `$not_between` require a two-element array `[low, high]`. The check is inclusive on both ends.
+
+## Logical Operators
+
+Combine multiple filter conditions using `$and` and `$or`:
+
+```typescript
+// $and: all conditions must match (this is the default for top-level keys)
+{
+  filters: {
+    $and: [
+      { status: "active" },
+      { priority: { $gte: 3 } },
+    ],
+  },
+}
+
+// $or: at least one condition must match
+{
+  filters: {
+    $or: [
+      { completed: true },
+      { priority: { $gte: 5 } },
+    ],
+  },
+}
+```
+
+Logical operators can be nested:
+
+```typescript
+{
+  filters: {
+    $or: [
+      {
+        $and: [
+          { status: "active" },
+          { priority: { $gte: 5 } },
+        ],
+      },
+      { assignedTo: { $is_null: true } },
+    ],
+  },
+}
+```
+
+Filter nesting depth is capped at 10 levels to prevent abuse.
+
+## Relation Quantifier Filters (Server-Side)
+
+On the server, filters can target related records using quantifier operators. These are evaluated against the related records resolved through schema-defined relations.
+
+| Operator | Description |
+|---|---|
+| `$any` | At least one related record matches the sub-filter |
+| `$all` | All related records match the sub-filter (false if no related records exist) |
+| `$none` | No related records match the sub-filter (true if no related records exist) |
+
+```typescript
+// Find users who have at least one completed todo
+{
+  resource: "users",
+  version: 1,
+  filters: {
+    todos: {
+      $any: { completed: true },
+    },
+  },
+}
+
+// Find categories where ALL items are in stock
+{
+  resource: "categories",
+  version: 1,
+  filters: {
+    items: {
+      $all: { inStock: true },
+    },
+  },
+}
+
+// Find users with no overdue tasks
+{
+  resource: "users",
+  version: 1,
+  filters: {
+    tasks: {
+      $none: { overdue: true },
+    },
+  },
+}
+```
+
+## Dot-Path Filters
+
+Filters can traverse nested object fields using dot notation:
+
+```typescript
+// Filter on a nested object field
+{ "address.city": "London" }
+
+// Filter on a relation field (requires resolveRelation)
+{ "author.name": "Alice" }
+```
+
+When the first segment of a dot-path does not resolve to a field on the record, the evaluator attempts to resolve it as a relation (if a relation resolver is provided).
+
+## Programmatic Filter Evaluation
+
+The `evaluateFilter` function evaluates a filter against a single record in memory. This is used by the client's offline query engine and the server's in-memory execution path.
+
+```typescript
+import { evaluateFilter } from "@datafn/core";
+
+const record = { id: "1", title: "Test", priority: 3, completed: false };
+
+evaluateFilter(record, { priority: { $gte: 2 }, completed: false });
+// true
+
+evaluateFilter(record, { priority: { $gt: 5 } });
+// false
+```
+
+For server-side evaluation with relation support, pass a `FilterEvalOptions` object:
+
+```typescript
+evaluateFilter(record, filters, {
+  resource: "todos",
+  resolveRelation: (resource, recordId, relationName) => {
+    // Return array of related records
+    return relatedRecords;
+  },
+});
+```

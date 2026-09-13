@@ -1,0 +1,104 @@
+---
+title: "Schema Definition"
+description: "Define and validate your DataFn schema, including capability-driven behavior."
+audience: reference
+applies_to: both
+---
+
+## DatafnSchema
+
+A DataFn schema defines resources, relations, and optional global capabilities.
+
+```typescript
+type DatafnSchema = {
+  capabilities?: SchemaCapabilities;
+  resources: DatafnResourceSchema[];
+  relations?: DatafnRelationSchema[];
+  namespaced?: boolean; // defaults to true
+};
+```
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `capabilities` | `SchemaCapabilities` | Optional global capability entries applied to resources by default. |
+| `resources` | `DatafnResourceSchema[]` | Resource definitions (required, max 100). |
+| `relations` | `DatafnRelationSchema[]` | Optional relation definitions (`[]` when omitted). |
+| `namespaced` | `boolean` | Namespace isolation flag (defaults to `true`). |
+
+See [Capabilities](/docs/documentation/concepts/capabilities) for the behavior model.
+
+## defineSchema
+
+`defineSchema` gives compile-time safety for field names, index fields, and capability declarations.
+
+```typescript
+import { defineSchema } from "@datafn/core";
+
+const schema = defineSchema({
+  capabilities: ["timestamps", "audit"],
+  resources: [
+    {
+      name: "projects",
+      version: 1,
+      idPrefix: "prj",
+      capabilities: ["archivable"],
+      fields: [
+        { name: "title", type: "string", required: true, maxLength: 200 },
+        { name: "status", type: "string", required: true, enum: ["active", "done"] },
+      ],
+      indices: { base: ["title", "status"] },
+    },
+    {
+      name: "auditLogs",
+      version: 1,
+      capabilities: { exclude: ["audit"] },
+      fields: [{ name: "message", type: "string", required: true }],
+    },
+  ],
+});
+```
+
+## validateSchema
+
+`validateSchema(schema)` performs runtime validation and normalization and returns `DatafnEnvelope<DatafnSchema>`.
+
+```typescript
+import { validateSchema } from "@datafn/core";
+
+const result = validateSchema(schema);
+if (!result.ok) {
+  console.error(result.error.code, result.error.message);
+}
+```
+
+### Normalization
+
+On success, DataFn normalizes:
+
+- capability arrays (deduped and canonicalized),
+- `indices: string[]` to `{ base, search, vector }`,
+- omitted `relations` to `[]`,
+- omitted `namespaced` to `true`.
+
+### Validation checks
+
+`validateSchema` enforces:
+
+- resource structure and limits (max 100 resources, max 200 fields/resource),
+- unique resource names and field names,
+- index fields must exist,
+- relation references must point to declared resources,
+- capability declarations and capability config validity,
+- capability field collisions (`CAPABILITY_FIELD_COLLISION`),
+- capability dependencies (for example `shareable` requires `audit`),
+- relation capability constraints (`many-many` only, `timestamps|audit` only).
+
+## Namespace default
+
+`namespaced` defaults to `true`. Only explicit `namespaced: false` disables row-level namespace isolation.
+
+```typescript
+import { isNamespaced } from "@datafn/core";
+
+isNamespaced(schema); // true by default
+```

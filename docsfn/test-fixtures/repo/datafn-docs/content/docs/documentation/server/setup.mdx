@@ -1,0 +1,259 @@
+---
+title: "Server Setup"
+description: "Create and configure a DataFn server."
+audience: guide
+applies_to: both
+---
+
+import { Tab, Tabs } from "fumadocs-ui/components/tabs";
+
+DataFn supports both TypeScript (Node.js) and Python servers. Use the language tabs to switch between examples.
+
+## Installation
+
+<Tabs items={["TypeScript", "Python"]}>
+  <Tab value="TypeScript">
+    ```bash
+    npm install @datafn/server @datafn/core
+    ```
+  </Tab>
+  <Tab value="Python">
+    ```bash
+    pip install datafn
+    ```
+
+    Or in `pyproject.toml`:
+
+    ```toml
+    [project]
+    dependencies = [
+        "datafn",
+    ]
+    ```
+  </Tab>
+</Tabs>
+
+## Creating a Server
+
+<Tabs items={["TypeScript", "Python"]}>
+  <Tab value="TypeScript">
+    Use `createDatafnServer()` to initialize a DataFn server instance. The function validates your schema at startup, initializes the database adapter, and returns a router with all DataFn endpoints.
+
+    ```typescript
+    import { createDatafnServer } from "@datafn/server";
+    import { drizzleAdapter } from "@superfunctions/db/adapters";
+    import { ns } from "@datafn/core";
+    import { schema } from "./schema";
+
+    const server = await createDatafnServer({
+      schema,
+      db: drizzleAdapter({ db: drizzle, dialect: "postgres" }),
+      plugins: [],
+      debug: process.env.NODE_ENV !== "production",
+      rest: true,
+      limits: {
+        maxLimit: 100,
+        maxPayloadBytes: 5_242_880,
+        maxTransactSteps: 100,
+        maxPullLimit: 1000,
+        maxSelectTokens: 50,
+        maxFilterKeysPerLevel: 20,
+        maxSortFields: 10,
+        maxAggregations: 20,
+        maxIdLength: 255,
+        maxBatchSize: 500,
+        maxBatchQueryConcurrency: 20,
+      },
+      authorize: async (ctx, action, payload) => {
+        return ctx.session?.authenticated === true;
+      },
+      namespaceProvider: {
+        getNamespace: (ctx) => ns(ctx.session.orgId, ctx.session.userId),
+        getActorId: (ctx) => ctx.session.userId,
+      },
+      retention: {
+        changeLogDays: 30,
+        idempotencyDays: 7,
+        pruneOnStartup: true,
+        pruneIntervalMs: 3_600_000,
+      },
+      rateLimit: {
+        enabled: true,
+        maxRequests: 100,
+        windowSeconds: 60,
+        endpoints: {
+          mutation: { maxRequests: 50, windowSeconds: 60 },
+        },
+      },
+      observability: {
+        timing: true,
+        onTiming: (event) => console.log(event),
+      },
+      ws: {
+        maxConnections: 10_000,
+        maxConnectionsPerNamespace: 100,
+        heartbeatIntervalMs: 30_000,
+        heartbeatTimeoutMs: 10_000,
+      },
+      shutdownTimeoutMs: 10_000,
+      logger: customLogger,
+    });
+    ```
+  </Tab>
+  <Tab value="Python">
+    Use `create_datafn_server()` to initialize a DataFn server. It validates your schema and returns a dictionary with route handlers.
+
+    ```python
+    from datafn import create_datafn_server
+    from datafn.server import DatafnServerConfig
+
+    schema = {
+        "resources": [
+            {
+                "name": "todos",
+                "version": 1,
+                "idPrefix": "td",
+                "fields": [
+                    {"name": "title", "type": "string", "required": True},
+                    {"name": "completed", "type": "boolean", "required": True},
+                ],
+            }
+        ]
+    }
+
+    config = DatafnServerConfig(
+        schema=schema,
+        db=my_db_adapter,
+        authorize=my_authorize_fn,
+        limits={"maxLimit": 100},
+    )
+
+    server = create_datafn_server(config)
+    ```
+
+    You can also pass configuration as a plain dictionary:
+
+    ```python
+    server = create_datafn_server({
+        "schema": schema,
+        "db": my_db_adapter,
+        "authorize": my_authorize_fn,
+        "limits": {"maxLimit": 50},
+    })
+    ```
+
+    ### Python Configuration Options
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `schema` | `dict` | Required. DataFn schema definition with `resources` and optional `relations`. |
+    | `db` | `Adapter` | Database adapter implementing the adapter protocol. |
+    | `authorize` | `callable` | Async authorization callback `(ctx, action, payload) -> bool`. |
+    | `limits` | `dict` | Optional limits: `maxLimit`, `maxTransactSteps`, `maxPayloadBytes`. |
+  </Tab>
+</Tabs>
+
+## Configuration Reference
+
+### Required
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `schema` | `DatafnSchema` | The DataFn schema definition. Validated at startup; throws if invalid. |
+
+### Database and Storage
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `db` | `Adapter` | `undefined` | Database adapter for persistence. |
+| `redis` | `RedisAdapter` | `undefined` | Redis adapter for atomic operations (serverSeq, rate limiting). |
+| `kvStore` | `KVStoreAdapter` | `undefined` | KV store adapter. Must support `incr()` for serverSeq. |
+| `dbMapping` | `DbMapping` | `undefined` | Maps features to specific databases (e.g., `{ serverseq: "redis" }`). |
+| `rowLevelNamespace` | `false \| RowLevelNamespaceConfig` | auto | Row-level namespace isolation. Auto-enabled when `namespaceProvider` is present. Set to `false` to disable. |
+
+### Authorization and Security
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `authorize` | `(ctx, action, payload) => boolean` | `undefined` | Per-request authorization callback. Actions: `"status"`, `"query"`, `"mutation"`, `"transact"`, `"seed"`, `"clone"`, `"pull"`, `"push"`, `"reconcile"`. |
+| `namespaceProvider` | `{ getNamespace: (ctx) => string; getActorId?: (ctx) => string }` | `undefined` | Maps requests to a namespace string for data isolation. Optional `getActorId` for audit attribution. |
+| `allowUnknownResources` | `boolean` | `false` | Allow access to resources without a permissions policy. Use only in development. |
+| `debug` | `boolean` | `NODE_ENV !== 'production'` | When `false`, error messages are generic (no field names or schema details). |
+
+### Limits
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `limits.maxLimit` | `number` | `100` | Maximum query result limit. |
+| `limits.maxTransactSteps` | `number` | `100` | Maximum steps in a transaction. |
+| `limits.maxPayloadBytes` | `number` | `5,242,880` | Maximum request body size (5 MB). |
+| `limits.maxPullLimit` | `number` | `1,000` | Maximum changes returned per pull. |
+| `limits.maxSelectTokens` | `number` | `50` | Maximum select tokens per query. |
+| `limits.maxFilterKeysPerLevel` | `number` | `20` | Maximum filter keys per nesting level. |
+| `limits.maxSortFields` | `number` | `10` | Maximum sort fields per query. |
+| `limits.maxAggregations` | `number` | `20` | Maximum aggregation definitions per query. |
+| `limits.maxIdLength` | `number` | `255` | Maximum character length for record IDs. |
+| `limits.maxBatchSize` | `number` | `500` | Maximum batch size for `/datafn/push` and batch `/datafn/mutation`. |
+| `limits.maxBatchQueryConcurrency` | `number` | `20` | Maximum in-flight query concurrency for batch `/datafn/query`. |
+
+### Features
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `plugins` | `DatafnPlugin[]` | `[]` | Server-side plugins (for example custom query/mutation hooks). |
+| `rest` | `boolean` | `false` | Enable REST endpoint wrappers. |
+| `getServerTime` | `() => number` | `Date.now` | Server time provider. Useful for testing. |
+| `retention` | `RetentionConfig` | `undefined` | Data retention for change log and idempotency tables. |
+| `rateLimit` | `RateLimitConfig` | `undefined` | Rate limiting configuration. |
+| `observability` | `ObservabilityConfig` | `undefined` | Timing and observability hooks. |
+| `ws` | `WsManagerConfig` | `undefined` | WebSocket connection limits and heartbeat settings. |
+| `shutdownTimeoutMs` | `number` | `10,000` | Graceful shutdown drain timeout in milliseconds. |
+| `logger` | `DatafnLogger` | console-based | Pluggable logger. JSON output in production, pretty-print in dev. |
+
+## Server Instance
+
+`createDatafnServer()` returns a `DatafnServer` object:
+
+```typescript
+interface DatafnServer<TContext = any> {
+  router: Router<TContext>;
+  websocketHandler: {
+    addClient(client: WebSocketClient, authContext: WsAuthContext): boolean;
+    removeClient(client: WebSocketClient): void;
+    handleMessage(client: WebSocketClient, data: string): void;
+    handlePong(client: WebSocketClient): void;
+  };
+  close(): Promise<void>;
+}
+```
+
+The `router` handles all HTTP routing. Integrate it with your HTTP server framework (Bun, Node, etc.).
+
+## Schema Validation
+
+The schema is validated at startup using `validateSchema()`. If validation fails, `createDatafnServer()` throws synchronously with a descriptive error:
+
+```
+Schema validation failed: <details>
+```
+
+Built-in KV resources are automatically added to the schema after validation.
+
+## Graceful Shutdown
+
+Call `server.close()` to initiate graceful shutdown. The sequence is:
+
+1. New requests are immediately rejected with HTTP 503 (`SERVICE_UNAVAILABLE`).
+2. All connected WebSocket clients receive close frame 1001 (Going Away).
+3. The server waits up to `shutdownTimeoutMs` for in-flight requests to complete.
+4. Periodic timers (pruning, rate limit cleanup) are cleared.
+
+The server also registers `SIGTERM` and `SIGINT` handlers that trigger shutdown automatically.
+
+```typescript
+// Manual shutdown
+await server.close();
+
+// Automatic via process signals
+// SIGTERM and SIGINT are handled automatically
+```

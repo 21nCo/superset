@@ -1,0 +1,99 @@
+---
+title: "Hook Utilities"
+description: "Plugin hook execution utilities."
+audience: reference
+applies_to: typescript
+---
+
+## HookError
+
+Error returned when a before-hook rejects.
+
+```typescript
+interface HookError {
+  code: string;
+  message: string;
+  details?: Record<string, unknown>;
+}
+```
+
+## BeforeHookResult\<T\>
+
+Return type for `runBeforeHook`.
+
+```typescript
+type BeforeHookResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: HookError };
+```
+
+## runBeforeHook
+
+Runs a before-style hook across all plugins filtered by environment. **Fail-closed**: the first error stops the chain and returns `{ ok: false, error }`.
+
+Each hook's return value (if defined) replaces the current payload for subsequent hooks.
+
+```typescript
+async function runBeforeHook<T = unknown>(
+  plugins: DatafnPlugin[],
+  env: "client" | "server",
+  hookName: keyof DatafnPlugin,
+  ctx: DatafnHookContext,
+  payload: T,
+  preArgs?: unknown[],
+): Promise<BeforeHookResult<T>>;
+```
+
+**Parameters:**
+- `plugins` -- array of plugins to iterate.
+- `env` -- filter plugins by their `runsOn` array.
+- `hookName` -- name of the hook method (e.g., `"beforeQuery"`, `"beforeMutation"`, `"beforeSync"`).
+- `ctx` -- hook context with `env`, `schema`, and optional `context`.
+- `payload` -- initial payload passed to the first hook.
+- `preArgs` -- optional arguments inserted before the payload in the hook call.
+
+## runAfterHook
+
+Runs an after-style hook across all plugins filtered by environment. **Fail-open**: errors are logged to console but do not stop the chain.
+
+```typescript
+async function runAfterHook(
+  plugins: DatafnPlugin[],
+  env: "client" | "server",
+  hookName: keyof DatafnPlugin,
+  ctx: DatafnHookContext,
+  payload: unknown,
+  result: unknown,
+  preArgs?: unknown[],
+): Promise<void>;
+```
+
+## Hook Filtering
+
+Only plugins whose `runsOn` array includes the current `env` are executed:
+
+```typescript
+const filtered = plugins.filter((p) => p.runsOn.includes(env));
+```
+
+A plugin with `runsOn: ["server"]` will not execute when the hook runner is called with `env: "client"`, and vice versa.
+
+## Example
+
+```typescript
+const result = await runBeforeHook(
+  plugins,
+  "server",
+  "beforeMutation",
+  { env: "server", schema },
+  mutation,
+);
+
+if (!result.ok) {
+  // Hook rejected: result.error has { code, message, details }
+  return errorResponse(result.error);
+}
+
+// Proceed with potentially modified payload
+const finalMutation = result.value;
+```

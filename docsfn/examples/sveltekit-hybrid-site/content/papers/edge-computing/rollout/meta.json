@@ -1,0 +1,8 @@
+{
+  "title": "Rollout",
+  "root": true,
+  "pages": [
+    { "key": "index", "label": "Strategy" },
+    { "key": "canaries", "label": "Canaries" }
+  ]
+}

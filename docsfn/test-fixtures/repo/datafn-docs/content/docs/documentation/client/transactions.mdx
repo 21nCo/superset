@@ -1,0 +1,134 @@
+---
+title: "Transactions"
+description: "Execute atomic sequences of queries and mutations."
+audience: guide
+applies_to: typescript
+---
+
+## Overview
+
+Transactions group multiple queries and mutations into an atomic unit. Either all steps succeed, or none are applied. Later steps in a transaction can observe the results of earlier steps, enabling dependent operations in a single round-trip. For the complete DFQL transaction specification, see the [DFQL Transactions reference](/docs/dfql/transactions).
+
+## Executing a Transaction
+
+Use `client.transact()` or `client.table("name").transact()` to execute a transaction against the server.
+
+```typescript
+const result = await client.transact({
+  transactionId: "tx-create-order",
+  atomic: true,
+  steps: [
+    {
+      type: "mutation",
+      mutation: {
+        resource: "orders",
+        version: 1,
+        operation: "insert",
+        id: "ord:abc123",
+        record: {
+          customerId: "cust:456",
+          status: "pending",
+          total: 99.99,
+        },
+      },
+    },
+    {
+      type: "mutation",
+      mutation: {
+        resource: "orderItems",
+        version: 1,
+        operation: "insert",
+        record: {
+          orderId: "ord:abc123",
+          productId: "prod:789",
+          quantity: 2,
+          price: 49.99,
+        },
+      },
+    },
+    {
+      type: "mutation",
+      mutation: {
+        resource: "inventory",
+        version: 1,
+        operation: "merge",
+        id: "prod:789",
+        record: {
+          stock: 48,
+        },
+      },
+    },
+  ],
+});
+```
+
+## Transaction Payload
+
+| Field | Type | Description |
+|---|---|---|
+| `transactionId` | `string` | Unique identifier for the transaction. Used for idempotency. |
+| `atomic` | `boolean` | When `true`, all steps execute atomically: if any step fails, all changes are rolled back. |
+| `steps` | `Array` | Ordered list of query or mutation steps. |
+
+Each step has a `type` field (`"query"` or `"mutation"`) and the corresponding payload:
+
+```typescript
+// Query step
+{
+  type: "query",
+  query: {
+    resource: "inventory",
+    version: 1,
+    filters: { productId: { eq: "prod:789" } },
+  },
+}
+
+// Mutation step
+{
+  type: "mutation",
+  mutation: {
+    resource: "inventory",
+    version: 1,
+    operation: "merge",
+    id: "prod:789",
+    record: { stock: 48 },
+  },
+}
+```
+
+## Using Table Handles
+
+When calling `transact()` through a table handle, the transaction is delegated to the client. You still provide full resource/version in each step since transactions can span multiple resources.
+
+```typescript
+const result = await client.table("orders").transact({
+  transactionId: "tx-update-order",
+  atomic: true,
+  steps: [
+    {
+      type: "query",
+      query: {
+        resource: "orders",
+        version: 1,
+        filters: { id: { eq: "ord:abc123" } },
+      },
+    },
+    {
+      type: "mutation",
+      mutation: {
+        resource: "orders",
+        version: 1,
+        operation: "merge",
+        id: "ord:abc123",
+        record: { status: "confirmed" },
+      },
+    },
+  ],
+});
+```
+
+## Semantics
+
+- **Atomicity**: With `atomic: true`, a failure in any step rolls back all preceding mutations in the transaction.
+- **Step visibility**: Each step executes in order. A query step following a mutation step will see the mutation's effects.
+- **Server-side execution**: Transactions always execute on the server. They are not routed to local storage.

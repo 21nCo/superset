@@ -1,0 +1,194 @@
+---
+title: Client API
+description: Create and configure a SearchFn client for in-app search.
+---
+
+## Creating a Client
+
+Use `createSearchClient()` to create a search client. The client validates inputs, applies defaults, and delegates to the underlying adapter.
+
+```typescript
+import { createSearchClient } from "@searchfn/client";
+import { MemoryAdapter } from "@searchfn/adapter-memory";
+
+const client = createSearchClient({
+  adapter: new MemoryAdapter(),
+  defaults: {
+    limit: 20,
+    limitPerResource: 10,
+    fuzzy: true,
+  },
+});
+```
+
+## Configuration
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `adapter` | `SearchAdapter` | Required. The search adapter to use. |
+| `defaults.limit` | `number` | Default result limit for `search` calls. |
+| `defaults.limitPerResource` | `number` | Default per-resource limit for `searchAll` calls. |
+| `defaults.fuzzy` | `boolean \| number` | Enable fuzzy matching by default. Pass a number for edit distance threshold. |
+
+## Methods
+
+### `initialize`
+
+Declare resources and their searchable fields. Call before indexing.
+
+```typescript
+await client.initialize?.({
+  resources: [
+    { name: "tasks", searchFields: ["title", "description"] },
+    { name: "notes", searchFields: ["content", "tags"] },
+  ],
+});
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `resources` | `InitializeResourceConfig[]` | Array of resource declarations with name and searchable fields. |
+
+### `index`
+
+Index a batch of documents into a resource.
+
+```typescript
+await client.index({
+  resource: "tasks",
+  documents: [
+    { id: "t-1", fields: { title: "Ship docs", description: "Write the guide" } },
+    { id: "t-2", fields: { title: "Fix bug", description: "Handle retries" } },
+  ],
+});
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `resource` | `string` | Target resource name. |
+| `documents` | `SearchDocument[]` | Documents to index. Each has an `id` and a `fields` record. |
+| `signal` | `AbortSignal?` | Optional abort signal. |
+
+### `search`
+
+Search a single resource. Returns matching document IDs.
+
+```typescript
+const ids = await client.search({
+  resource: "tasks",
+  query: "docs",
+  limit: 10,
+  fuzzy: true,
+  fields: ["title"],
+  fieldBoosts: { title: 2.0 },
+});
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `resource` | `string` | Resource to search. |
+| `query` | `string` | Search query string. |
+| `fields` | `string[]?` | Restrict search to specific fields. |
+| `limit` | `number?` | Max results to return. |
+| `fuzzy` | `boolean \| number?` | Enable fuzzy matching. |
+| `fieldBoosts` | `Record<string, number>?` | Per-field relevance boosts (adapter support required). |
+| `signal` | `AbortSignal?` | Optional abort signal. |
+
+**Returns:** `Promise<Array<string | number>>`
+
+### `searchAll`
+
+Search across multiple resources. Returns results with resource name, ID, and score.
+
+```typescript
+const results = await client.searchAll({
+  query: "launch",
+  resources: ["tasks", "notes"],
+  limitPerResource: 5,
+});
+
+// [{ resource: "tasks", id: "t-3", score: 1.5 }, { resource: "notes", id: "n-1", score: 0.8 }]
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `query` | `string` | Search query string. |
+| `resources` | `string[]?` | Resources to search. Omit to search all initialized resources. |
+| `fields` | `string[]?` | Restrict search to specific fields. |
+| `limit` | `number?` | Max total results. |
+| `limitPerResource` | `number?` | Max results per resource. |
+| `fuzzy` | `boolean \| number?` | Enable fuzzy matching. |
+| `fieldBoosts` | `Record<string, number>?` | Per-field relevance boosts. |
+| `signal` | `AbortSignal?` | Optional abort signal. |
+
+**Returns:** `Promise<SearchAllResult[]>` where each result has `resource`, `id`, and `score`.
+
+If the adapter does not implement `searchAll` natively, the client runs per-resource searches concurrently and merges results with deterministic score-based ordering.
+
+### `remove`
+
+Remove documents from a resource by ID.
+
+```typescript
+await client.remove({
+  resource: "tasks",
+  ids: ["t-1", "t-2"],
+});
+```
+
+### `clear`
+
+Remove all documents from a resource.
+
+```typescript
+await client.clear("tasks");
+```
+
+### `dispose`
+
+Release resources held by the adapter. After disposal, call `initialize()` again before further operations.
+
+```typescript
+await client.dispose();
+```
+
+### `adapterInfo`
+
+Returns the adapter name and declared capabilities.
+
+```typescript
+const info = client.adapterInfo();
+// { name: "memory", capabilities: { persistent: false, searchAll: true, fuzzy: true, fieldBoosts: true } }
+```
+
+## Convenience Constructors
+
+Shorthand for common adapter setups:
+
+```typescript
+import { createMemorySearchClient, createIndexedDbSearchClient } from "@searchfn/client";
+
+const memoryClient = createMemorySearchClient({
+  adapterConfig: { pipeline: { /* custom pipeline */ } },
+  defaults: { limit: 20, fuzzy: true },
+});
+
+const browserClient = createIndexedDbSearchClient({
+  adapterConfig: { dbName: "my-app-search", cache: { terms: 4096 } },
+  defaults: { limit: 20, fuzzy: true },
+});
+```
+
+## Validation Limits
+
+The client validates all inputs before passing them to the adapter:
+
+| Limit | Default |
+| --- | --- |
+| Max query length | `1000` characters |
+| Max `limit` | `10,000` |
+| Max `limitPerResource` | `1,000` |
+| Max resources in `searchAll` | `50` |
+| Max documents per `index` batch | `10,000` |
+
+Validation failures throw `SearchClientValidationError` with a `code` and optional `details.path`.

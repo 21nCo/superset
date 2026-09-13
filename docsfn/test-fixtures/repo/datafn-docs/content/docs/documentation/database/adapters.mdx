@@ -1,0 +1,283 @@
+---
+title: Database Adapters
+description: Connect DataFn to your database.
+audience: guide
+applies_to: both
+---
+
+import { Tab, Tabs } from "fumadocs-ui/components/tabs";
+
+DataFn uses database adapters to interface with databases on the server. The adapter provides a uniform API for CRUD operations, transactions, and schema management across different database backends.
+
+## Adapter Interface
+
+<Tabs items={["TypeScript", "Python"]}>
+  <Tab value="TypeScript">
+    The TypeScript adapter uses the `@superfunctions/db` adapter system:
+
+    ```typescript
+    interface Adapter {
+      readonly id: string;
+      readonly name: string;
+      readonly version: string;
+      readonly capabilities: AdapterCapabilities;
+
+      create<T>(params: CreateParams): Promise<T>;
+      findOne<T>(params: FindOneParams): Promise<T | null>;
+      findMany<T>(params: FindManyParams): Promise<T[]>;
+      update<T>(params: UpdateParams): Promise<T>;
+      delete(params: DeleteParams): Promise<void>;
+
+      createMany<T>(params: CreateManyParams): Promise<T[]>;
+      updateMany(params: UpdateManyParams): Promise<number>;
+      deleteMany(params: DeleteManyParams): Promise<number>;
+
+      upsert<T>(params: UpsertParams): Promise<T>;
+      count(params: CountParams): Promise<number>;
+
+      transaction<R>(callback: (trx: TransactionAdapter) => Promise<R>): Promise<R>;
+
+      initialize(): Promise<void>;
+      isHealthy(): Promise<HealthStatus>;
+      close(): Promise<void>;
+
+      getSchemaVersion(namespace: string): Promise<number>;
+      setSchemaVersion(namespace: string, version: number): Promise<void>;
+      validateSchema(schema: TableSchema): Promise<ValidationResult>;
+
+      readonly internal: InternalCrud;
+    }
+    ```
+  </Tab>
+  <Tab value="Python">
+    The Python adapter uses a Protocol-based interface:
+
+    ```python
+    from typing import Any, Dict, List, Optional, AsyncContextManager, Protocol
+
+    class Adapter(Protocol):
+        async def find_many(
+            self,
+            model: str,
+            where: List[Dict[str, Any]],
+            limit: Optional[int] = None,
+            sort: Optional[List[str]] = None,
+            cursor: Optional[Dict[str, Any]] = None,
+            namespace: str = "datafn",
+        ) -> List[Dict[str, Any]]:
+            ...
+
+        async def find_one(
+            self,
+            model: str,
+            where: List[Dict[str, Any]],
+            namespace: str = "datafn",
+        ) -> Optional[Dict[str, Any]]:
+            ...
+
+        async def create(
+            self,
+            model: str,
+            data: Dict[str, Any],
+            namespace: str = "datafn",
+        ) -> None:
+            ...
+
+        async def update(
+            self,
+            model: str,
+            where: List[Dict[str, Any]],
+            data: Dict[str, Any],
+            namespace: str = "datafn",
+        ) -> None:
+            ...
+
+        async def delete(
+            self,
+            model: str,
+            where: List[Dict[str, Any]],
+            namespace: str = "datafn",
+        ) -> None:
+            ...
+
+        def transaction(self) -> AsyncContextManager["Adapter"]:
+            ...
+    ```
+
+    ### Python Method Parameters
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `model` | `str` | Resource (table) name. |
+    | `where` | `list[dict]` | Filter conditions as a list of `{field, op, value}` dicts. |
+    | `limit` | `int \| None` | Maximum records to return. |
+    | `sort` | `list[str] \| None` | Sort fields, e.g. `["+createdAt", "-title"]`. |
+    | `cursor` | `dict \| None` | Cursor-based pagination state. |
+    | `namespace` | `str` | Namespace for multi-tenant isolation. Defaults to `"datafn"`. |
+    | `data` | `dict` | Record data for create/update operations. |
+  </Tab>
+</Tabs>
+
+## Namespace Support
+
+All CRUD operations accept an optional `namespace` parameter for row-level isolation. When row-level namespacing is enabled, the adapter automatically filters queries by a discriminator column (default: `__ns`):
+
+```typescript
+await adapter.findMany({ model: "todos", where: [], namespace: "tenant-1" });
+// Internally: SELECT * FROM todos WHERE __ns = 'tenant-1'
+```
+
+Namespace is always server-derived. The client never supplies the namespace directly.
+
+## Operation Parameters
+
+<Tabs items={["TypeScript", "Python"]}>
+  <Tab value="TypeScript">
+    ```typescript
+    // Create
+    await adapter.create({
+      model: "todos",
+      data: { id: "t1", title: "Buy milk" },
+      namespace: "tenant-1",
+    });
+
+    // Find
+    const todo = await adapter.findOne({
+      model: "todos",
+      where: [{ field: "id", operator: "eq", value: "t1" }],
+      namespace: "tenant-1",
+    });
+
+    const todos = await adapter.findMany({
+      model: "todos",
+      where: [{ field: "status", operator: "eq", value: "active" }],
+      orderBy: [{ field: "createdAt", direction: "desc" }],
+      limit: 50,
+      namespace: "tenant-1",
+    });
+
+    // Update and Delete
+    await adapter.update({
+      model: "todos",
+      where: [{ field: "id", operator: "eq", value: "t1" }],
+      data: { status: "done" },
+      namespace: "tenant-1",
+    });
+
+    await adapter.delete({
+      model: "todos",
+      where: [{ field: "id", operator: "eq", value: "t1" }],
+      namespace: "tenant-1",
+    });
+    ```
+  </Tab>
+  <Tab value="Python">
+    ```python
+    # Create
+    await adapter.create("todos", {"id": "t1", "title": "Buy milk"}, namespace="tenant-1")
+
+    # Find
+    todo = await adapter.find_one("todos", [{"field": "id", "op": "eq", "value": "t1"}], namespace="tenant-1")
+
+    todos = await adapter.find_many(
+        "todos",
+        [{"field": "status", "op": "eq", "value": "active"}],
+        sort=["+createdAt"],
+        limit=50,
+        namespace="tenant-1",
+    )
+
+    # Update and Delete
+    await adapter.update(
+        "todos",
+        [{"field": "id", "op": "eq", "value": "t1"}],
+        {"status": "done"},
+        namespace="tenant-1",
+    )
+
+    await adapter.delete(
+        "todos",
+        [{"field": "id", "op": "eq", "value": "t1"}],
+        namespace="tenant-1",
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Transactions
+
+<Tabs items={["TypeScript", "Python"]}>
+  <Tab value="TypeScript">
+    ```typescript
+    await adapter.transaction(async (trx) => {
+      await trx.create({ model: "todos", data: { id: "t1", title: "Buy milk" } });
+      await trx.update({
+        model: "todos",
+        where: [{ field: "id", operator: "eq", value: "t2" }],
+        data: { completed: true },
+      });
+    });
+    ```
+  </Tab>
+  <Tab value="Python">
+    The `transaction()` method returns an async context manager. Operations within the context use a single database transaction:
+
+    ```python
+    async with adapter.transaction() as tx:
+        await tx.create("todos", {"id": "t1", "title": "Buy milk"})
+        await tx.update("todos", [{"field": "id", "op": "eq", "value": "t2"}], {"completed": True})
+        # Commits on successful exit, rolls back on exception.
+    ```
+  </Tab>
+</Tabs>
+
+## Where Clause Operators
+
+| Operator | Description |
+|----------|-------------|
+| `eq` | Equal to |
+| `ne` | Not equal to |
+| `gt` | Greater than |
+| `gte` | Greater than or equal to |
+| `lt` | Less than |
+| `lte` | Less than or equal to |
+| `in` | In array |
+| `not_in` | Not in array |
+| `contains` | String contains |
+| `starts_with` | String starts with |
+| `ends_with` | String ends with |
+
+## Internal Tables
+
+DataFn uses several internal tables managed via the `adapter.internal` API:
+
+| Table | Purpose |
+|-------|---------|
+| `__datafn_meta` | Stores `next_server_seq` per namespace |
+| `__datafn_changes` | Change log entries for incremental sync |
+| `__datafn_idempotency` | Mutation deduplication records |
+| `__datafn_seed` | Seed tracking metadata |
+
+Internal tables are created automatically on first use via `CREATE TABLE IF NOT EXISTS`.
+
+## Available Adapters
+
+| Adapter | Package | Language | Databases |
+|---------|---------|----------|-----------|
+| [Drizzle](/docs/documentation/database/drizzle) | `@superfunctions/db` | TypeScript | PostgreSQL, MySQL, SQLite |
+| Memory | `@superfunctions/db` | TypeScript | In-memory (testing) |
+| Custom | — | Python | Any (implement the `Adapter` protocol) |
+
+## Row-Level Namespace Configuration
+
+```typescript
+const adapter = drizzleAdapter({
+  db: drizzleInstance,
+  dialect: "postgres",
+  rowLevelNamespace: {
+    enabled: true,
+    columnName: "__ns",    // Default
+    mandatory: true,       // Default
+  },
+});
+```

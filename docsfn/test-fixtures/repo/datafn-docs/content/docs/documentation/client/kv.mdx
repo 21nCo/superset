@@ -1,0 +1,136 @@
+---
+title: "Key-Value Store"
+description: "A built-in key-value API with signals and debounce support."
+audience: guide
+applies_to: typescript
+---
+
+## Overview
+
+DataFn includes a first-class key-value API accessible via `client.kv`. It is built on top of an internal `kv` resource with `id` and `value` fields, so KV data participates in sync, offline support, and event emission like any other resource.
+
+## API Reference
+
+### get
+
+Retrieve a value by key. Returns `null` if the key does not exist. Reads from local storage first (offline-first), falling back to a remote query.
+
+```typescript
+const theme = await client.kv.get<string>("user-theme");
+// theme: "dark" | null
+```
+
+### set
+
+Set a key to a value. Creates the entry if it does not exist, or overwrites it.
+
+```typescript
+await client.kv.set("user-theme", "dark");
+```
+
+With optional parameters:
+
+```typescript
+await client.kv.set("user-theme", "dark", {
+  context: { changedBy: "settings-page" },
+  debounceMs: 1000,
+});
+```
+
+The return type is `{ ok: true; key: string }` on success or `{ ok: false; error: unknown }` on failure.
+
+### merge
+
+One-level deep merge for object values. Existing top-level keys not present in the patch are preserved. Uses per-key serialization locks to prevent read-modify-write races from concurrent calls.
+
+```typescript
+await client.kv.set("preferences", { fontSize: 14, theme: "light", lang: "en" });
+
+// Only updates fontSize, leaves theme and lang intact
+await client.kv.merge("preferences", { fontSize: 16 });
+
+const prefs = await client.kv.get("preferences");
+// { fontSize: 16, theme: "light", lang: "en" }
+```
+
+Merge also supports debouncing:
+
+```typescript
+await client.kv.merge("preferences", { fontSize: 16 }, { debounceMs: 500 });
+```
+
+### delete
+
+Remove a key-value entry.
+
+```typescript
+await client.kv.delete("user-theme");
+```
+
+### getOrSeed
+
+Read a value by key. If the key does not exist, seed it with the provided defaults and return those defaults.
+
+```typescript
+const prefs = await client.kv.getOrSeed("preferences", {
+  fontSize: 14,
+  theme: "system",
+  notifications: true,
+});
+// Returns existing value if present, otherwise seeds and returns defaults
+```
+
+### flush
+
+Force immediate execution of debounced KV mutations. Pass a key to flush a specific entry, or call with no arguments to flush all pending KV mutations.
+
+```typescript
+// Flush a specific key
+await client.kv.flush("preferences");
+
+// Flush all pending KV mutations
+await client.kv.flush();
+```
+
+### signal
+
+Create a reactive signal for a KV key. The signal automatically unwraps the internal record structure, emitting the `value` field directly.
+
+```typescript
+const themeSignal = client.kv.signal<string>("user-theme", {
+  defaultValue: "system",
+});
+
+themeSignal.subscribe((theme) => {
+  document.body.dataset.theme = theme;
+});
+
+// Synchronous read
+const current = themeSignal.get();
+// "dark" | "system" (defaultValue if key doesn't exist)
+```
+
+The signal auto-refreshes when the key is mutated via `set`, `merge`, or `delete`.
+
+## Practical Example
+
+```typescript
+// Initialize preferences on first visit
+const prefs = await client.kv.getOrSeed("user-prefs", {
+  theme: "system",
+  fontSize: 14,
+  sidebar: true,
+});
+
+// Bind UI to reactive preference updates
+const prefsSignal = client.kv.signal<typeof prefs>("user-prefs");
+prefsSignal.subscribe((p) => applyPreferences(p));
+
+// Update a single preference with debounce (e.g., from a slider)
+function onFontSizeChange(size: number) {
+  client.kv.merge("user-prefs", { fontSize: size }, { debounceMs: 300 });
+}
+
+// Cleanup
+prefsSignal.dispose();
+```

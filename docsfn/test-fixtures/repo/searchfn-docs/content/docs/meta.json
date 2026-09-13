@@ -1,0 +1,11 @@
+{
+  "title": "SearchFn",
+  "pages": [
+    "index",
+    "getting-started",
+    "architecture",
+    "reference",
+    "integrations",
+    "operations"
+  ]
+}

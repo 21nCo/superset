@@ -1,0 +1,149 @@
+---
+title: "Getting Started"
+description: "Get up and running with DataFn in minutes."
+audience: landing
+applies_to: both
+---
+
+## Overview
+
+DataFn is a full-stack data framework for TypeScript applications. It provides:
+
+- **Schema-defined capabilities** -- opt-in lifecycle behaviors like `timestamps`, `audit`, `trash`, `archivable`, and `shareable`.
+- **Offline-first sync** -- local-first reads/writes with clone, pull, push, and reconcile.
+- **Reactive signals** -- query subscriptions that revalidate on local and remote changes.
+- **DFQL query language** -- structured queries, mutations, and transactions.
+- **Namespace isolation** -- row-level multi-tenancy enabled by default.
+- **Plugin hooks** -- pre/post lifecycle hooks on query, mutation, and sync flows.
+
+DataFn is composed of three packages:
+
+| Package | Purpose |
+| --- | --- |
+| `@datafn/core` | Schema types, validation, capabilities, DFQL utilities |
+| `@datafn/client` | Browser/Node client with local storage, sync engine, and reactive signals |
+| `@datafn/server` | HTTP server with query, mutation, transaction, and sync endpoints |
+
+## Installation
+
+```bash
+npm install @datafn/core @datafn/client @datafn/server
+```
+
+Install only what you need. `@datafn/core` is shared by both client and server.
+
+## Quick Start
+
+### 1. Define a Schema
+
+```typescript
+import { defineSchema } from "@datafn/core";
+
+const schema = defineSchema({
+  capabilities: ["timestamps", "audit", "trash"],
+  resources: [
+    {
+      name: "tasks",
+      version: 1,
+      idPrefix: "tsk",
+      capabilities: ["archivable"],
+      fields: [
+        { name: "title", type: "string", required: true },
+        { name: "completed", type: "boolean", required: true, default: false },
+        { name: "priority", type: "number", required: false, min: 1, max: 5 },
+      ],
+      indices: { base: ["title", "completed", "priority"] },
+    },
+  ],
+  relations: [],
+});
+```
+
+### 2. Create a Server
+
+```typescript
+import { createDatafnServer } from "@datafn/server";
+import { drizzleAdapter } from "@superfunctions/db/adapters";
+
+const server = await createDatafnServer({
+  schema,
+  db: drizzleAdapter({ db: drizzleInstance, dialect: "postgres" }),
+  rest: true,
+});
+
+Bun.serve({
+  port: 3000,
+  fetch: server.router.fetch,
+});
+```
+
+### 3. Create a Client
+
+```typescript
+import { createDatafnClient, MemoryStorageAdapter } from "@datafn/client";
+
+const client = createDatafnClient({
+  schema,
+  clientId: "device-1",
+  storage: new MemoryStorageAdapter(),
+  sync: {
+    remote: "http://localhost:3000/datafn",
+    offlinability: true,
+    ws: true,
+  },
+});
+```
+
+### 4. Query and Mutate
+
+```typescript
+// Insert
+await client.table("tasks").mutate({
+  operation: "insert",
+  record: { title: "Ship v1", completed: false, priority: 1 },
+});
+
+// Query
+const result = await client.table("tasks").query({
+  filters: { completed: { $eq: false } },
+  sort: ["priority:asc", "id:asc"],
+  limit: 20,
+});
+
+// Reactive signal
+const signal = client.table("tasks").signal({
+  filters: { completed: { $eq: false } },
+});
+
+signal.subscribe((value) => {
+  console.log("Active tasks:", value);
+});
+```
+
+### 5. Use Capability Operations
+
+```typescript
+// Available because "trash" is enabled
+await client.table("tasks").trash?.("tsk:1");
+await client.table("tasks").restore?.("tsk:1");
+
+// Available because "archivable" is enabled on tasks
+await client.table("tasks").archive?.("tsk:1");
+await client.table("tasks").unarchive?.("tsk:1");
+
+// Include archived/trashed rows explicitly
+await client.table("tasks").query({
+  metadata: { includeArchived: true, includeTrashed: true },
+});
+```
+
+## Next Steps
+
+- [Concepts Overview](/docs/documentation/concepts/overview) -- architecture and data model.
+- [Capabilities](/docs/documentation/concepts/capabilities) -- capability declarations, field ownership, and operations.
+- [Schema](/docs/dfql/schema) -- full schema contract.
+- [Resources](/docs/dfql/schema/resources) -- resource-level config and capability overrides.
+- [System Fields](/docs/dfql/schema/system-fields) -- capability-injected lifecycle fields.
+- [Mutations](/docs/dfql/mutations) -- operation-level DFQL reference.
+- [Client Setup](/docs/documentation/client/setup) -- client runtime configuration.
+- [Server Setup](/docs/documentation/server/setup) -- server runtime configuration.

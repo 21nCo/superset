@@ -1,0 +1,94 @@
+---
+title: "WebSocket Manager"
+description: "WebSocket manager reference."
+audience: reference
+applies_to: both
+---
+
+## WebSocketManager
+
+Manages WebSocket connections for real-time sync notifications. Connections are tracked per-namespace for efficient broadcast.
+
+```typescript
+class WebSocketManager {
+  constructor(config?: WsManagerConfig, logger?: DatafnLogger);
+
+  addClient(client: WebSocketClient, authContext: WsAuthContext): boolean;
+  removeClient(client: WebSocketClient): void;
+  handleMessage(client: WebSocketClient, data: string): void;
+  handlePong(client: WebSocketClient): void;
+  broadcastCursor(cursor: string, namespace: string): void;
+  close(): void;
+  destroy(): void;
+}
+```
+
+## WebSocketClient Interface
+
+```typescript
+interface WebSocketClient {
+  send(data: string): void;
+  close?(code?: number, reason?: string): void;
+  ping?(): void;
+}
+```
+
+## WsAuthContext
+
+```typescript
+interface WsAuthContext {
+  namespace: string;
+}
+```
+
+The namespace is **server-derived** from the `namespaceProvider`. Client-supplied namespace values in messages are ignored.
+
+## addClient
+
+Registers a client after authentication. Returns `false` if connection limits are exceeded.
+
+**Security requirements:**
+- The caller must reject unauthenticated connections with close code `4401` before calling `addClient`.
+- The namespace in `authContext` is locked at connection time and cannot be changed.
+
+**Connection limits:**
+- Global limit: `maxConnections` (default: 10,000).
+- Per-namespace limit: `maxConnectionsPerNamespace` (default: 100).
+- Rejected connections receive close code `4503`.
+
+## removeClient
+
+Removes a client from tracking. Called on disconnect or when a heartbeat times out.
+
+## handleMessage
+
+Processes incoming WebSocket messages. Currently handles the `hello` message type for client registration. The namespace field in hello messages is ignored (server-derived only).
+
+## handlePong
+
+Called by the WebSocket transport when a native pong frame is received. Clears the pending-pong marker so the connection is not timed out by the heartbeat.
+
+## broadcastCursor
+
+Sends a cursor update to all clients in a namespace. Complexity is O(clients in namespace). Failed sends result in client removal.
+
+```typescript
+// Message format
+{ "type": "cursor", "cursor": "42" }
+```
+
+## Heartbeat
+
+The heartbeat starts lazily when the first client connects. It pings all clients at `heartbeatIntervalMs` (default: 30s). Clients that do not respond with a pong within `heartbeatTimeoutMs` (default: 10s) are closed with code `1001`.
+
+## Close Codes
+
+| Code | Meaning |
+|---|---|
+| `4401` | Unauthorized (caller should send before `addClient`). |
+| `4503` | Connection limit exceeded. |
+| `1001` | Going away (graceful shutdown or heartbeat timeout). |
+
+## Graceful Shutdown
+
+`close()` stops the heartbeat timer, sends close code `1001` ("Going Away") to all connected clients, and clears all internal state. Called automatically by `DatafnServer.close()`.

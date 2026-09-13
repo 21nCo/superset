@@ -1,0 +1,27 @@
+{
+  "name": "@docsfn/example-sveltekit-hybrid-site",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev --port 6053",
+    "build": "vite build",
+    "preview": "vite preview --port 6053"
+  },
+  "dependencies": {
+    "@docsfn/core": "file:../../core",
+    "@docsfn/provider-fs": "file:../../provider-fs",
+    "@docsfn/svelte": "file:../../svelte",
+    "@docsfn/sveltekit": "file:../../sveltekit",
+    "@sveltejs/adapter-auto": "^3.0.0",
+    "@sveltejs/kit": "^2.0.0",
+    "@uifn/core": "file:../../../uifn/core",
+    "@uifn/svelte": "file:../../../uifn/svelte",
+    "svelte": "^5.0.0",
+    "vite": "^5.4.21"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^4.0.4",
+    "typescript": "^5.0.0"
+  }
+}

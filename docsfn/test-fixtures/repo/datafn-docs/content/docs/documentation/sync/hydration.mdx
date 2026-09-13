@@ -1,0 +1,101 @@
+---
+title: Hydration
+description: Configure startup data loading strategy.
+audience: guide
+applies_to: both
+---
+
+Hydration controls how the client loads data on startup. By default, the sync engine clones all resources before the application is ready. For large schemas, you can use a hydration plan to prioritize critical resources and defer others.
+
+## Hydration States
+
+Each resource tracks its own hydration state:
+
+| State | Description |
+|-------|-------------|
+| `notStarted` | Resource has not been cloned yet |
+| `hydrating` | Clone is in progress |
+| `ready` | Resource is fully hydrated and available for local queries |
+
+State transitions are validated. For example, a resource cannot transition from `ready` back to `notStarted`.
+
+## Hydration Plan
+
+A hydration plan splits resources into two groups:
+
+- **bootResources** -- Cloned before the application is considered ready. Blocks startup until complete.
+- **backgroundResources** -- Cloned asynchronously after boot resources are ready. Does not block startup.
+
+```typescript
+const client = createDatafnClient({
+  schema,
+  sync: {
+    remote: "https://api.example.com/datafn",
+    hydration: {
+      bootResources: ["users", "settings"],
+      backgroundResources: ["auditLog", "analytics"],
+      clonePageSize: 5000,
+    },
+  },
+});
+```
+
+### Startup Sequence
+
+1. Check hydration state for each boot resource.
+2. Clone any boot resources that are not yet `"ready"`.
+3. If all boot resources were already `"ready"`, perform an incremental pull instead.
+4. Schedule background resources for async clone (non-blocking).
+
+### Page Size Configuration
+
+The `clonePageSize` option controls pagination during clone. It can be a global number or a per-resource map:
+
+```typescript
+hydration: {
+  bootResources: ["todos"],
+  clonePageSize: {
+    todos: 10000,      // Large resource: bigger pages
+    settings: 100,     // Small resource: smaller pages
+  },
+}
+```
+
+## Query Routing by Hydration State
+
+The hydration state of a resource determines whether queries run locally or are forwarded to the remote server:
+
+```typescript
+// "users" is a boot resource -- guaranteed to be hydrated before this runs
+const currentUser = await client.table("users").query({
+  filters: { id: userId },
+});
+
+// "auditLog" may still be loading in background
+// If not yet hydrated, this query falls back to the remote server
+const logs = await client.table("auditLog").query({
+  sort: ["createdAt:desc"],
+  limit: 20,
+});
+```
+
+## Per-Resource State Tracking
+
+You can observe hydration progress through the storage adapter:
+
+```typescript
+const state = await storage.getHydrationState("todos");
+// "notStarted" | "hydrating" | "ready"
+```
+
+## Background Clone Failures
+
+If a background resource fails to clone, a `sync_failed` event is emitted. You can trigger a re-clone by restarting the sync engine or calling clone manually.
+
+```typescript
+client.subscribe((event) => {
+  if (event.type === "sync_failed" && event.context.phase === "clone") {
+    console.warn("Background clone failed:", event.context.error?.message);
+  }
+});
+```

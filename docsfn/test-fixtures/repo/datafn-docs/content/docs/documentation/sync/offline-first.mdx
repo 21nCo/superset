@@ -1,0 +1,117 @@
+---
+title: Offline-First
+description: Build applications that work without a network connection.
+audience: guide
+applies_to: both
+---
+
+DataFn is designed around an offline-first architecture. The local storage adapter is the primary source of truth for the client. The remote server acts as the authoritative sync target, but the application remains fully functional without a network connection.
+
+## Architecture Principles
+
+1. **Local-first reads.** Queries run against local storage when the resource is hydrated. No network round-trip required.
+2. **Optimistic mutations.** Mutations are applied locally and appended to the changelog immediately. The push engine uploads them asynchronously.
+3. **Automatic hydration.** On startup, the sync engine clones missing resources and pulls incremental updates for already-hydrated resources.
+4. **Changelog as write-ahead log.** Every local mutation is recorded in the changelog with a monotonic sequence number, ensuring no writes are lost.
+
+## Query Routing
+
+Query routing depends on the hydration state of each resource:
+
+| Hydration State | Query Behavior |
+|-----------------|---------------|
+| `notStarted` | Queries are routed to the remote server |
+| `hydrating` | Queries are routed to the remote server |
+| `ready` | Queries run against local storage |
+
+```typescript
+// This query runs locally if "todos" is hydrated, otherwise falls back to remote
+const todos = await client.table("todos").query({
+  filters: { status: "active" },
+  sort: ["createdAt:desc"],
+  limit: 50,
+});
+```
+
+## Offline Mutations
+
+When the client is offline, mutations are applied to local storage and appended to the changelog. Each changelog entry contains:
+
+```typescript
+type DatafnChangelogEntry = {
+  seq: number;           // Monotonic local sequence
+  clientId: string;      // Unique client identifier
+  mutationId: string;    // Unique mutation identifier
+  mutation: Record<string, unknown>;  // The full mutation payload
+  timestampMs: number;   // Local timestamp
+  actorId?: string;      // Audit attribution (who performed the action)
+  timestamp?: string;    // ISO 8601 timestamp
+};
+```
+
+When the network becomes available, the push engine reads pending entries from the changelog and uploads them in batches.
+
+## Online/Offline Detection
+
+The sync engine listens to the browser `online` and `offline` events:
+
+- **Going offline**: The push interval is paused to save battery. Mutations continue to be stored in the changelog.
+- **Coming online**: The push interval resumes, an immediate pull is triggered, and pending mutations are pushed.
+
+```typescript
+client.subscribe((event) => {
+  if (event.type !== "connectivity_changed") return;
+  if (event.context.isOnline) {
+    console.log("Back online -- syncing...");
+  } else {
+    console.log("Offline -- mutations will be queued");
+  }
+});
+```
+
+## Hydration on Startup
+
+The sync engine initializes automatically when `client.sync.start()` is called:
+
+1. For each resource, check the hydration state in local storage.
+2. If any resource is not `"ready"`, perform a full clone for those resources.
+3. If all resources are already `"ready"`, perform an incremental pull to catch up.
+
+You can customize this behavior with a [hydration plan](/docs/documentation/sync/hydration).
+
+## Conflict Resolution
+
+DataFn uses a last-writer-wins strategy by default. The server assigns a monotonic `serverSeq` to each mutation. During pull, the client applies changes in `serverSeq` order, which means the latest server-acknowledged write takes precedence.
+
+For more granular control, use [guards](/docs/documentation/advanced/guards) to implement optimistic concurrency control with conditional mutations.
+
+## Push Retry with Backoff
+
+When push fails, the engine retries with exponential backoff:
+
+```typescript
+sync: {
+  pushMaxRetries: 3,
+  pushRetryBackoff: {
+    baseDelayMs: 1000,
+    multiplier: 2,
+    maxDelayMs: 60000,
+    jitterMs: 500,
+  },
+}
+```
+
+If consecutive pushes keep failing, the push interval itself backs off to avoid wasting resources:
+
+```typescript
+sync: {
+  pushInterval: 5000,
+  pushIntervalBackoff: {
+    baseMultiplier: 2,
+    maxDelayMs: 300000,  // Cap at 5 minutes
+    jitterMs: 1000,
+  },
+}
+```
+
+The interval backoff resets to the configured `pushInterval` after the first successful push.

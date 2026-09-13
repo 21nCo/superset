@@ -1,0 +1,4 @@
+{
+  "title": "@datafn/client",
+  "pages": ["config", "query", "mutation", "signal", "svelte", "storage", "sync", "events", "transport"]
+}

@@ -1,0 +1,189 @@
+{
+  "name": "@docsfn/svelte",
+  "version": "0.0.4",
+  "description": "Svelte components and helpers for docsfn",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "svelte": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "svelte": "./src/index.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./ApiReferenceRenderer.svelte": {
+      "types": "./dist/ApiReferenceRenderer.d.ts",
+      "svelte": "./src/ApiReferenceRenderer.svelte",
+      "import": "./dist/ApiReferenceRenderer.js",
+      "require": "./dist/ApiReferenceRenderer.cjs"
+    },
+    "./Breadcrumbs.svelte": {
+      "types": "./dist/Breadcrumbs.d.ts",
+      "svelte": "./src/Breadcrumbs.svelte",
+      "import": "./dist/Breadcrumbs.js",
+      "require": "./dist/Breadcrumbs.cjs"
+    },
+    "./ChangelogEntry.svelte": {
+      "types": "./dist/ChangelogEntry.d.ts",
+      "svelte": "./src/ChangelogEntry.svelte",
+      "import": "./dist/ChangelogEntry.js",
+      "require": "./dist/ChangelogEntry.cjs"
+    },
+    "./ChangelogList.svelte": {
+      "types": "./dist/ChangelogList.d.ts",
+      "svelte": "./src/ChangelogList.svelte",
+      "import": "./dist/ChangelogList.js",
+      "require": "./dist/ChangelogList.cjs"
+    },
+    "./DatedCollectionEntry.svelte": {
+      "types": "./dist/DatedCollectionEntry.d.ts",
+      "svelte": "./src/DatedCollectionEntry.svelte",
+      "import": "./dist/DatedCollectionEntry.js",
+      "require": "./dist/DatedCollectionEntry.cjs"
+    },
+    "./DatedCollectionList.svelte": {
+      "types": "./dist/DatedCollectionList.d.ts",
+      "svelte": "./src/DatedCollectionList.svelte",
+      "import": "./dist/DatedCollectionList.js",
+      "require": "./dist/DatedCollectionList.cjs"
+    },
+    "./DocsContent.svelte": {
+      "types": "./dist/DocsContent.d.ts",
+      "svelte": "./src/DocsContent.svelte",
+      "import": "./dist/DocsContent.js",
+      "require": "./dist/DocsContent.cjs"
+    },
+    "./DocsFooter.svelte": {
+      "types": "./dist/DocsFooter.d.ts",
+      "svelte": "./src/DocsFooter.svelte",
+      "import": "./dist/DocsFooter.js",
+      "require": "./dist/DocsFooter.cjs"
+    },
+    "./DocsLayout.svelte": {
+      "types": "./dist/DocsLayout.d.ts",
+      "svelte": "./src/DocsLayout.svelte",
+      "import": "./dist/DocsLayout.js",
+      "require": "./dist/DocsLayout.cjs"
+    },
+    "./DocsSearch.svelte": {
+      "types": "./dist/DocsSearch.d.ts",
+      "svelte": "./src/DocsSearch.svelte",
+      "import": "./dist/DocsSearch.js",
+      "require": "./dist/DocsSearch.cjs"
+    },
+    "./DocsSidebar.svelte": {
+      "types": "./dist/DocsSidebar.d.ts",
+      "svelte": "./src/DocsSidebar.svelte",
+      "import": "./dist/DocsSidebar.js",
+      "require": "./dist/DocsSidebar.cjs"
+    },
+    "./DocsSiteShell.svelte": {
+      "types": "./dist/DocsSiteShell.d.ts",
+      "svelte": "./src/DocsSiteShell.svelte",
+      "import": "./dist/DocsSiteShell.js",
+      "require": "./dist/DocsSiteShell.cjs"
+    },
+    "./DocsToc.svelte": {
+      "types": "./dist/DocsToc.d.ts",
+      "svelte": "./src/DocsToc.svelte",
+      "import": "./dist/DocsToc.js",
+      "require": "./dist/DocsToc.cjs"
+    },
+    "./EmbeddedPage.svelte": {
+      "types": "./dist/EmbeddedPage.d.ts",
+      "svelte": "./src/EmbeddedPage.svelte",
+      "import": "./dist/EmbeddedPage.js",
+      "require": "./dist/EmbeddedPage.cjs"
+    },
+    "./YouTubeEmbed.svelte": {
+      "types": "./dist/YouTubeEmbed.d.ts",
+      "svelte": "./src/YouTubeEmbed.svelte",
+      "import": "./dist/YouTubeEmbed.js",
+      "require": "./dist/YouTubeEmbed.cjs"
+    },
+    "./Pagination.svelte": {
+      "types": "./dist/Pagination.d.ts",
+      "svelte": "./src/Pagination.svelte",
+      "import": "./dist/Pagination.js",
+      "require": "./dist/Pagination.cjs"
+    },
+    "./PageActions.svelte": {
+      "types": "./dist/PageActions.d.ts",
+      "svelte": "./src/PageActions.svelte",
+      "import": "./dist/PageActions.js",
+      "require": "./dist/PageActions.cjs"
+    },
+    "./SidebarGroup.svelte": {
+      "types": "./dist/SidebarGroup.d.ts",
+      "svelte": "./src/SidebarGroup.svelte",
+      "import": "./dist/SidebarGroup.js",
+      "require": "./dist/SidebarGroup.cjs"
+    },
+    "./TopBar.svelte": {
+      "types": "./dist/TopBar.d.ts",
+      "svelte": "./src/TopBar.svelte",
+      "import": "./dist/TopBar.js",
+      "require": "./dist/TopBar.cjs"
+    },
+    "./VersionSwitcher.svelte": {
+      "types": "./dist/VersionSwitcher.d.ts",
+      "svelte": "./src/VersionSwitcher.svelte",
+      "import": "./dist/VersionSwitcher.js",
+      "require": "./dist/VersionSwitcher.cjs"
+    },
+    "./theme.css": "./dist/theme.css",
+    "./theme-base.css": "./dist/theme-base.css"
+  },
+  "peerDependencies": {
+    "@searchfn/client": "^0.3.0",
+    "svelte": ">=5.20.0 <6"
+  },
+  "peerDependenciesMeta": {
+    "@searchfn/client": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@docsfn/core": "0.0.6",
+    "@uifn/svelte": "0.0.2",
+    "@lucide/svelte": "^1.24.0",
+    "marked": "^12.0.0",
+    "searchfn": "*"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^4.0.4",
+    "@testing-library/svelte": "^5.3.1",
+    "esbuild-svelte": "^0.9.4",
+    "jsdom": "^27.0.1",
+    "svelte": ">=5.20.0 <6",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.2.4"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run"
+  },
+  "author": "21n",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/21nCo/super-functions/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/21nCo/super-functions.git",
+    "directory": "docsfn/svelte"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ]
+}

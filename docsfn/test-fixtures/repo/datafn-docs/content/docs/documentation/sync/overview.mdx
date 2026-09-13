@@ -1,0 +1,114 @@
+---
+title: Sync Overview
+description: Understand the DataFn synchronization architecture.
+audience: guide
+applies_to: both
+---
+
+DataFn provides a full-featured synchronization engine that keeps client-side data in sync with the server. The engine supports offline-first workflows, incremental updates, and real-time push notifications via WebSocket.
+
+## Sync Modes
+
+The sync engine operates in three primary modes:
+
+| Mode | Direction | Purpose |
+|------|-----------|---------|
+| **Clone** | Server to Client | Full dataset retrieval for initial hydration |
+| **Pull** | Server to Client | Cursor-based incremental updates |
+| **Push** | Client to Server | Upload local mutations from the changelog |
+
+## Sync Engine Lifecycle
+
+When the sync engine starts, it progresses through a sequence of phases:
+
+1. **Seed** -- Optional server-side seeding of initial data.
+2. **Clone** -- Full dataset download for resources that have not yet been hydrated.
+3. **Pull** -- Incremental fetch of changes since the last known cursor.
+4. **Push** -- Upload locally queued mutations from the changelog.
+5. **CloneUp** -- Bulk upload of offline-created data to the server.
+6. **Reconcile** -- Drift detection by comparing local and server record counts, triggering re-clone for mismatched resources.
+
+```typescript
+import { createDatafnClient } from "@datafn/client";
+
+const client = createDatafnClient({
+  schema,
+  sync: {
+    remote: "https://api.example.com/datafn",
+    pushInterval: 5000,       // Push every 5 seconds
+    pushBatchSize: 100,       // Max mutations per push batch
+    pushMaxRetries: 3,        // Retry failed pushes up to 3 times
+    pullBatchSize: 200,       // Max changes per pull request
+    ws: true,                 // Enable WebSocket for real-time updates
+  },
+});
+```
+
+## WebSocket Real-Time Updates
+
+When `ws: true` is configured, the sync engine opens a WebSocket connection to the server. On connect, it sends a `hello` message containing the client ID and per-table cursors. The server sends `cursor` messages when new changes are available. If the server cursor exceeds the locally stored cursor, the engine triggers an immediate pull.
+
+WebSocket reconnection uses exponential backoff with jitter:
+
+```typescript
+sync: {
+  ws: true,
+  remote: "https://api.example.com/datafn",
+  wsReconnect: {
+    enabled: true,            // Default: true
+    baseDelayMs: 1000,        // Initial delay
+    multiplier: 2,            // Exponential multiplier
+    maxDelayMs: 60000,        // Cap at 60 seconds
+    jitterMs: 500,            // Random jitter to prevent thundering herd
+  },
+}
+```
+
+## Event-Driven Architecture
+
+The sync engine emits events through the client event bus at each phase:
+
+- `sync_applied` -- Emitted after a successful clone, pull, push, or reconcile.
+- `sync_failed` -- Emitted when a sync operation fails after all retries.
+- `sync_retry` -- Emitted before a retry attempt, includes the attempt number and delay.
+- `connectivity_changed` -- Emitted when the browser goes online or offline.
+- `ws_connected` / `ws_disconnected` -- WebSocket lifecycle events.
+
+```typescript
+client.subscribe((event) => {
+  if (event.type !== "sync_applied") return;
+  console.log(`Sync phase: ${event.context.phase}`);
+  console.log(`Resources: ${event.context.resources}`);
+});
+```
+
+## Plugin Hooks
+
+Plugins can intercept sync operations using `beforeSync` and `afterSync` hooks:
+
+- **beforeSync** hooks are fail-closed. If any hook throws or returns an error, the sync operation is aborted.
+- **afterSync** hooks are fail-open. Errors are logged but do not prevent the sync result from being applied.
+
+Both hooks receive the sync phase (`"clone"`, `"pull"`, `"push"`, `"seed"`) and the payload being sent or received.
+
+## Automatic Triggers
+
+The sync engine automatically triggers pulls in response to:
+
+- **Visibility change** -- When the browser tab becomes visible.
+- **Window focus** -- When the user switches back to the app window.
+- **Online event** -- When the browser transitions from offline to online.
+- **WebSocket cursor message** -- When the server notifies of new changes.
+- **Post-push** -- After a successful push, if foreign changes are detected.
+
+## Manual Engine Controls
+
+The client also exposes explicit sync-engine control methods:
+
+```typescript
+await client.sync.start();        // Start engine lifecycle (clone/pull/push scheduling)
+client.sync.stop();               // Stop timers, listeners, and WS processing
+await client.sync.pullNow();      // Immediate incremental pull cycle
+await client.sync.cloneNow();     // Immediate clone cycle using hydration plan
+await client.sync.reconcileNow(); // Count-based drift detection + targeted re-clone
+```

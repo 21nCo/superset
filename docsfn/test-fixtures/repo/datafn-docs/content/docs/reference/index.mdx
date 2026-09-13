@@ -1,0 +1,46 @@
+---
+title: "API Reference"
+description: "Complete API reference for all DataFn packages."
+audience: landing
+applies_to: both
+---
+
+## Packages
+
+DataFn is organized into three packages:
+
+### @datafn/core
+
+Shared types, schema validation, filter evaluation, normalization utilities, date conversion, KV helpers, and plugin hook execution. Used by both client and server.
+
+- [Core Types](/docs/reference/core/types) -- all type definitions
+- [Schema Utilities](/docs/reference/core/schema) -- validation and indexing
+- [Filter Utilities](/docs/reference/core/filters) -- filter evaluation and operators
+- [Normalization](/docs/reference/core/normalize) -- DFQL normalization for caching
+- [Date Utilities](/docs/reference/core/date) -- date format conversion
+- [KV Utilities](/docs/reference/core/kv) -- built-in key-value resource
+- [Hook Utilities](/docs/reference/core/hooks) -- plugin hook execution
+- [Error Types](/docs/reference/core/errors) -- error codes and envelopes
+
+### @datafn/client
+
+Browser and Node.js client with offline support, sync engine, reactive signals, event bus, and storage adapters.
+
+- [Client Configuration](/docs/reference/client/config) -- `createDatafnClient` options
+- [Query Execution](/docs/reference/client/query) -- client query internals
+- [Mutation Execution](/docs/reference/client/mutation) -- client mutation internals
+- [Signal API](/docs/reference/client/signal) -- reactive signal system
+- [Storage Adapter](/docs/reference/client/storage) -- storage interface
+- [Sync Engine](/docs/reference/client/sync) -- sync engine internals
+- [Event Bus](/docs/reference/client/events) -- event system
+- [Transport](/docs/reference/client/transport) -- HTTP transport and remote adapter
+
+### @datafn/server
+
+Node.js server with route handlers, execution engine, middleware, and WebSocket support.
+
+- [Server Configuration](/docs/reference/server/config) -- `createDatafnServer` options
+- [Route Handlers](/docs/reference/server/routes) -- handler internals
+- [Middleware](/docs/reference/server/middleware) -- rate limiting and timing
+- [Execution Engine](/docs/reference/server/execution) -- query and mutation execution
+- [WebSocket Manager](/docs/reference/server/websocket) -- real-time push

@@ -1,0 +1,97 @@
+---
+title: "Event Bus"
+description: "Event bus reference."
+audience: reference
+applies_to: typescript
+---
+
+## EventBus
+
+Simple in-process event bus with fault-tolerant delivery.
+
+```typescript
+class EventBus {
+  constructor(options?: EventBusOptions);
+  subscribe(handler: EventHandler, filter?: EventFilter): () => void;
+  emit(event: DatafnEvent): void;
+  clear(): void;
+}
+```
+
+### subscribe
+
+Register a handler for events matching an optional filter. Returns an unsubscribe function.
+
+```typescript
+const unsub = eventBus.subscribe(
+  (event) => console.log(event),
+  { type: "mutation_applied", resource: "todos" },
+);
+
+// Later:
+unsub();
+```
+
+### emit
+
+Deliver an event to all matching subscribers. Handlers are called synchronously. The subscriber list is copied before iteration, so unsubscribing during emit is safe.
+
+### clear
+
+Remove all subscriptions.
+
+## DatafnEvent
+
+```typescript
+interface DatafnEvent {
+  type: "mutation_applied" | "mutation_rejected" | "sync_applied" | "sync_failed"
+    | "sync_retry" | "connectivity_changed" | "ws_connected" | "ws_disconnected";
+  resource?: string;
+  ids?: string[];
+  mutationId?: string;
+  clientId?: string;
+  timestampMs: number;
+  context?: unknown;
+  action?: string;
+  fields?: string[];
+  system?: boolean;
+  fromRemoteTab?: boolean;
+}
+```
+
+## DatafnEventFilter
+
+Filters are matched using `matchesFilter`. Each filter field supports a single value or an array of values. All specified fields must match (AND logic).
+
+```typescript
+type DatafnEventFilter = Partial<{
+  type: DatafnEvent["type"] | Array<DatafnEvent["type"]>;
+  resource: string | string[];
+  ids: string | string[];
+  mutationId: string | string[];
+  action: string | string[];
+  fields: string | string[];
+  contextKeys: string[];
+  context: Record<string, unknown>;
+}>;
+```
+
+## matchesFilter
+
+```typescript
+function matchesFilter(event: DatafnEvent, filter?: EventFilter): boolean;
+```
+
+Returns `true` if the event matches the filter (or if no filter is provided).
+
+## Error Isolation
+
+If a subscriber throws an error, it does not prevent delivery to other subscribers. The error is passed to the `onError` handler (defaults to `console.error`).
+
+```typescript
+const bus = new EventBus({
+  onError: (error, event) => {
+    myLogger.error("Event handler failed", { error, event });
+  },
+});
+```

@@ -1,0 +1,8 @@
+{
+  "title": "Platform",
+  "pages": [
+    { "key": "index", "label": "Overview" },
+    { "key": "webhooks", "label": "Webhooks" },
+    { "key": "workspaces", "label": "Workspaces" }
+  ]
+}

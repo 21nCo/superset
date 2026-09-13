@@ -47,7 +47,12 @@ Object.defineProperty(globalThis, 'getComputedStyle', { value: dom.window.getCom
 globalThis.requestAnimationFrame = (callback) => setTimeout(() => callback(Date.now()), 0);
 globalThis.cancelAnimationFrame = (handle) => clearTimeout(handle);
 globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-globalThis.IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} };
+globalThis.IntersectionObserver = class {
+  constructor(_callback, _options) {}
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
 const warnings = [];
 const originalError = console.error;
 const originalWarn = console.warn;

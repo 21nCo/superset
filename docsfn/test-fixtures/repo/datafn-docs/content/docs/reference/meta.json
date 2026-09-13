@@ -1,0 +1,11 @@
+{
+  "title": "Reference",
+  "description": "API Reference",
+  "root": true,
+  "pages": [
+    "index",
+    "core",
+    "client",
+    "server"
+  ]
+}

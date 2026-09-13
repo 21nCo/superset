@@ -1,0 +1,122 @@
+---
+title: "Error Types"
+description: "Error codes and envelope types."
+audience: reference
+applies_to: typescript
+---
+
+## DatafnErrorCode
+
+All possible error codes.
+
+```typescript
+type DatafnErrorCode =
+  | "SCHEMA_INVALID"
+  | "INVALID_CAPABILITY"
+  | "INVALID_CAPABILITY_CONFIG"
+  | "CAPABILITY_FIELD_COLLISION"
+  | "CAPABILITY_DEPENDENCY"
+  | "DFQL_INVALID"
+  | "DFQL_UNKNOWN_RESOURCE"
+  | "DFQL_UNKNOWN_FIELD"
+  | "DFQL_UNKNOWN_RELATION"
+  | "DFQL_UNSUPPORTED"
+  | "DFQL_ABORTED"
+  | "DFQL_SHARE_SCOPE_INVALID"
+  | "DFQL_PRINCIPAL_INVALID"
+  | "DFQL_CROSS_NS_SHARE_FORBIDDEN"
+  | "LIMIT_EXCEEDED"
+  | "FORBIDDEN"
+  | "NOT_FOUND"
+  | "CONFLICT"
+  | "INTERNAL"
+  | "TRANSPORT_ERROR";
+```
+
+| Code | Description |
+|---|---|
+| `SCHEMA_INVALID` | Schema validation failed. |
+| `INVALID_CAPABILITY` | Capability name/value is invalid. |
+| `INVALID_CAPABILITY_CONFIG` | Capability config shape is invalid. |
+| `CAPABILITY_FIELD_COLLISION` | Declared field collides with capability-managed field. |
+| `CAPABILITY_DEPENDENCY` | A capability requires another capability (for example `shareable` requires `audit`). |
+| `DFQL_INVALID` | Malformed DFQL query or mutation. |
+| `DFQL_UNKNOWN_RESOURCE` | Referenced resource does not exist in schema. |
+| `DFQL_UNKNOWN_FIELD` | Referenced field does not exist on resource. |
+| `DFQL_UNKNOWN_RELATION` | Referenced relation does not exist. |
+| `DFQL_UNSUPPORTED` | Unsupported DFQL operator or feature. |
+| `DFQL_ABORTED` | Transaction aborted. |
+| `DFQL_SHARE_SCOPE_INVALID` | Share scope is invalid. Thrown when `scope` is not `"record"` or `"resource"`, when a record-scope share is missing `id`, or when a resource-scope share includes `id`. |
+| `DFQL_PRINCIPAL_INVALID` | Principal identifier is invalid. Thrown when `shareWith.principalId` is empty, when both `principalId` and `userId` are provided with conflicting values, or when neither is provided. |
+| `DFQL_CROSS_NS_SHARE_FORBIDDEN` | Cross-namespace sharing is disabled. Thrown when attempting to share with a principal outside the current namespace on a resource with `crossNsShareable: false`. |
+| `LIMIT_EXCEEDED` | Server-side limit exceeded. |
+| `FORBIDDEN` | Authorization denied. |
+| `NOT_FOUND` | Record not found. |
+| `CONFLICT` | Conflict (e.g., duplicate ID). |
+| `INTERNAL` | Unexpected server error. |
+| `TRANSPORT_ERROR` | Network/transport layer error. |
+
+## DatafnError
+
+Error payload.
+
+```typescript
+type DatafnError = {
+  code: DatafnErrorCode;
+  message: string;
+  details?: unknown;
+};
+```
+
+## DatafnEnvelope\<T\>
+
+Discriminated union for all DataFn responses.
+
+```typescript
+type DatafnEnvelope<T> =
+  | { ok: true; result: T }
+  | { ok: false; error: DatafnError };
+```
+
+## ok
+
+Creates a success envelope.
+
+```typescript
+function ok<T>(result: T): DatafnEnvelope<T>;
+```
+
+```typescript
+ok({ records: [] });
+// { ok: true, result: { records: [] } }
+```
+
+## err
+
+Creates an error envelope. If `details` is not provided, defaults to `{ path: "$" }`.
+
+```typescript
+function err<T = never>(
+  code: DatafnErrorCode,
+  message: string,
+  details?: unknown,
+): DatafnEnvelope<T>;
+```
+
+```typescript
+err("DFQL_INVALID", "Missing resource field");
+// { ok: false, error: { code: "DFQL_INVALID", message: "Missing resource field", details: { path: "$" } } }
+```
+
+## unwrapEnvelope
+
+Extracts the result from a success envelope. Throws the error if the envelope is a failure.
+
+```typescript
+function unwrapEnvelope<T>(envelope: DatafnEnvelope<T>): T;
+```
+
+```typescript
+const schema = unwrapEnvelope(validateSchema(input));
+// Returns DatafnSchema or throws DatafnError
+```

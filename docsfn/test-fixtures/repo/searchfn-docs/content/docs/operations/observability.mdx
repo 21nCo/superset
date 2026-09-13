@@ -1,0 +1,89 @@
+---
+title: Observability
+description: Structured logging, health checks, and failure classification for SearchFn.
+---
+
+## Structured Logging
+
+Pass a `logger` to `createSearchFnServer` to receive structured log events for every operation:
+
+```typescript
+const server = await createSearchFnServer({
+  adapter,
+  logger: {
+    info: (msg, ctx) => console.log(JSON.stringify({ level: "info", msg, ...ctx })),
+    warn: (msg, ctx) => console.warn(JSON.stringify({ level: "warn", msg, ...ctx })),
+    error: (msg, ctx) => console.error(JSON.stringify({ level: "error", msg, ...ctx })),
+    debug: (msg, ctx) => console.debug(JSON.stringify({ level: "debug", msg, ...ctx })),
+  },
+});
+```
+
+### Log Events
+
+The server emits these event names:
+- `request.start`
+- `request.end`
+- `request.error`
+- `authorization.denied`
+- `authorization.error`
+- `server.close`
+
+### Log Fields
+
+Each log event includes:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `operation` | `string` | The action being performed (`search`, `index`, `remove`, etc.) |
+| `adapter` | `string` | Adapter name (`memory`, `postgres`, `meilisearch`, etc.) |
+| `durationMs` | `number` | Time taken for the operation in milliseconds |
+| `status` | `number` | HTTP status code from the response |
+| `success` | `boolean` | Whether the operation succeeded |
+| `errorCode` | `string?` | Error code if the operation failed |
+
+Sensitive values are automatically redacted before logging. See [Security](/docs/operations/security) for details.
+
+## Health Endpoint
+
+`GET /searchfn/status` provides a readiness check for load balancers and monitoring:
+
+```json
+{
+  "ok": true,
+  "result": {
+    "adapter": "postgres",
+    "capabilities": {
+      "persistent": true,
+      "searchAll": true,
+      "fuzzy": true,
+      "fieldBoosts": false
+    },
+    "uptimeMs": 84200
+  }
+}
+```
+
+Use this endpoint for:
+- Kubernetes readiness probes
+- Load balancer health checks
+- Monitoring dashboards
+
+## Failure Classification
+
+Errors fall into five categories. Use these to build alerts and dashboards:
+
+| Category | Error codes | Cause | Action |
+| --- | --- | --- | --- |
+| Validation | `DFQL_INVALID`, `LIMIT_EXCEEDED` | Malformed request or exceeded limits | Fix client-side request construction |
+| Authorization | `FORBIDDEN` | Auth callback denied access | Check credentials and permissions |
+| Unsupported | `DFQL_UNSUPPORTED` | Adapter doesn't support the operation | Use a different adapter or remove unsupported options |
+| Runtime | `INTERNAL` | Unexpected backend failure | Check backend health and logs |
+| Cancellation | `DFQL_ABORTED` | Client cancelled the request | No action needed (expected behavior) |
+
+### Alerting Recommendations
+
+- **Alert on `INTERNAL` errors** — these indicate backend problems that need investigation.
+- **Monitor `LIMIT_EXCEEDED` rates** — a spike may indicate a client bug or abuse.
+- **Track `durationMs` percentiles** — degrading latency can signal backend capacity issues.
+- **Ignore `DFQL_ABORTED`** — these are normal when users navigate away or cancel searches.

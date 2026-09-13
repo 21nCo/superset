@@ -1,0 +1,101 @@
+---
+title: "Filter Utilities"
+description: "Filter evaluation and operator utilities."
+audience: reference
+applies_to: typescript
+---
+
+## evaluateFilter
+
+Evaluates a DFQL filter against a single record. Returns `true` if the record matches all filter conditions.
+
+```typescript
+function evaluateFilter(
+  record: Record<string, unknown>,
+  filters: Record<string, unknown>,
+  opts?: FilterEvalOptions,
+): boolean;
+```
+
+### FilterEvalOptions
+
+```typescript
+interface FilterEvalOptions {
+  resolveRelation?: (resource: string, recordId: string, relationName: string) => Record<string, unknown>[];
+  resource?: string;
+}
+```
+
+The `resolveRelation` callback is used for dot-path filters that traverse relations (e.g., `"author.name": { $eq: "Alice" }`).
+
+## Supported Operators
+
+All operators use the `$`-prefix form internally.
+
+| Operator | Description |
+|---|---|
+| `$eq` | Equal. |
+| `$ne` | Not equal. |
+| `$gt` | Greater than. |
+| `$gte` | Greater than or equal. |
+| `$lt` | Less than. |
+| `$lte` | Less than or equal. |
+| `$in` | Value in array. |
+| `$nin` | Value not in array. |
+| `$contains` | String contains substring, or array contains element. |
+| `$startsWith` | String starts with prefix. |
+| `$endsWith` | String ends with suffix. |
+| `$like` | SQL LIKE pattern (`%` = any, `_` = single char). Case-sensitive. |
+| `$ilike` | Case-insensitive LIKE. |
+| `$not_like` | Negated LIKE. |
+| `$not_ilike` | Negated case-insensitive LIKE. |
+| `$is_null` | `true` if value is null/undefined, `false` if not. |
+| `$is_not_null` | Inverse of `$is_null`. |
+| `$is_empty` | `true` if null, undefined, empty string, or empty array. |
+| `$is_not_empty` | Inverse of `$is_empty`. |
+| `$before` | Less than (for dates/timestamps). |
+| `$after` | Greater than (for dates/timestamps). |
+| `$between` | Value in `[low, high]` range (inclusive). |
+| `$not_between` | Value outside `[low, high]` range. |
+
+### Logical Combinators
+
+| Combinator | Description |
+|---|---|
+| `$and` | Array of filter objects. All must match. |
+| `$or` | Array of filter objects. At least one must match. |
+
+Maximum nesting depth is 10 levels.
+
+## OP_REMAP
+
+Maps non-`$`-prefixed operator names to their canonical `$`-prefixed form.
+
+```typescript
+const OP_REMAP: Record<string, string> = {
+  eq: "$eq", ne: "$ne", gt: "$gt", gte: "$gte", lt: "$lt", lte: "$lte",
+  in: "$in", not_in: "$nin",
+  like: "$like", ilike: "$ilike", not_like: "$not_like", not_ilike: "$not_ilike",
+  is_null: "$is_null", is_not_null: "$is_not_null",
+  is_empty: "$is_empty", is_not_empty: "$is_not_empty",
+  before: "$before", after: "$after", between: "$between", not_between: "$not_between",
+};
+```
+
+## normalizeFilterOps
+
+Recursively remaps non-`$`-prefixed operator names to their canonical form.
+
+```typescript
+function normalizeFilterOps(filters: Record<string, unknown>): Record<string, unknown>;
+```
+
+## likeToRegExp
+
+Converts a SQL LIKE pattern to a JavaScript `RegExp`.
+
+```typescript
+function likeToRegExp(pattern: string, caseInsensitive: boolean): RegExp;
+```
+
+`%` maps to `.*`, `_` maps to `.`. Special regex characters are escaped.

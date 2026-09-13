@@ -1,0 +1,166 @@
+---
+title: "Rate Limiting"
+description: "Protect your server with configurable rate limits."
+audience: guide
+applies_to: both
+---
+
+## Overview
+
+DataFn supports configurable per-endpoint rate limiting with two backends: **Redis** for distributed deployments and **in-memory** for single-server setups. Rate limiting is applied before JSON body parsing and authorization, ensuring minimal overhead for rejected requests.
+
+## Configuration
+
+Enable rate limiting in the server config:
+
+```typescript
+const server = await createDatafnServer({
+  schema,
+  db,
+  rateLimit: {
+    enabled: true,
+    maxRequests: 100,
+    windowSeconds: 60,
+  },
+});
+```
+
+### RateLimitConfig
+
+```typescript
+interface RateLimitConfig<TContext = any> {
+  /** Enable rate limiting. Default: false. */
+  enabled: boolean;
+
+  /** Max requests per window per client. Default: 100. */
+  maxRequests?: number;
+
+  /** Window duration in seconds. Default: 60. */
+  windowSeconds?: number;
+
+  /** Per-endpoint overrides. */
+  endpoints?: Partial<Record<
+    "query" | "mutation" | "transact" | "push" | "pull" |
+    "clone" | "reconcile" | "seed",
+    { maxRequests: number; windowSeconds: number }
+  >>;
+
+  /** Custom key extractor. Default: uses namespace from namespaceProvider or "anonymous". */
+  keyExtractor?: (ctx: TContext) => string | Promise<string>;
+}
+```
+
+### Per-Endpoint Overrides
+
+Override the global limits for specific endpoints:
+
+```typescript
+const server = await createDatafnServer({
+  schema,
+  db,
+  rateLimit: {
+    enabled: true,
+    maxRequests: 200,
+    windowSeconds: 60,
+    endpoints: {
+      query: { maxRequests: 300, windowSeconds: 60 },
+      mutation: { maxRequests: 50, windowSeconds: 60 },
+      push: { maxRequests: 100, windowSeconds: 60 },
+    },
+  },
+});
+```
+
+### Custom Key Extractor
+
+By default, the rate limit key is derived from the `namespaceProvider`. Provide a custom extractor to key on IP address, API key, or any other property:
+
+```typescript
+const server = await createDatafnServer({
+  schema,
+  db,
+  rateLimit: {
+    enabled: true,
+    maxRequests: 100,
+    windowSeconds: 60,
+    keyExtractor: (ctx) => {
+      return ctx.headers?.["x-api-key"] ?? "anonymous";
+    },
+  },
+});
+```
+
+## Key Format
+
+Rate limit keys follow the format:
+
+```
+ratelimit:{endpoint}:{clientKey}:{windowId}
+```
+
+Where `windowId` is `Math.floor(Date.now() / (windowSeconds * 1000))`. For example:
+
+```
+ratelimit:query:user_123:28487683
+ratelimit:mutation:anonymous:28487683
+```
+
+## Redis Backend
+
+When a `redis` adapter is provided in the server config, rate limiting uses Redis for distributed coordination. The implementation uses an atomic Lua script to prevent race conditions between INCR and EXPIRE:
+
+```lua
+local c = redis.call('incr', KEYS[1])
+if c == 1 then
+  redis.call('expire', KEYS[1], ARGV[1])
+end
+return c
+```
+
+If the Redis client does not support `eval()`, the implementation uses an alternate non-atomic path (`INCR` + TTL set on new keys).
+
+```typescript
+const server = await createDatafnServer({
+  schema,
+  db,
+  redis: myRedisAdapter,
+  rateLimit: {
+    enabled: true,
+    maxRequests: 100,
+    windowSeconds: 60,
+  },
+});
+```
+
+## In-Memory Backend
+
+When no Redis adapter is provided, rate limiting uses an in-memory implementation. This uses a `Map<string, { count, resetAt }>` structure with lazy cleanup via a periodic sweep (default: every 60 seconds).
+
+The in-memory backend works for single-process deployments only. It does not share state across multiple server instances.
+
+## Rate Limit Response
+
+When a request is rate-limited, the server returns HTTP 429:
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "RATE_LIMITED",
+    "message": "Too many requests",
+    "details": { "path": "$" }
+  }
+}
+```
+
+The response includes a `Retry-After` header with the window duration in seconds:
+
+```
+HTTP/1.1 429 Too Many Requests
+Retry-After: 60
+Content-Type: application/json; charset=utf-8
+```
+
+## Cleanup
+
+The in-memory rate limiter's sweep timer is automatically stopped during graceful shutdown (`server.close()`). The timer is also unrefed so it does not prevent the Node.js process from exiting.

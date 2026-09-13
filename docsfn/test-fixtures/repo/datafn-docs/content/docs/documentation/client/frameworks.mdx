@@ -1,0 +1,154 @@
+---
+title: "Framework Adapters"
+description: "Connect DataFn to your UI framework with thin adapter packages."
+audience: guide
+applies_to: typescript
+---
+
+## Overview
+
+DataFn's core client is **framework-agnostic**. The reactive primitive `DatafnSignal<T>` provides `subscribe()`, `get()`, and lifecycle methods that work in any JavaScript environment.
+
+**Framework adapters** are thin packages that convert a `DatafnSignal<T>` into the native reactive primitive of a specific UI framework — a Svelte readable store, a React hook, a Vue composable, and so on.
+
+## Why Adapter Packages?
+
+Rather than bundling all framework integrations into `@datafn/client`, each framework gets its own lightweight package. This keeps bundle sizes small, avoids peer dependency conflicts, and lets you install only what you need.
+
+## Available Adapters
+
+| Package | Framework | Status | Converts Signal To |
+|---|---|---|---|
+| `@datafn/svelte` | Svelte 3/4 | **Available** | `Readable` store |
+| `@datafn/react` | React 18+ | Planned | Hook (`useDatafnSignal`) |
+| `@datafn/vue` | Vue 3 | Planned | Composable (`useDatafnSignal`) |
+| `@datafn/solid` | Solid.js | Planned | Solid reactive signal |
+| `@datafn/angular` | Angular 16+ | Planned | Observable / Angular Signal |
+
+---
+
+## `@datafn/svelte`
+
+### Installation
+
+```bash
+npm install @datafn/svelte
+```
+
+### Basic Usage
+
+Convert any `DatafnSignal<T>` to a Svelte readable store with `toSvelteStore`:
+
+```typescript
+import { toSvelteStore } from "@datafn/svelte";
+
+const todosStore = toSvelteStore(
+  client.todos.signal({ sort: ["-createdAt"] })
+);
+```
+
+### Template Usage
+
+The store provides `data`, `loading`, `error`, `refreshing`, and `nextCursor` properties:
+
+```svelte
+{#if $todosStore.loading}
+  <p>Loading...</p>
+{:else if $todosStore.error}
+  <p>Error: {$todosStore.error.message}</p>
+{:else}
+  {#each $todosStore.data ?? [] as todo}
+    <p>{todo.title}</p>
+  {/each}
+{/if}
+```
+
+### State Properties
+
+| Property | Type | Description |
+|---|---|---|
+| `data` | `T` | The current query result. |
+| `loading` | `boolean` | `true` during the initial fetch before any data is available. |
+| `error` | `DatafnError \| null` | Non-null if the last fetch failed. |
+| `refreshing` | `boolean` | `true` when re-fetching after a mutation (data is still available). |
+| `nextCursor` | `string \| null` | Cursor for loading the next page, or `null` if no more pages. |
+
+### Lifecycle
+
+Signals from `createDatafnClient` are **lifecycle-aware** via LiveSignals — they survive `switchContext()` and rebind automatically. No factory pattern or `clientRef` is needed. Simply pass the signal to `toSvelteStore` and it works across context switches.
+
+### Composing with Svelte `derived`
+
+You can compose DataFn stores with Svelte's `derived` to create computed values:
+
+```typescript
+import { derived } from "svelte/store";
+
+const completedCount = derived(todosStore, ($s) =>
+  ($s.data ?? []).filter((t) => t.completed).length
+);
+```
+
+### Factory Overload
+
+An additional factory-based overload is also available:
+
+```typescript
+toSvelteStore(clientRef, (client) => client.todos.signal({ ... }));
+```
+
+Use the direct signal form when you already have a stable signal instance. Use the factory overload when signal creation depends on a client reference that can change.
+
+---
+
+## The Adapter Pattern
+
+Every framework adapter follows the same three-step pattern:
+
+1. **Subscribe** to the `DatafnSignal<T>` via `signal.subscribe()`.
+2. **Emit** updates to the framework's reactivity system (store set, hook state update, ref assignment, etc.).
+3. **Clean up** the subscription when the component unmounts or the store is destroyed.
+
+This pattern is simple enough that community adapters for any framework can be built with minimal code.
+
+---
+
+## Future Framework Packages
+
+### `@datafn/react` (Planned)
+
+A `useDatafnSignal` hook that returns reactive state:
+
+```typescript
+// Planned API (not yet available)
+import { useDatafnSignal } from "@datafn/react";
+
+function TodoList() {
+  const { data: todos, loading } = useDatafnSignal(
+    client.todos.signal({ sort: ["-createdAt"] })
+  );
+  if (loading) return <p>Loading...</p>;
+  return todos.map(t => <p key={t.id}>{t.title}</p>);
+}
+```
+
+### `@datafn/vue` (Planned)
+
+A `useDatafnSignal` composable that returns reactive refs:
+
+```typescript
+// Planned API (not yet available)
+import { useDatafnSignal } from "@datafn/vue";
+
+const { data: todos, loading } = useDatafnSignal(
+  client.todos.signal({ sort: ["-createdAt"] })
+);
+```
+
+### `@datafn/solid` (Planned)
+
+Wraps `DatafnSignal<T>` into Solid's fine-grained reactive system.
+
+### `@datafn/angular` (Planned)
+
+Wraps `DatafnSignal<T>` into an RxJS Observable or Angular Signal.

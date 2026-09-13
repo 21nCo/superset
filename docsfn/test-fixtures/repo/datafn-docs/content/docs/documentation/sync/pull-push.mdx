@@ -1,0 +1,164 @@
+---
+title: Pull and Push
+description: Incremental synchronization between client and server.
+audience: guide
+applies_to: both
+---
+
+After the initial clone, the client uses pull and push operations for incremental synchronization. Pull fetches changes from the server; push uploads local mutations.
+
+## Pull
+
+Pull retrieves incremental updates since the last known cursor for each resource.
+
+### How It Works
+
+1. The engine reads per-table cursors from local storage.
+2. A pull request is sent with all cursors and a batch limit.
+3. The server returns changes since those cursors.
+4. Changes are applied to local storage (upserts, deletes, merges).
+5. Cursors are advanced monotonically.
+6. If `hasMore` is true, the engine repeats the pull (catch-up loop).
+
+```typescript
+// Trigger a manual pull cycle using the sync engine
+await client.sync.pullNow();
+```
+
+### Pull Request
+
+```json
+{
+  "clientId": "client-abc-123",
+  "cursors": {
+    "todos": "42",
+    "projects": "38",
+    "todos.tags.tags": "15"
+  },
+  "limit": 200,
+  "includeJoins": true
+}
+```
+
+### Pull Response
+
+```json
+{
+  "ok": true,
+  "records": {
+    "todos": [{ "id": "t2", "title": "New task", "status": "active" }]
+  },
+  "deleted": {
+    "todos": ["t3"]
+  },
+  "merged": {
+    "todos": [{ "id": "t1", "status": "done" }]
+  },
+  "joins": {
+    "todos.tags.tags": [{ "from": "t2", "to": "tag1" }]
+  },
+  "cursors": {
+    "todos": "55",
+    "projects": "38"
+  },
+  "hasMore": false
+}
+```
+
+### Catch-Up Loop
+
+When the client is significantly behind, a single pull may not return all changes. The engine automatically loops, advancing cursors each iteration, until `hasMore` is false or the maximum iteration count is reached:
+
+```typescript
+sync: {
+  pullBatchSize: 200,        // Changes per pull request
+  maxPullIterations: 50,     // Safety limit on catch-up iterations
+}
+```
+
+## Push
+
+Push uploads locally queued mutations from the changelog to the server.
+
+### How It Works
+
+1. The engine reads pending entries from the changelog (up to `pushBatchSize`).
+2. Mutations are sent to the server in a single batch.
+3. On success, acknowledged entries are removed from the changelog.
+4. Per-table cursors returned by the server are advanced locally, preventing the client from re-fetching its own changes on the next pull.
+5. If the batch was full, the engine immediately schedules another push for remaining entries.
+
+```typescript
+// Trigger a manual push with explicit payload
+await client.sync.push({
+  clientId: "client-abc-123",
+  mutations: [],
+});
+```
+
+### Push Request
+
+```json
+{
+  "clientId": "client-abc-123",
+  "mutations": [
+    {
+      "resource": "todos",
+      "operation": "insert",
+      "id": "t4",
+      "record": { "title": "New task" },
+      "mutationId": "mut-001",
+      "clientId": "client-abc-123"
+    }
+  ]
+}
+```
+
+### Push Response
+
+```json
+{
+  "ok": true,
+  "applied": ["mut-001"],
+  "errors": [],
+  "cursor": "60",
+  "cursorBefore": "55",
+  "cursors": {
+    "todos": "60"
+  }
+}
+```
+
+### Idempotent Deduplication
+
+Each mutation includes a `clientId` and `mutationId` pair. The server deduplicates on this pair, so retried pushes do not cause double-writes. See [Idempotency](/docs/documentation/advanced/idempotency) for details.
+
+### Configuration
+
+```typescript
+sync: {
+  pushInterval: 5000,        // Poll changelog every 5 seconds
+  pushBatchSize: 100,         // Max mutations per push
+  pushMaxRetries: 3,          // Retry failed pushes
+  pushRetryBackoff: {
+    baseDelayMs: 1000,
+    multiplier: 2,
+    maxDelayMs: 60000,
+    jitterMs: 500,
+  },
+}
+```
+
+### Retry with Exponential Backoff
+
+When a push fails, the engine retries with exponential backoff and jitter. The delay is calculated as:
+
+```
+delay = min(baseDelayMs * multiplier^attempt + random(0, jitterMs), maxDelayMs)
+```
+
+After exhausting all retries, a `sync_failed` event is emitted. The next push cycle will pick up the same entries from the changelog.
+
+### Post-Push Pull Detection
+
+After a successful push, the engine checks whether foreign changes exist by comparing `cursorBefore` (the global sequence before the push) with the locally stored cursor. If they differ, other clients have written changes, and an immediate pull is triggered.

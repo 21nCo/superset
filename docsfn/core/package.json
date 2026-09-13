@@ -1,0 +1,94 @@
+{
+  "name": "@docsfn/core",
+  "version": "0.0.6",
+  "description": "Core toolkit contracts for docsfn",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./search-runtime": {
+      "types": "./dist/search-runtime.d.ts",
+      "import": "./dist/search-runtime.js",
+      "require": "./dist/search-runtime.cjs"
+    },
+    "./search": {
+      "types": "./dist/search.d.ts",
+      "import": "./dist/search.js",
+      "require": "./dist/search.cjs"
+    },
+    "./search-adapter": {
+      "types": "./dist/search-adapter.d.ts",
+      "import": "./dist/search-adapter.js",
+      "require": "./dist/search-adapter.cjs"
+    },
+    "./analytics": {
+      "types": "./dist/analytics.d.ts",
+      "import": "./dist/analytics.js",
+      "require": "./dist/analytics.cjs"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js",
+      "require": "./dist/browser.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mdfn/extensions": "0.1.0",
+    "@mdfn/markdown": "0.1.0",
+    "@mdfn/render": "0.1.0",
+    "entities": "^6.0.1",
+    "marked": "^12.0.0",
+    "typescript": "^5.0.0",
+    "yaml": "^2.8.1",
+    "zod": "^3.0.0"
+  },
+  "peerDependencies": {
+    "@searchfn/client": "^0.3.0"
+  },
+  "peerDependenciesMeta": {
+    "@searchfn/client": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@searchfn/client": "0.3.0",
+    "@types/node": "^20.0.0",
+    "tsup": "^8.0.0",
+    "vitest": "^1.0.0"
+  },
+  "author": "21n",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20 <25"
+  },
+  "bugs": {
+    "url": "https://github.com/21nCo/super-functions/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/21nCo/super-functions.git",
+    "directory": "docsfn/core"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "superfunctions": {
+    "initFunction": "docsFn",
+    "schemaVersion": 1,
+    "namespace": "docsfn"
+  },
+  "files": [
+    "dist"
+  ]
+}

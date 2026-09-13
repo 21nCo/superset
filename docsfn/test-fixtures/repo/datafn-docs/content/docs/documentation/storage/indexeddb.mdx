@@ -1,0 +1,132 @@
+---
+title: IndexedDB
+description: Persistent browser storage via IndexedDB.
+audience: guide
+applies_to: both
+---
+
+The `IndexedDbStorageAdapter` provides persistent client-side storage backed by the browser IndexedDB API. It is the recommended adapter for production browser applications.
+
+## Creating an Adapter
+
+The recommended way to create the adapter is with a schema, which ensures all resource object stores and join tables are created in IndexedDB:
+
+```typescript
+import { IndexedDbStorageAdapter } from "@datafn/client";
+
+const storage = IndexedDbStorageAdapter.create({
+  dbName: "my-app-db",
+  schema,
+});
+```
+
+## Namespace Isolation
+
+For applications with namespace-based data isolation, use `createForNamespace` to create isolated IndexedDB databases per namespace:
+
+```typescript
+import { ns } from "@datafn/client";
+
+// Single-segment namespace
+const storage = IndexedDbStorageAdapter.createForNamespace(
+  "my-app",
+  ns("user-123"),
+  undefined,
+  schema,
+);
+// Database name: "my-app_user-123"
+
+// Multi-segment namespace
+const storage = IndexedDbStorageAdapter.createForNamespace(
+  "my-app",
+  ns("org-456", "user-123"),
+  undefined,
+  schema,
+);
+// Database name: "my-app_org-456_user-123"
+```
+
+Colons in the namespace string are replaced with underscores in the database name.
+
+### As a Storage Factory
+
+Use `createForNamespace` with the client's factory pattern:
+
+```typescript
+const client = createDatafnClient({
+  schema,
+  clientId: "device-abc",
+  namespace: ns("org-456", "user-123"),
+  storage: (namespace) =>
+    IndexedDbStorageAdapter.createForNamespace("my-app", namespace, undefined, schema),
+});
+```
+
+## Schema-Aware Store Creation
+
+When a schema is provided, the adapter automatically:
+
+1. Creates an object store for each resource (keyed by `id`).
+2. Creates indices from the resource schema (e.g., fields listed in `indices`).
+3. Creates foreign key indices inferred from relations.
+4. Creates join stores for many-many relations with composite keys `[from, to]` and indices on both columns.
+5. Creates the built-in `kv` store for key-value operations.
+
+## Auto-Version Bumping
+
+If the database already exists but is missing stores (for example, after adding new resources to the schema), the adapter automatically:
+
+1. Detects missing stores after opening.
+2. Closes the database.
+3. Reopens with a bumped version number to trigger `onupgradeneeded`.
+4. Creates the missing stores.
+
+### Version Limit
+
+IndexedDB versions increment over time as the schema evolves. When the version exceeds `MAX_IDB_VERSION` (1000), the adapter recreates the database from scratch by deleting and reopening it. This prevents version number overflow in long-lived applications.
+
+## Changelog Deduplication
+
+The changelog store has a unique compound index on `[clientId, mutationId]`. When `changelogAppend` is called with a duplicate `(clientId, mutationId)` pair, the existing entry is returned instead of creating a duplicate.
+
+## Deterministic Ordering
+
+All list operations return records ordered by `id` ascending, ensuring deterministic output regardless of insertion order.
+
+## Internal Stores
+
+The adapter maintains several internal IndexedDB object stores:
+
+| Store | Key | Purpose |
+|-------|-----|---------|
+| `<resource>` | `id` | Per-resource record storage |
+| `<from>.<relation>.<to>` | `[from, to]` | Many-many join rows |
+| `kv` | `id` | Built-in key-value store |
+| `meta` | `[type, key]` | Cursors and hydration state |
+| `changelog` | `seq` (auto-increment) | Offline mutation log |
+
+## Health Check
+
+The adapter provides a `healthCheck()` method that verifies:
+
+- The database is accessible.
+- All expected object stores exist.
+- The cursor store is readable.
+- No incomplete upgrade state is detected.
+
+```typescript
+const { ok, issues } = await storage.healthCheck();
+if (!ok) {
+  console.error("Storage issues:", issues);
+}
+```
+
+## Lifecycle
+
+```typescript
+// Close the database connection
+await storage.close();
+
+// Delete all data from all stores
+await storage.clearAll();
+```

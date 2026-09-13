@@ -1,0 +1,86 @@
+---
+title: "Generate"
+description: "Generate TypeScript types and database schemas from your DataFn schema."
+audience: reference
+applies_to: typescript
+---
+
+## Usage
+
+```bash
+datafn generate [flags]
+```
+
+The `generate` command reads your DataFn schema and produces TypeScript type definitions and ORM-specific database schema files.
+
+## Flags
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--schema` | `string` | auto-discovered | Path to schema file. |
+| `--adapter` | `drizzle` | -- | Required. ORM adapter for schema generation. |
+| `--database` | `postgres \| mysql \| sqlite` | -- | Required. Target database dialect. |
+| `--output` | `string` | `./` | Output directory for generated files. |
+
+## What Gets Generated
+
+Running `datafn generate` produces two outputs:
+
+1. **TypeScript type definitions** -- interfaces for each resource, a `Tables` mapping type, and a `TypedClient` type for type-safe client code.
+2. **ORM schema file** -- table definitions for your chosen adapter and database dialect (e.g., Drizzle `pgTable` definitions for PostgreSQL).
+
+## Example
+
+```bash
+# Generate Drizzle schema for PostgreSQL
+datafn generate --adapter drizzle --database postgres --output ./src/generated
+
+# Generate from a specific schema file
+datafn generate --adapter drizzle --database postgres --schema ./config/schema.datafn.ts --output ./src/db
+
+# Generate for SQLite
+datafn generate --adapter drizzle --database sqlite --output ./src/generated
+```
+
+Given this schema:
+
+```typescript
+import { defineSchema } from "@datafn/core";
+
+export default defineSchema({
+  resources: [
+    {
+      name: "todos",
+      version: 1,
+      idPrefix: "td",
+      fields: [
+        { name: "title", type: "string", required: true },
+        { name: "completed", type: "boolean", required: true },
+        { name: "dueDate", type: "date", required: false },
+      ],
+    },
+  ],
+});
+```
+
+The command generates a TypeScript file with:
+
+```typescript
+import type { DatafnClient, DatafnTable } from "@datafn/client";
+
+export interface Todos {
+  completed: boolean;
+  dueDate?: number;
+  title: string;
+}
+
+export interface Tables {
+  todos: Todos;
+}
+
+export type TypedClient = DatafnClient & {
+  todos: DatafnTable<Todos>;
+};
+```
+
+And a Drizzle schema file with table definitions matching your resources and dialect. See [Type Generation](/docs/cli/type-codegen) and [Drizzle Schema Generation](/docs/cli/drizzle-codegen) for details on each output.

@@ -1,0 +1,4 @@
+{
+  "title": "@datafn/core",
+  "pages": ["types", "schema", "filters", "normalize", "date", "kv", "hooks", "search-provider", "errors"]
+}

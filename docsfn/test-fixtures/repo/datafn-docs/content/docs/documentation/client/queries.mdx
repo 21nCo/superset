@@ -1,0 +1,144 @@
+---
+title: "Queries"
+description: "Query data from the server or local storage."
+audience: guide
+applies_to: typescript
+---
+
+## Basic Queries
+
+Execute queries through a table handle. The table automatically injects the `resource` and `version` fields from your schema.
+
+```typescript
+const result = await client.table("todos").query({});
+// result.data: Todo[]
+```
+
+You can also use the shorthand property accessor:
+
+```typescript
+const result = await client.todos.query({});
+```
+
+## Query Options
+
+### Filters
+
+Filter records using comparison operators on any field.
+
+```typescript
+const result = await client.table("todos").query({
+  filters: {
+    completed: { eq: false },
+    title: { like: "%shopping%" },
+    priority: { gte: 3 },
+  },
+});
+```
+
+Supported filter operators: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `like`, `in`, `nin`, `isNull`. See the full [DFQL Filters reference](/docs/dfql/filters) for all filter operators and logical combinators.
+
+Combine filters with logical operators:
+
+```typescript
+const result = await client.table("todos").query({
+  filters: {
+    or: [
+      { completed: { eq: true } },
+      { priority: { gte: 5 } },
+    ],
+  },
+});
+```
+
+### Sorting
+
+Sort results by one or more fields in ascending or descending order. See the full [DFQL Sorting reference](/docs/dfql/sorting) for all sorting options.
+
+```typescript
+const result = await client.table("todos").query({
+  sort: [
+    { field: "priority", direction: "desc" },
+    { field: "createdAt", direction: "asc" },
+  ],
+});
+```
+
+### Pagination
+
+Use `limit` and `offset` for offset-based pagination, or `cursor` for cursor-based pagination. See the full [DFQL Pagination reference](/docs/dfql/pagination) for cursor-based and offset-based strategies.
+
+```typescript
+// Offset-based
+const page1 = await client.table("todos").query({
+  limit: 20,
+  offset: 0,
+});
+
+// Cursor-based
+const page2 = await client.table("todos").query({
+  limit: 20,
+  cursor: page1.nextCursor,
+});
+```
+
+### Count
+
+Request a total count alongside results.
+
+```typescript
+const result = await client.table("todos").query({
+  count: true,
+  limit: 10,
+});
+// result.totalCount: number
+```
+
+### Field Selection
+
+Use `select` to return only specific fields, or `omit` to exclude fields. See the full [DFQL Select reference](/docs/dfql/select) for field projection and relation expansion.
+
+```typescript
+// Only return id and title
+const result = await client.table("todos").query({
+  select: ["id", "title"],
+});
+
+// Return all fields except description
+const result = await client.table("todos").query({
+  omit: ["description"],
+});
+```
+
+### Full-Text Search
+
+Search across indexed fields using the `search` option. See the full [DFQL Search reference](/docs/dfql/search) for full-text search options.
+
+```typescript
+const result = await client.table("todos").query({
+  search: "grocery list",
+});
+```
+
+## Batch Queries
+
+Execute multiple queries in a single round-trip by passing an array to `client.query()`:
+
+```typescript
+const [todos, users] = await client.query([
+  { resource: "todos", version: 1, filters: { completed: { eq: false } } },
+  { resource: "users", version: 1, limit: 10 },
+]);
+```
+
+## Query Routing
+
+The client uses intelligent routing to decide where a query executes:
+
+1. **No storage configured** -- All queries go to the remote server.
+2. **Storage configured, table hydration is `ready`** -- Queries execute locally against the storage adapter. This enables offline access and eliminates network latency.
+3. **Storage configured, table is `hydrating`** -- Queries fall back to the remote server while clone is in progress.
+4. **Remote-only tables** (`isRemoteOnly: true` in schema) -- Always execute on the server, regardless of hydration state.
+5. **Batch queries** -- Always execute on the remote server.
+
+This routing is transparent. You write the same query code regardless of whether data is local or remote.

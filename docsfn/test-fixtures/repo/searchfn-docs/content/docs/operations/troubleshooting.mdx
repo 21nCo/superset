@@ -1,0 +1,61 @@
+---
+title: Troubleshooting
+description: Diagnose and resolve common SearchFn errors with error codes and backend-specific playbooks.
+---
+
+## Error Reference
+
+| Error Code | Cause | Resolution |
+| --- | --- | --- |
+| `DFQL_INVALID` | Invalid request shape, missing required fields, or empty query string | Validate the request payload before sending. Check that `resource`, `query`, and `documents` fields are present and correctly typed. |
+| `LIMIT_EXCEEDED` | Query length, result limit, resource count, or batch size exceeds configured maximums | Reduce the request size or increase server limits in the `limits` configuration. |
+| `DFQL_ABORTED` | The caller aborted the request via `AbortSignal` | Expected behavior when users cancel searches. Retry from the client when appropriate. |
+| `DFQL_UNSUPPORTED` | Adapter does not support the requested operation or configuration | Check your adapter's capabilities. For Elasticsearch/OpenSearch, verify the `engine` value is `"elasticsearch"` or `"opensearch"`. |
+| `FORBIDDEN` | Authorization callback denied the request | Verify the user's credentials and permissions. Check the `authorize` callback logic. |
+| `INTERNAL` | Unexpected backend or runtime failure | Check the structured logs for details. Inspect backend health (database connectivity, service availability). |
+
+## Common Issues
+
+### Search returns no results
+
+1. Verify that `initialize()` was called with the correct `searchFields`.
+2. Verify that documents were indexed with matching field names.
+3. Check that the `resource` name matches between `index` and `search` calls.
+4. Try disabling `fuzzy` to rule out fuzzy matching issues.
+
+### `initialize` not called
+
+Calling `index` or `search` before `initialize` may cause unexpected behavior. Always call `initialize()` with your resource definitions before other operations.
+
+### Adapter disposed
+
+Calling any method after `dispose()` throws `SEARCH_ADAPTER_DISPOSED`. Call `initialize()` again to reinitialize the adapter.
+
+## Backend Playbooks
+
+### Postgres
+
+| Symptom | Check |
+| --- | --- |
+| Connection timeouts | Verify `connectionString` and network access to the database |
+| Slow queries | Check that migration SQL was run (tables and indexes exist) |
+| Missing results | Verify the target `schema` matches your database setup |
+| Retry exhaustion | Increase `retry.maxRetries` or `retry.maxDelayMs` |
+
+### Meilisearch
+
+| Symptom | Check |
+| --- | --- |
+| `FORBIDDEN` errors | Verify the API key has the correct permissions (search, documents, indexes) |
+| Missing results | Check the Meilisearch dashboard for index status and task queue |
+| Timeout errors | Verify `host` is reachable and increase `requestTimeoutMs` if needed |
+| Wrong results | Verify `indexPrefix` matches across your adapter instances |
+
+### Elasticsearch / OpenSearch
+
+| Symptom | Check |
+| --- | --- |
+| `DFQL_UNSUPPORTED` | Verify `engine` is set to `"elasticsearch"` or `"opensearch"` |
+| Connection errors | Verify `node` URL and authentication credentials |
+| Missing indexes | Ensure `initialize()` was called to create indexes |
+| Cluster health | Check cluster status via `/_cluster/health` endpoint |

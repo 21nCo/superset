@@ -1,0 +1,101 @@
+---
+title: "Storage Adapter"
+description: "Storage adapter interface reference."
+audience: reference
+applies_to: typescript
+---
+
+## DatafnStorageAdapter
+
+Complete interface for local persistence.
+
+```typescript
+interface DatafnStorageAdapter {
+  // Record operations
+  getRecord(resource: string, id: string): Promise<Record<string, unknown> | null>;
+  listRecords(resource: string): Promise<Record<string, unknown>[]>;
+  upsertRecord(resource: string, record: Record<string, unknown>): Promise<void>;
+  deleteRecord(resource: string, id: string): Promise<void>;
+  mergeRecord(resource: string, id: string, partial: Record<string, unknown>): Promise<Record<string, unknown>>;
+  findRecords(resource: string, field: string, value: unknown): Promise<Record<string, unknown>[]>;
+
+  // Join row operations (many-many relations)
+  listJoinRows(relationKey: string): Promise<Array<Record<string, unknown>>>;
+  getJoinRows(relationKey: string, fromId: string): Promise<Array<Record<string, unknown>>>;
+  getJoinRowsInverse(relationKey: string, toId: string): Promise<Array<Record<string, unknown>>>;
+  upsertJoinRow(relationKey: string, row: Record<string, unknown>): Promise<void>;
+  setJoinRows(relationKey: string, rows: Array<Record<string, unknown>>): Promise<void>;
+  deleteJoinRow(relationKey: string, from: string, to: string): Promise<void>;
+
+  // Sync state
+  getCursor(resource: string): Promise<string | null>;
+  setCursor(resource: string, cursor: string | null): Promise<void>;
+  getHydrationState(resource: string): Promise<DatafnHydrationState>;
+  setHydrationState(resource: string, state: DatafnHydrationState): Promise<void>;
+
+  // Offline changelog
+  changelogAppend(entry: Omit<DatafnChangelogEntry, "seq">): Promise<DatafnChangelogEntry>;
+  changelogList(options?: { limit?: number }): Promise<DatafnChangelogEntry[]>;
+  changelogAck(options: { throughSeq: number }): Promise<void>;
+
+  // Counts for reconcile
+  countRecords(resource: string): Promise<number>;
+  countJoinRows(relationKey: string): Promise<number>;
+
+  // Lifecycle
+  close(): Promise<void>;
+  clearAll(): Promise<void>;
+  healthCheck(): Promise<{ ok: boolean; issues: string[] }>;
+}
+```
+
+## DatafnHydrationState
+
+```typescript
+type DatafnHydrationState = "notStarted" | "hydrating" | "ready";
+```
+
+## DatafnChangelogEntry
+
+```typescript
+type DatafnChangelogEntry = {
+  seq: number;          // Monotonic local sequence
+  clientId: string;
+  mutationId: string;
+  mutation: Record<string, unknown>;
+  timestampMs: number;
+  actorId?: string;     // Audit attribution (who performed the action)
+  timestamp?: string;   // ISO 8601
+};
+```
+
+## DatafnStorageFactory
+
+```typescript
+type DatafnStorageFactory = (namespace: string) => DatafnStorageAdapter;
+```
+
+The factory is called with the namespace string when the client is configured with `namespace`.
+
+## Built-in Adapters
+
+| Adapter | Environment | Persistence |
+|---|---|---|
+| `MemoryStorageAdapter` | Any | In-memory (lost on reload). |
+| `IndexedDbStorageAdapter` | Browser | IndexedDB (persistent). |
+
+```typescript
+import { MemoryStorageAdapter, IndexedDbStorageAdapter } from "@datafn/client";
+
+const memory = new MemoryStorageAdapter();
+const idb = new IndexedDbStorageAdapter("my-app-db");
+```
+
+For namespace isolation:
+
+```typescript
+import { ns } from "@datafn/client";
+
+const factory: DatafnStorageFactory = (namespace) =>
+  IndexedDbStorageAdapter.createForNamespace("my-app", namespace);
+```

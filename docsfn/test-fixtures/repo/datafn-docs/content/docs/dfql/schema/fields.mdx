@@ -1,0 +1,174 @@
+---
+title: "Fields"
+description: "Configure field types, validation constraints, and behavior."
+audience: reference
+applies_to: both
+---
+
+## DatafnFieldSchema
+
+Each field in a resource defines its name, type, and validation constraints. Fields are validated on both the client and server.
+
+```typescript
+type DatafnFieldSchema = {
+  name: string;
+  type: "string" | "number" | "boolean" | "date" | "object" | "array" | "file" | "json";
+  required: boolean;
+  nullable?: boolean;
+  readonly?: boolean;
+  default?: unknown;
+  enum?: unknown[];
+  min?: number;
+  max?: number;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  unique?: boolean | string;
+  encrypt?: boolean;
+  volatile?: boolean;
+};
+```
+
+## Field Types
+
+| Type | TypeScript | Storage | Notes |
+| --- | --- | --- | --- |
+| `string` | `string` | Text | General-purpose text values. |
+| `number` | `number` | Numeric | NaN is rejected during validation. |
+| `boolean` | `boolean` | Boolean | Strict `true`/`false` only. |
+| `date` | `string \| number` | Epoch ms | Accepts ISO 8601 strings or epoch milliseconds. Stored as epoch ms internally. |
+| `object` | `Record<string, unknown>` | JSON | Plain objects only. Arrays and null are rejected. |
+| `array` | `unknown[]` | JSON | Array values only. |
+| `file` | `string` | Text | File reference (URL or path). Validated as a string. |
+| `json` | `unknown` | JSON | Any valid JSON value: string, number, boolean, object, or array. |
+
+## Constraints
+
+### required
+
+When `true`, the field must be present and non-undefined in insert mutations. Fields with a `default` value satisfy the required check automatically.
+
+```typescript
+{ name: "title", type: "string", required: true }
+```
+
+### nullable
+
+When `true`, the field accepts `null` as a valid value. By default, `null` is rejected for all types.
+
+```typescript
+{ name: "deletedAt", type: "date", required: false, nullable: true }
+```
+
+### readonly
+
+When `true`, the field can be set on insert but cannot be modified by subsequent update or merge mutations.
+
+```typescript
+{ name: "createdBy", type: "string", required: true, readonly: true }
+```
+
+### default
+
+A default value applied when the field is omitted from an insert mutation.
+
+```typescript
+{ name: "status", type: "string", required: true, default: "draft" }
+{ name: "viewCount", type: "number", required: true, default: 0 }
+```
+
+### enum
+
+Restricts the field to a fixed set of allowed values.
+
+```typescript
+{ name: "priority", type: "string", required: true, enum: ["low", "medium", "high", "critical"] }
+```
+
+### min / max
+
+Numeric range constraints. Apply to `number` and `date` fields.
+
+```typescript
+{ name: "score", type: "number", required: true, min: 0, max: 100 }
+```
+
+### minLength / maxLength
+
+String length constraints. Apply to `string` fields.
+
+```typescript
+{ name: "username", type: "string", required: true, minLength: 3, maxLength: 64 }
+```
+
+### pattern
+
+A regular expression pattern the string value must match.
+
+```typescript
+{ name: "slug", type: "string", required: true, pattern: "^[a-z0-9-]+$" }
+```
+
+### unique
+
+When `true`, enforces a unique constraint on the field across all records in the resource. When set to a string, it defines a named uniqueness group -- fields sharing the same group name form a composite unique constraint.
+
+```typescript
+// Simple unique constraint
+{ name: "email", type: "string", required: true, unique: true }
+
+// Composite unique constraint -- (orgId, slug) must be unique together
+{ name: "orgId", type: "string", required: true, unique: "org_slug" }
+{ name: "slug", type: "string", required: true, unique: "org_slug" }
+```
+
+### encrypt
+
+When `true`, the field value is encrypted at rest. Useful for sensitive data like tokens or personal information.
+
+```typescript
+{ name: "apiKey", type: "string", required: true, encrypt: true }
+```
+
+### volatile
+
+When `true`, the field is excluded from sync operations. Volatile fields exist only in the local client store and are not pushed to the server.
+
+```typescript
+{ name: "localDraft", type: "string", required: false, volatile: true }
+```
+
+## Complete Example
+
+```typescript
+import { defineSchema } from "@datafn/core";
+
+const schema = defineSchema({
+  resources: [
+    {
+      name: "users",
+      version: 1,
+      idPrefix: "usr",
+      fields: [
+        { name: "email", type: "string", required: true, unique: true, maxLength: 255 },
+        { name: "displayName", type: "string", required: true, minLength: 1, maxLength: 100 },
+        { name: "role", type: "string", required: true, enum: ["admin", "editor", "viewer"], default: "viewer" },
+        { name: "bio", type: "string", required: false, maxLength: 2000, nullable: true },
+        { name: "loginCount", type: "number", required: true, default: 0, min: 0 },
+        { name: "emailVerified", type: "boolean", required: true, default: false },
+        { name: "lastLoginAt", type: "date", required: false, nullable: true },
+        { name: "avatar", type: "file", required: false },
+        { name: "preferences", type: "json", required: false },
+        { name: "settings", type: "object", required: false },
+        { name: "favoriteTopics", type: "array", required: false },
+        { name: "encryptedToken", type: "string", required: false, encrypt: true },
+        { name: "localNotes", type: "string", required: false, volatile: true },
+      ],
+      indices: {
+        base: ["email", "role"],
+        search: ["displayName", "bio"],
+      },
+    },
+  ],
+});
+```

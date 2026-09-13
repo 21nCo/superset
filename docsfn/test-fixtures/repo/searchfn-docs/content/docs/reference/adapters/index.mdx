@@ -1,0 +1,85 @@
+---
+title: Adapters
+description: Choose the right search adapter — built-in engine or external backend.
+---
+
+SearchFn ships five adapters that all implement the `SearchAdapter` contract. Two use SearchFn's **built-in search engine** (tokenization, BM25 scoring, inverted index, fuzzy matching). Three delegate to **external search backends**. Swap between them without changing your application code.
+
+## Adapter Comparison
+
+### Built-in Engine
+
+These adapters run SearchFn's own search engine in-process. No external services required.
+
+| Adapter | Environment | Persistent | Fuzzy | Field Boosts | Best for |
+| --- | --- | --- | --- | --- | --- |
+| [MemoryAdapter](/docs/reference/adapters/memory) | Browser / Node | No | Yes | Yes | In-process server search, tests, CLIs, small-to-moderate datasets |
+| [IndexedDbAdapter](/docs/reference/adapters/indexeddb) | Browser | Yes | Yes | Yes | Offline-first browser apps, PWAs, client-side search |
+
+### External Backends
+
+These adapters are thin wrappers that translate the `SearchAdapter` contract into the backend's native API.
+
+| Adapter | Environment | Persistent | Fuzzy | Field Boosts | Best for |
+| --- | --- | --- | --- | --- | --- |
+| [PostgresAdapter](/docs/reference/adapters/postgres) | Server | Yes | Yes | No | Production apps already using Postgres |
+| [MeilisearchAdapter](/docs/reference/adapters/meilisearch) | Server | Yes | Yes | No | Dedicated search with typo tolerance and faceting |
+| [Elasticsearch/OpenSearch](/docs/reference/adapters/elastic-opensearch) | Server | Yes | Yes | Yes | Large-scale search with advanced relevance tuning |
+
+## Choosing an Adapter
+
+**MemoryAdapter** runs the full search engine in-process with zero setup. Use it for server-side search where the dataset fits in memory, CLI tools, tests, and any environment where you want search without external dependencies.
+
+**IndexedDbAdapter** is for browser and offline-first apps. It uses the same built-in engine as MemoryAdapter, but persists the inverted index in IndexedDB with LRU caches — search survives page reloads and works offline.
+
+Both built-in engine adapters are production-ready. **Use an external backend** when your use case specifically needs:
+- Shared search state across multiple clients or servers
+- Datasets that exceed process or browser memory
+- Backend-specific features (Postgres `tsvector` tuning, Meilisearch facets, Elasticsearch analyzers)
+
+**PostgresAdapter** is the simplest external option if you already run Postgres. It uses native `tsvector` full-text search with no additional infrastructure.
+
+**MeilisearchAdapter** gives you a dedicated search engine with built-in typo tolerance and fast indexing. Good for user-facing search with high relevance requirements.
+
+**Elasticsearch/OpenSearch Adapter** is for large-scale deployments that need advanced relevance tuning, field boosts, and cluster scalability.
+
+## Common Interface
+
+All adapters — built-in and external — support the same operations:
+
+- `initialize` — declare resources and searchable fields
+- `index` — batch index documents
+- `search` — search a single resource by query
+- `remove` — remove documents by ID
+- `clear` — remove all documents from a resource
+- `dispose` — release resources and connections
+
+Most adapters also support `searchAll` (cross-resource search) and `fuzzy` matching. See individual adapter pages for details.
+
+## Lifecycle
+
+Every adapter follows the same lifecycle:
+
+1. **Construct** — create the adapter with configuration.
+2. **Initialize** — call `initialize()` to declare resources and search fields.
+3. **Use** — call `index`, `search`, `searchAll`, `remove`, `clear`.
+4. **Dispose** — call `dispose()` to release resources. After disposal, call `initialize()` again before further operations.
+
+```typescript
+import { MemoryAdapter } from "@searchfn/adapter-memory";
+
+const adapter = new MemoryAdapter();
+
+await adapter.initialize({
+  resources: [{ name: "tasks", searchFields: ["title", "description"] }],
+});
+
+await adapter.index({
+  resource: "tasks",
+  documents: [{ id: "1", fields: { title: "Hello", description: "World" } }],
+});
+
+const ids = await adapter.search({ resource: "tasks", query: "hello" });
+
+await adapter.dispose();
+```

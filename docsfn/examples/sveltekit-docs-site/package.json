@@ -1,0 +1,28 @@
+{
+  "name": "@docsfn/example-sveltekit-docs-site",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev --port 6052",
+    "build": "vite build",
+    "preview": "vite preview --port 6052",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@docsfn/core": "file:../../core",
+    "@docsfn/provider-fs": "file:../../provider-fs",
+    "@docsfn/svelte": "file:../../svelte",
+    "@docsfn/sveltekit": "file:../../sveltekit",
+    "@sveltejs/adapter-auto": "^3.0.0",
+    "@sveltejs/kit": "^2.0.0",
+    "svelte": ">=5.20.0 <6"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^3.1.2",
+    "@testing-library/svelte": "^5.3.1",
+    "jsdom": "^27.0.1",
+    "vite": "^5.4.21",
+    "vitest": "^3.2.4"
+  }
+}

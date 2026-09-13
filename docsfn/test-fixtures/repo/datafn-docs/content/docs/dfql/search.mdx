@@ -1,0 +1,206 @@
+---
+title: "Search"
+description: "Provider-backed full-text search for DFQL and client cross-resource search."
+audience: reference
+applies_to: both
+---
+
+DataFn search is provider-backed and local-first when a `searchProvider` is configured on the client. See [Setting Up a Search Provider](#setting-up-a-search-provider) below to get started.
+
+The same option set is supported across query and cross-resource search:
+
+- `prefix`
+- `fuzzy`
+- `fieldBoosts`
+
+## Resource Search In DFQL Queries
+
+Use the `search` block inside a normal DFQL query:
+
+```typescript
+const query = {
+  resource: "articles",
+  version: 1,
+  search: {
+    query: "typescript generics",
+    type: "fullText",
+    fields: ["title", "body"],
+    prefix: true,
+    fuzzy: 0.2,
+    fieldBoosts: { title: 2, body: 1 },
+  },
+  filters: {
+    publishedAt: { is_not_null: true },
+  },
+  sort: ["-publishedAt"],
+  limit: 10,
+};
+```
+
+### `search` Fields
+
+| Field | Type | Description |
+|---|---|---|
+| `query` | `string` | Search text. |
+| `type` | `"fullText" \| "semantic"` | Search mode. |
+| `fields` | `string[]` | Optional subset of indexed fields. |
+| `prefix` | `boolean` | Prefix token matching. |
+| `fuzzy` | `boolean \| number` | Fuzzy matching (or distance/tolerance hint). |
+| `fieldBoosts` | `Record<string, number>` | Field-specific relevance weights. |
+
+`fieldBoosts` values must be finite positive numbers.
+
+## Cross-Resource Search (`client.search`)
+
+Use `client.search()` for ranked results across multiple resources.
+
+```typescript
+const result = await client.search({
+  query: "test",
+  resources: ["todos", "categories"],
+  prefix: true,
+  fuzzy: 0.2,
+  fieldBoosts: { text: 2, name: 1 },
+  source: "auto",
+});
+```
+
+### Source Selection
+
+`source: auto|local|remote` controls where search executes:
+
+- `auto` (default): local-first. Uses local provider search when available/ready, otherwise remote.
+- `local`: force local provider search.
+- `remote`: force remote `/datafn/search` execution.
+
+If forced source is unavailable, DataFn returns `DFQL_UNSUPPORTED`.
+
+## Local-First Execution Model
+
+With a configured `searchProvider`, client search behavior is:
+
+1. Resolve candidate IDs using provider search.
+2. Inject deterministic ID filters into the query pipeline.
+3. Apply normal filters/sort/select on top of those candidates.
+
+In sync mode, this gives local-first behavior once resource hydration is ready.
+
+## Server Search Endpoint
+
+`POST /datafn/search` supports cross-resource search with option parity:
+
+```json
+{
+  "query": "test",
+  "resources": ["todos", "categories"],
+  "prefix": true,
+  "fuzzy": 0.2,
+  "fieldBoosts": { "text": 2, "name": 1 },
+  "limit": 20
+}
+```
+
+The server validates these options and forwards them to the configured search provider.
+
+## Setting Up a Search Provider
+
+To enable local-first search on the client, configure a `searchProvider`. The recommended approach uses [SearchFn](https://searchfn.com) adapters via the `@searchfn/datafn-provider` bridge.
+
+### 1. Install Dependencies
+
+```bash
+npm install @searchfn/datafn-provider @searchfn/adapter-indexeddb
+```
+
+Other adapters are available depending on your environment:
+
+| Adapter | Use case |
+| --- | --- |
+| `@searchfn/adapter-indexeddb` | Browser apps (IndexedDB persistence) |
+| `@searchfn/adapter-memory` | Development, tests, SSR |
+| `@searchfn/adapter-meilisearch` | Server-side with Meilisearch |
+| `@searchfn/adapter-postgres` | Server-side with PostgreSQL |
+
+### 2. Define Resource Search Fields
+
+Map each resource to the fields that should be indexed:
+
+```typescript
+const resourceFields = {
+  todos: ["text"],
+  categories: ["name"],
+};
+```
+
+### 3. Create the Search Provider
+
+```typescript
+import { createSearchProvider } from "@searchfn/datafn-provider";
+import { IndexedDbAdapter } from "@searchfn/adapter-indexeddb";
+
+const searchProvider = createSearchProvider(
+  new IndexedDbAdapter({
+    dbName: "my-app-search",
+    defaults: { prefix: true, fuzzy: 0.2 },
+  }),
+  { resourceFields },
+);
+```
+
+### 4. Pass to `createDatafnClient`
+
+```typescript
+import { createDatafnClient } from "@datafn/client";
+
+const client = createDatafnClient({
+  schema,
+  clientId,
+  storage,
+  searchProvider,
+});
+```
+
+### 5. Verify with a Local Search
+
+```typescript
+const results = await client.search({
+  query: "test",
+  resources: ["todos", "categories"],
+  source: "local",
+});
+```
+
+If `source: "local"` returns results, your provider is working. Use `source: "auto"` (the default) in production for local-first with server fallback.
+
+### Alternative: Plugin-Based Setup
+
+Instead of the top-level `searchProvider` config, you can use the [Client Search Plugin](/docs/documentation/plugins/client-search) for fine-grained control:
+
+```typescript
+import { createClientSearchPlugin } from "@datafn/client";
+
+const client = createDatafnClient({
+  schema,
+  clientId,
+  storage,
+  plugins: [createClientSearchPlugin({ searchProvider })],
+});
+```
+
+See [Client Search Plugin](/docs/documentation/plugins/client-search) for details on plugin vs config trade-offs.
+
+### Server-Side Search
+
+For server-side search setup with SearchFn, see the [SearchFn DataFn integration guide](https://searchfn.com/docs/integrations/datafn).
+
+## Reference
+
+- [`SearchProvider` interface](/docs/reference/core/search-provider) — full method signatures and parameter types.
+- [`searchProvider` client config field](/docs/reference/client/config#searchprovider) — config reference.
+- [Client Search Plugin](/docs/documentation/plugins/client-search) — built-in plugin for search lifecycle hooks.
+
+## Migration Notes
+
+- MiniSearch-only client plugin mode is still available for compatibility.
+- **MiniSearch legacy mode deprecated**: prefer `searchProvider` for unified local/server behavior.
+- Existing query semantics (`filters`, `sort`, `limit`, aggregations) remain unchanged.

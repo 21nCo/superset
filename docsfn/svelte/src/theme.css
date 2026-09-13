@@ -1,0 +1,208 @@
+/* @docsfn/svelte — default visual theme
+ *
+ * theme.css imports theme-base.css and adds only the default visual skin:
+ * colors, borders, surfaces, and default palette tokens. Consumers can
+ * override any token after importing this file.
+ *
+ * Usage:
+ *   import "@docsfn/svelte/theme.css";
+ */
+
+@import "./theme-base.css";
+
+:root {
+  color-scheme: light;
+  --docsfn-color-bg: #fafafa;
+  --docsfn-color-surface: #ffffff;
+  --docsfn-color-surface-raised: #f8fafc;
+  --docsfn-color-fg: #0f172a;
+  --docsfn-color-muted: #64748b;
+  --docsfn-color-border: #e2e8f0;
+  --docsfn-color-primary: #2563eb;
+  --docsfn-color-primary-hover: #1d4ed8;
+  --docsfn-color-primary-fg: #ffffff;
+  --docsfn-color-accent-soft: rgb(37 99 235 / 0.08);
+  --docsfn-color-code-bg: #f1f5f9;
+  --docsfn-color-code-fg: #0f172a;
+  --docsfn-color-code-border: #e2e8f0;
+  --docsfn-sidebar-panel-bg: var(--docsfn-color-surface);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --docsfn-color-bg: #0f172a;
+    --docsfn-color-surface: #1e293b;
+    --docsfn-color-surface-raised: #334155;
+    --docsfn-color-fg: #f8fafc;
+    --docsfn-color-muted: #94a3b8;
+    --docsfn-color-border: #334155;
+    --docsfn-color-primary: #3b82f6;
+    --docsfn-color-primary-hover: #60a5fa;
+    --docsfn-color-primary-fg: #0f172a;
+    --docsfn-color-accent-soft: rgb(59 130 246 / 0.15);
+    --docsfn-color-code-bg: #0f172a;
+    --docsfn-color-code-fg: #e2e8f0;
+    --docsfn-color-code-border: #475569;
+  }
+}
+
+.docsfn-layout {
+  background: var(--docsfn-color-bg);
+  color: var(--docsfn-color-fg);
+}
+
+.docsfn-topbar {
+  background: var(--docsfn-color-surface);
+}
+
+.docsfn-topbar-link,
+.docsfn-topbar-dropdown-trigger {
+  color: var(--docsfn-color-muted);
+}
+
+.docsfn-topbar-link:hover,
+.docsfn-topbar-dropdown-trigger:hover {
+  color: var(--docsfn-color-primary);
+}
+
+.docsfn-topbar-dropdown-item {
+  color: var(--docsfn-color-fg);
+}
+
+.docsfn-sidebar-link {
+  color: var(--docsfn-color-muted);
+}
+
+.docsfn-sidebar-link:hover {
+  color: var(--docsfn-color-fg);
+  background: var(--docsfn-color-accent-soft);
+}
+
+.docsfn-sidebar-link.active {
+  color: var(--docsfn-color-primary);
+  background: var(--docsfn-color-accent-soft);
+}
+
+.docsfn-sidebar-group-trigger {
+  color: var(--docsfn-color-fg);
+}
+
+.docsfn-sidebar-group-trigger:hover {
+  background: var(--docsfn-color-accent-soft);
+}
+
+.docsfn-sidebar-group-icon {
+  color: var(--docsfn-color-muted);
+}
+
+.docsfn-breadcrumb-link {
+  color: var(--docsfn-color-muted);
+}
+
+.docsfn-breadcrumb-link:hover {
+  color: var(--docsfn-color-primary);
+}
+
+.docsfn-breadcrumb-current {
+  color: var(--docsfn-color-fg);
+}
+
+.docsfn-breadcrumb-separator,
+.docsfn-pagination-context,
+.docsfn-pagination-label,
+.docsfn-toc-title {
+  color: var(--docsfn-color-muted);
+}
+
+.docsfn-pagination-prev:hover,
+.docsfn-pagination-next:hover {
+  border-color: var(--docsfn-color-primary);
+  background: var(--docsfn-color-accent-soft);
+}
+
+.docsfn-pagination-title {
+  color: var(--docsfn-color-fg);
+}
+
+.docsfn-toc-link {
+  color: var(--docsfn-color-muted);
+}
+
+.docsfn-toc-link:hover {
+  color: var(--docsfn-color-fg);
+  background: color-mix(in srgb, var(--docsfn-color-accent-soft) 58%, transparent);
+}
+
+.docsfn-toc-link.active {
+  color: var(--docsfn-color-primary);
+  background: var(--docsfn-color-accent-soft);
+  font-weight: 650;
+}
+
+.docsfn-content {
+  color: var(--docsfn-color-fg);
+}
+
+.docsfn-content :where(h1, h2, h3, h4, h5, h6) {
+  color: var(--docsfn-color-fg);
+}
+
+.docsfn-content :where(a):not([data-docsfn-tabs] a) {
+  color: var(--docsfn-color-primary);
+}
+
+.docsfn-content :where(a:hover):not([data-docsfn-tabs] a) {
+  color: var(--docsfn-color-primary-hover);
+}
+
+.docsfn-content :not(pre) > code {
+  background: var(--docsfn-color-code-bg);
+  color: var(--docsfn-color-code-fg);
+}
+
+.docsfn-content pre[data-docsfn-code="true"],
+.docsfn-content pre[data-docsfn-mermaid="true"] {
+  background: var(--docsfn-color-code-bg);
+  color: var(--docsfn-color-code-fg);
+}
+
+.docsfn-content aside[data-docsfn-callout] {
+  background: var(--docsfn-color-accent-soft);
+}
+
+.docsfn-content aside[data-docsfn-callout="tip"] {
+  background: rgb(22 163 74 / 0.08);
+}
+
+.docsfn-content aside[data-docsfn-callout="warning"],
+.docsfn-content aside[data-docsfn-callout="caution"] {
+  background: rgb(217 119 6 / 0.08);
+}
+
+.docsfn-content [data-docsfn-tabs="true"] {
+  background: var(--docsfn-color-surface);
+}
+
+.docsfn-content [data-docsfn-tabs="true"] [role="tablist"] {
+  background: var(--docsfn-color-surface-raised);
+}
+
+.docsfn-content [data-docsfn-tabs="true"] button[role="tab"] {
+  color: var(--docsfn-color-muted);
+}
+
+.docsfn-content [data-docsfn-tabs="true"] button[role="tab"][aria-selected="true"] {
+  color: var(--docsfn-color-fg);
+  border-color: var(--docsfn-color-primary);
+  background: var(--docsfn-color-surface);
+}
+
+.docsfn-content [data-docsfn-tabs="true"] [role="tabpanel"] pre {
+  background: var(--docsfn-color-code-bg);
+  color: var(--docsfn-color-code-fg);
+}
+
+.docsfn-content :where(th) {
+  background: var(--docsfn-color-surface-raised);
+}

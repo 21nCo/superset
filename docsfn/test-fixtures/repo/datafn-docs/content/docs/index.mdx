@@ -1,0 +1,56 @@
+---
+title: DataFn
+description: A full-stack data management framework with offline-first sync, reactive signals, and type-safe queries.
+audience: landing
+applies_to: both
+---
+
+DataFn is a full-stack data management framework for building data-driven applications. It provides a unified approach to defining schemas, querying data, managing mutations, and synchronizing state between client and server.
+
+## System Architecture
+
+DataFn connects your client application to your server through DFQL, a structured query language. The client operates offline-first with local storage, syncing changes when online.
+
+```mermaid
+graph TD
+    subgraph Client ["Client (Browser / Mobile)"]
+        DC[DatafnClient]
+        SIG[Signals]
+        STR["Storage — IndexedDB / Memory"]
+        FA["Framework Adapters — Svelte / React / Vue"]
+    end
+
+    subgraph Protocol ["DFQL Protocol"]
+        Q[Queries]
+        M[Mutations]
+        T[Transactions]
+    end
+
+    subgraph Server ["Server (Node.js / Python)"]
+        DS[DatafnServer]
+        RT[Routes]
+        AUTH[Authorization]
+        SE[Sync Engine]
+    end
+
+    subgraph DB ["Database"]
+        AD["Adapters — Drizzle / SQLAlchemy"]
+        PG[(PostgreSQL / SQLite)]
+    end
+
+    DC --> SIG
+    SIG --> FA
+    DC --> STR
+    DC <-->|"clone / pull / push"| SE
+    DC <-->|"query / mutate / transact"| RT
+    RT --> AUTH
+    RT --> DS
+    DS --> AD
+    AD --> PG
+    SE --> AD
+```
+
+Select a section from the sidebar to get started.
+
+----
+Part of [Super functions](https://github.com/21nCo/super-functions) and built with care at [21n](https://21n.co).

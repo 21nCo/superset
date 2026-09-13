@@ -1,0 +1,91 @@
+---
+title: IndexedDB Adapter
+description: Browser-persistent full-text search using SearchFn's built-in engine with IndexedDB storage.
+---
+
+The IndexedDB Adapter runs SearchFn's built-in search engine in the browser with persistent storage. It uses the same BM25 scoring, inverted index, fuzzy matching, and text pipeline as the [Memory Adapter](/docs/reference/adapters/memory), but stores the inverted index in IndexedDB so search data survives page reloads and browser restarts.
+
+## When to Use
+
+- Production offline-first browser applications
+- Progressive web apps with local search
+- Client-side search that needs to persist across sessions and work without network
+- Any browser app where you want full-text search without a server round-trip
+
+## Installation
+
+```bash
+npm install @searchfn/adapter-indexeddb
+```
+
+## Usage
+
+```typescript
+import { IndexedDbAdapter } from "@searchfn/adapter-indexeddb";
+
+const adapter = new IndexedDbAdapter({
+  dbName: "my-app-search",
+});
+
+await adapter.initialize({
+  resources: [{ name: "tasks", searchFields: ["title", "description"] }],
+});
+
+await adapter.index({
+  resource: "tasks",
+  documents: [
+    { id: "t-1", fields: { title: "Ship docs", description: "Write the guide" } },
+  ],
+});
+
+const ids = await adapter.search({ resource: "tasks", query: "docs" });
+```
+
+## Configuration
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `dbName` | `string` | `"searchfn-adapter"` | Base database name. Per-resource databases use `{dbName}-{resource}`. |
+| `pipeline` | `PipelineOptions` | Internal defaults | Configure the text pipeline (tokenization, stemming, stop words, n-grams). |
+| `cache.terms` | `number` | `2048` | Maximum entries in the term lookup LRU cache. |
+| `cache.vectors` | `number` | `512` | Maximum entries in the vector LRU cache. |
+
+```typescript
+const adapter = new IndexedDbAdapter({
+  dbName: "my-app-search",
+  cache: { terms: 4096, vectors: 1024 },
+});
+```
+
+## Capabilities
+
+| Capability | Supported |
+| --- | --- |
+| `persistent` | Yes |
+| `searchAll` | Yes |
+| `fuzzy` | Yes |
+| `fieldBoosts` | Yes |
+
+## How It Works
+
+The IndexedDB Adapter uses the full `@searchfn/core` search engine with IndexedDB as the storage backend:
+
+1. **Indexing** — documents pass through the text pipeline (tokenize, normalize, stop words, stem). Terms and posting lists are written to IndexedDB object stores, with postings stored as delta-varint encoded chunks keyed by `[field, term, chunk]`.
+2. **Searching** — query text passes through the same pipeline. Postings are retrieved from IndexedDB (with LRU caching for hot terms) and scored using BM25 with length normalization.
+3. **Ranking** — results are sorted by score (descending) with deterministic tie-breaking by document ID.
+
+### LRU Caches
+
+To reduce IndexedDB reads, the adapter maintains two LRU caches:
+
+- **Term cache** (default 2048 entries) — caches frequently accessed posting chunks.
+- **Vector cache** (default 512 entries) — caches computed vectors for faster scoring.
+
+Tune these via the `cache` configuration when working with large indexes.
+
+## Behavior
+
+- Data persists in IndexedDB across page reloads within the same browser origin.
+- Each resource gets its own IndexedDB database (`{dbName}-{resource}`).
+- Reads and writes are deterministic across repeated calls.
+- Calling `dispose()` closes all database handles. Call `initialize()` again to reopen.

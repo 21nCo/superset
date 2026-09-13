@@ -1,0 +1,18 @@
+{
+  "title": "DFQL",
+  "description": "DataFn Query Language",
+  "root": true,
+  "pages": [
+    "index",
+    "schema",
+    "queries",
+    "filters",
+    "sorting",
+    "pagination",
+    "select",
+    "aggregations",
+    "search",
+    "mutations",
+    "transactions"
+  ]
+}

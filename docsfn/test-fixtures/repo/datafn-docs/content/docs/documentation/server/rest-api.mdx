@@ -1,0 +1,139 @@
+---
+title: "REST API"
+description: "Optional RESTful endpoint wrappers."
+audience: guide
+applies_to: both
+---
+
+## Overview
+
+DataFn provides optional REST endpoint wrappers that translate standard HTTP methods into DFQL queries and mutations. Enable them by setting `rest: true` in the server configuration:
+
+```typescript
+const server = await createDatafnServer({
+  schema,
+  db,
+  rest: true,
+});
+```
+
+REST endpoints are schema-driven. The resource `version` is automatically injected from the schema, so clients do not need to track it.
+
+## Endpoints
+
+### GET /datafn/resources/:resource
+
+Query a resource. Pass DFQL query parameters as URL-encoded JSON in the `q` query parameter.
+
+```
+GET /datafn/resources/tasks?q={"filters":{"status":{"$eq":"active"}},"limit":10}
+```
+
+If `q` is omitted, all records are returned (subject to `maxLimit`). Invalid JSON in `q` returns `DFQL_INVALID` with `path: "q"`.
+
+**Response:**
+
+```json
+{
+  "ok": true,
+  "result": {
+    "data": [{ "id": "task_1", "title": "Write docs", "status": "active" }],
+    "hasMore": false
+  }
+}
+```
+
+### POST /datafn/resources/:resource
+
+Create or update a record. Defaults to `merge` operation when `operation` is not specified in the body.
+
+```typescript
+// Request body
+{
+  "id": "task_1",
+  "clientId": "client_abc",
+  "mutationId": "mut_001",
+  "record": {
+    "title": "New task",
+    "status": "pending"
+  }
+}
+```
+
+Both `clientId` and `mutationId` are required. They can be provided in the request body or as query parameters.
+
+**Response:**
+
+```json
+{
+  "ok": true,
+  "result": { "id": "task_1", "serverSeq": 42 }
+}
+```
+
+### PATCH /datafn/resources/:resource/:id
+
+Merge (partial update) a specific record by ID. The operation is always `merge`.
+
+```
+PATCH /datafn/resources/tasks/task_1
+```
+
+```typescript
+// Request body
+{
+  "clientId": "client_abc",
+  "mutationId": "mut_002",
+  "record": {
+    "status": "done"
+  }
+}
+```
+
+**Response:**
+
+```json
+{
+  "ok": true,
+  "result": { "id": "task_1", "serverSeq": 43 }
+}
+```
+
+### DELETE /datafn/resources/:resource/:id
+
+Delete a record by ID. `clientId` and `mutationId` are passed as query parameters.
+
+```
+DELETE /datafn/resources/tasks/task_1?clientId=client_abc&mutationId=mut_003
+```
+
+**Response:**
+
+```json
+{
+  "ok": true,
+  "result": { "id": "task_1", "serverSeq": 44 }
+}
+```
+
+## Authorization
+
+REST endpoints are subject to the same authorization as their underlying DFQL operations:
+
+- `GET` requests are authorized as `"query"` actions.
+- `POST`, `PATCH`, and `DELETE` requests are authorized as `"mutation"` actions.
+
+Permissions policies on resources apply to REST requests identically to direct DFQL requests.
+
+## Path Traversal Protection
+
+All path segments (`:resource` and `:id`) are sanitized against path traversal attacks:
+
+- URL-decoded segments are checked for `..`, null bytes, and encoded forward slashes (`%2F`).
+- Requests with invalid path segments are rejected with HTTP 400.
+
+```
+// Rejected
+GET /datafn/resources/..%2F..%2Fetc%2Fpasswd
+GET /datafn/resources/tasks/..%2Fadmin
+```

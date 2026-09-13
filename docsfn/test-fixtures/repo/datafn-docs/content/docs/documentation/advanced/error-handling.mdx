@@ -1,0 +1,194 @@
+---
+title: Error Handling
+description: Structured error handling across client and server.
+audience: guide
+applies_to: both
+---
+
+DataFn uses a structured error system with typed error codes and envelope responses. Every API response is wrapped in a `DatafnEnvelope` that makes success and failure explicit.
+
+## Error Codes
+
+```typescript
+type DatafnErrorCode =
+  | "SCHEMA_INVALID"           // Schema definition is malformed
+  | "DFQL_INVALID"             // Query or mutation syntax is invalid
+  | "DFQL_UNKNOWN_RESOURCE"    // Resource not found in schema
+  | "DFQL_UNKNOWN_FIELD"       // Field not found on resource
+  | "DFQL_UNKNOWN_RELATION"    // Relation not found in schema
+  | "DFQL_UNSUPPORTED"         // Operation not supported
+  | "DFQL_ABORTED"             // Operation was aborted (e.g., by guard failure)
+  | "LIMIT_EXCEEDED"           // Rate limit or size limit exceeded
+  | "FORBIDDEN"                // Authorization denied
+  | "NOT_FOUND"                // Record not found
+  | "CONFLICT"                 // Conflict (e.g., duplicate ID)
+  | "INTERNAL"                 // Internal server error
+  | "TRANSPORT_ERROR";         // Network/transport failure
+```
+
+## DatafnError
+
+Every error follows this structure:
+
+```typescript
+type DatafnError = {
+  code: DatafnErrorCode;
+  message: string;
+  details?: unknown;
+};
+```
+
+## DatafnEnvelope
+
+All server responses are wrapped in an envelope:
+
+```typescript
+type DatafnEnvelope<T> =
+  | { ok: true; result: T }
+  | { ok: false; error: DatafnError };
+```
+
+### Helper Functions
+
+```typescript
+import { ok, err } from "@datafn/core";
+
+// Success envelope
+ok({ records: [...] })
+// { ok: true, result: { records: [...] } }
+
+// Error envelope
+err("DFQL_UNKNOWN_RESOURCE", "Resource 'foo' not found in schema")
+// { ok: false, error: { code: "DFQL_UNKNOWN_RESOURCE", message: "...", details: { path: "$" } } }
+```
+
+## Client-Side Errors
+
+The client package provides its own error type:
+
+```typescript
+type DatafnClientError = {
+  code: DatafnErrorCode | "TRANSPORT_ERROR";
+  message: string;
+  details: { path: string; [key: string]: unknown };
+};
+```
+
+### throwClientError
+
+```typescript
+import { throwClientError } from "@datafn/client";
+
+throwClientError("DFQL_INVALID", "Invalid query: missing resource", { path: "resource" });
+```
+
+### isTransportError
+
+Determine whether an error is a network-level failure (and therefore safe to retry):
+
+```typescript
+import { isTransportError } from "@datafn/client";
+
+try {
+  await client.table("todos").query({});
+} catch (error) {
+  if (isTransportError(error)) {
+    // Network error -- safe to retry
+    console.log("Network error, will retry...");
+  } else {
+    // Logic error -- do not retry
+    console.error("Query error:", error);
+  }
+}
+```
+
+`isTransportError` returns `true` for:
+
+- Errors with `code: "TRANSPORT_ERROR"`
+- `TypeError` from `fetch()` (network failure)
+- `AbortError` (request timeout)
+
+## Unwrapping Envelopes
+
+```typescript
+import { unwrapRemoteSuccess } from "@datafn/client";
+
+const response = await fetch("/datafn/query", { /* ... */ });
+const envelope = await response.json();
+
+const result = unwrapRemoteSuccess(envelope);
+// Throws if envelope.ok is false
+```
+
+## Error Handling Patterns
+
+### Query Errors
+
+```typescript
+try {
+  const result = await client.table("todos").query({
+    filters: { nonExistentField: "value" },
+  });
+} catch (error) {
+  const err = error as DatafnClientError;
+  switch (err.code) {
+    case "DFQL_UNKNOWN_FIELD":
+      console.error("Unknown field in query:", err.details.path);
+      break;
+    case "FORBIDDEN":
+      console.error("Not authorized to read this resource");
+      break;
+    case "TRANSPORT_ERROR":
+      console.error("Network error -- check connectivity");
+      break;
+  }
+}
+```
+
+### Mutation Errors
+
+```typescript
+try {
+  await client.table("todos").mutate({
+    operation: "insert",
+    id: "t1",
+    record: { title: "Hello" },
+  });
+} catch (error) {
+  const err = error as DatafnClientError;
+  if (err.code === "CONFLICT") {
+    console.error("Record already exists");
+  }
+}
+```
+
+### Push Errors
+
+Push errors are reported via events rather than exceptions:
+
+```typescript
+client.subscribe((event) => {
+  if (event.type === "sync_failed" && event.context.phase === "push") {
+    console.error("Push failed after", event.context.attempts, "attempts");
+    console.error("Error:", event.context.error.message);
+  }
+});
+```
+
+## Error Codes Reference
+
+| Code | When It Occurs |
+|------|---------------|
+| `SCHEMA_INVALID` | Schema validation failed during server initialization |
+| `DFQL_INVALID` | Malformed DFQL query or mutation syntax |
+| `DFQL_UNKNOWN_RESOURCE` | Resource name not found in schema |
+| `DFQL_UNKNOWN_FIELD` | Field name not defined on the resource |
+| `DFQL_UNKNOWN_RELATION` | Relation not defined in schema |
+| `DFQL_UNSUPPORTED` | Operation not supported for this context |
+| `DFQL_ABORTED` | Operation aborted (guard failure, hook rejection) |
+| `LIMIT_EXCEEDED` | Rate limit hit or payload too large |
+| `FORBIDDEN` | Authorization policy denied access |
+| `NOT_FOUND` | Record not found (for operations requiring existence) |
+| `CONFLICT` | Duplicate key or version conflict |
+| `INTERNAL` | Unexpected server error |
+| `TRANSPORT_ERROR` | Network timeout, connection refused, etc. |

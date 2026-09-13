@@ -1,0 +1,206 @@
+---
+title: "Client Configuration"
+description: "Full configuration reference for createDatafnClient."
+audience: reference
+applies_to: typescript
+---
+
+## DatafnClientConfig
+
+Complete configuration type for `createDatafnClient`.
+
+```typescript
+interface DatafnClientConfig {
+  /** Required. Application schema created with defineSchema(). */
+  schema: DatafnSchema;
+
+  /** Required. Stable device/client identifier for idempotency and changelogs. */
+  clientId: string;
+
+  /** Local persistence adapter. Instance or factory function for namespace isolation. */
+  storage?: DatafnStorageAdapter | DatafnStorageFactory;
+
+  /** Namespace string for data isolation. Required when storage is a factory function. */
+  namespace?: string;
+
+  /** Sync and connectivity configuration. */
+  sync?: DatafnSyncConfig;
+
+  /** Client-side plugins. */
+  plugins?: DatafnPlugin[];
+
+  /** Custom ID generator for insert operations. */
+  generateId?: (params: { resource: string; idPrefix?: string }) => string;
+
+  /** Optional search provider for client-side search query routing. */
+  searchProvider?: SearchProvider;
+}
+```
+
+## DatafnSyncConfig
+
+```typescript
+interface DatafnSyncConfig {
+  /** Server URL. Required in sync mode. */
+  remote?: string;
+
+  /** Injected remote adapter (overrides built-in HTTP transport). */
+  remoteAdapter?: DatafnRemoteAdapter;
+
+  /** Enable WebSocket for real-time push. Default: false. */
+  ws?: boolean;
+
+  /** WebSocket URL. Auto-derived from remote when ws is enabled. */
+  wsUrl?: string;
+
+  /** "sync" (default) or "local-only". */
+  mode?: "sync" | "local-only";
+
+  /** Queue mutations locally when offline. Requires storage. Default: false. */
+  offlinability?: boolean;
+
+  /** Milliseconds between automatic push cycles. */
+  pushInterval?: number;
+
+  /** Max mutations sent per push batch. Default: 100. */
+  pushBatchSize?: number;
+
+  /** Max retry attempts per push round. Default: 3. */
+  pushMaxRetries?: number;
+
+  /** Exponential backoff config for push retries. */
+  pushRetryBackoff?: {
+    baseDelayMs?: number;
+    maxDelayMs?: number;
+    multiplier?: number;
+    jitterMs?: number;
+  };
+
+  /** Exponential backoff config for push interval when failures repeat. */
+  pushIntervalBackoff?: {
+    baseMultiplier?: number;
+    maxDelayMs?: number;
+    jitterMs?: number;
+  };
+
+  /** Initial data clone strategy. */
+  hydration?: DatafnHydrationConfig;
+
+  /** WebSocket reconnection configuration. */
+  wsReconnect?: DatafnWsReconnectConfig;
+
+  /** Pull batch size per request. Default: 200. */
+  pullBatchSize?: number;
+
+  /** Safety cap on pull catch-up loops. Default: 50. */
+  maxPullIterations?: number;
+
+  /** Relay mutation events to other same-origin browser tabs. Default: false. */
+  crossTab?: boolean;
+}
+```
+
+## DatafnHydrationConfig
+
+```typescript
+interface DatafnHydrationConfig {
+  /** Resources that must finish cloning before app is ready. */
+  bootResources?: string[];
+
+  /** Resources that clone in background after boot. */
+  backgroundResources?: string[];
+
+  /** Page size for paginated clone. Number or per-resource map. */
+  clonePageSize?: number | Record<string, number>;
+}
+```
+
+## DatafnWsReconnectConfig
+
+```typescript
+interface DatafnWsReconnectConfig {
+  /** Enable reconnection. Default: true. */
+  enabled?: boolean;
+
+  /** Base delay in ms. Default: 1000. */
+  baseDelayMs?: number;
+
+  /** Maximum delay in ms. Default: 60000. */
+  maxDelayMs?: number;
+
+  /** Backoff multiplier. Default: 2. */
+  multiplier?: number;
+
+  /** Jitter in ms added to each delay. Default: 500. */
+  jitterMs?: number;
+}
+```
+
+## DatafnStorageFactory
+
+Factory function for namespace-based storage isolation.
+
+```typescript
+type DatafnStorageFactory = (namespace: string) => DatafnStorageAdapter;
+```
+
+The factory is called with the namespace string when the client is configured with `namespace`.
+
+## DatafnRemoteAdapter
+
+Interface for server communication. The built-in HTTP transport implements this. You can inject a custom adapter via `sync.remoteAdapter`.
+
+```typescript
+interface DatafnRemoteAdapter {
+  query(q: unknown): Promise<unknown>;
+  mutation(m: unknown): Promise<unknown>;
+  transact(t: unknown): Promise<unknown>;
+  seed(payload: unknown): Promise<unknown>;
+  clone(payload: unknown): Promise<unknown>;
+  pull(payload: unknown): Promise<unknown>;
+  push(payload: unknown): Promise<unknown>;
+  reconcile(payload: unknown): Promise<unknown>;
+}
+```
+
+Each method returns a `DatafnEnvelope` as a plain object.
+
+## SearchProvider
+
+Optional search provider for local-first, client-side search query routing. When configured, DFQL `search` blocks and `client.search()` calls execute against the provider locally instead of routing to the server.
+
+```typescript
+interface SearchProvider {
+  readonly name: string;
+  search(params: SearchParams): Promise<string[]>;
+  searchAll?(params: SearchAllParams): Promise<Array<{ resource: string; id: string; score: number }>>;
+  updateIndices(params: UpdateIndicesParams): Promise<void>;
+  initialize?(config: { resources: Array<{ name: string; searchFields: string[] }> }): Promise<void>;
+  dispose?(): Promise<void>;
+}
+```
+
+At client initialization, `searchProvider.initialize()` is called with resource/searchFields mappings from the schema. During mutations, `searchProvider.updateIndices()` keeps the local index current. At query time, `searchProvider.search()` resolves candidate IDs that are injected into the DFQL filter pipeline.
+
+See the full [SearchProvider interface reference](/docs/reference/core/search-provider) for method signatures and parameter types.
+
+The recommended way to create a search provider is with `@searchfn/datafn-provider`:
+
+```typescript
+import { createSearchProvider } from "@searchfn/datafn-provider";
+import { IndexedDbAdapter } from "@searchfn/adapter-indexeddb";
+
+const searchProvider = createSearchProvider(
+  new IndexedDbAdapter({ dbName: "my-app-search" }),
+  { resourceFields: { tasks: ["title", "description"] } },
+);
+
+const client = createDatafnClient({
+  schema,
+  clientId,
+  storage,
+  searchProvider,
+});
+```
+
+See [Search](/docs/dfql/search#setting-up-a-search-provider) for the full setup guide.

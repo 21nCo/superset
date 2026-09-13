@@ -1,0 +1,250 @@
+---
+title: "Mutations"
+description: "DFQL write operations, including capability-aware lifecycle and sharing mutations."
+audience: reference
+applies_to: both
+---
+
+A DFQL mutation is a write operation against a resource.
+
+## Mutation Shape
+
+```typescript
+type DfqlMutation = {
+  resource: string;
+  version: number;
+  operation: string;
+  id?: string | string[];
+  record?: Record<string, unknown>;
+  records?: Array<Record<string, unknown>>;
+  clientId?: string;
+  mutationId?: string;
+  context?: unknown;
+  relations?: Record<string, unknown>;
+  if?: Record<string, unknown>;
+  cascade?: unknown;
+  silent?: boolean;
+  system?: boolean;
+  debounceKey?: string;
+  debounceMs?: number;
+  scope?: "record" | "resource";
+  shareWith?: { principalId: string; level?: string };
+};
+```
+
+In direct server requests, `id` is expected for mutation operations. When using table handles, IDs for `insert` can be auto-generated client-side.
+
+## Supported Operations
+
+### Core operations
+
+| Operation | Description |
+| --- | --- |
+| `insert` | Create a new record |
+| `merge` | Partial update (upsert semantics) |
+| `replace` | Replace full record contents |
+| `delete` | Hard-delete record |
+
+### Capability operations
+
+These are valid only when the target resource enables the required capability.
+
+| Operation | Requires capability | Description |
+| --- | --- | --- |
+| `trash` | `trash` | Mark record as trashed (`trashedAt`, `trashedBy`) |
+| `restore` | `trash` | Clear trash markers |
+| `archive` | `archivable` | Set `isArchived: true` |
+| `unarchive` | `archivable` | Set `isArchived: false` |
+| `share` | `shareable` | Grant user access level on a record |
+| `unshare` | `shareable` | Remove user access |
+
+### Relation operations
+
+| Operation | Description |
+| --- | --- |
+| `relate` | Create/update relation edges |
+| `modifyRelation` | Update relation metadata on existing edge |
+| `unrelate` | Remove relation edges |
+
+## Core Examples
+
+### Insert
+
+```typescript
+{
+  resource: "todos",
+  version: 1,
+  operation: "insert",
+  id: "td:1",
+  record: {
+    title: "Buy groceries",
+    completed: false,
+  },
+}
+```
+
+### Merge
+
+```typescript
+{
+  resource: "todos",
+  version: 1,
+  operation: "merge",
+  id: "td:1",
+  record: {
+    completed: true,
+  },
+}
+```
+
+### Replace
+
+```typescript
+{
+  resource: "todos",
+  version: 1,
+  operation: "replace",
+  id: "td:1",
+  record: {
+    title: "Updated task",
+    completed: false,
+    priority: 1,
+  },
+}
+```
+
+### Delete
+
+```typescript
+{
+  resource: "todos",
+  version: 1,
+  operation: "delete",
+  id: "td:1",
+}
+```
+
+## Capability Examples
+
+### Trash / Restore
+
+```typescript
+{ resource: "todos", version: 1, operation: "trash", id: "td:1" }
+{ resource: "todos", version: 1, operation: "restore", id: "td:1" }
+```
+
+### Archive / Unarchive
+
+```typescript
+{ resource: "todos", version: 1, operation: "archive", id: "td:1" }
+{ resource: "todos", version: 1, operation: "unarchive", id: "td:1" }
+```
+
+### Share / Unshare
+
+#### Record-level share (default)
+
+```typescript
+{
+  resource: "documents",
+  version: 1,
+  operation: "share",
+  id: "doc:1",
+  shareWith: { principalId: "user:alice", level: "editor" },
+}
+
+{
+  resource: "documents",
+  version: 1,
+  operation: "unshare",
+  id: "doc:1",
+  shareWith: { principalId: "user:alice" },
+}
+```
+
+#### Resource-level scope grant
+
+When `supportsScopeGrants` is enabled on the shareable capability, you can grant access to all records in a resource:
+
+```typescript
+{
+  resource: "documents",
+  version: 1,
+  operation: "share",
+  scope: "resource",
+  shareWith: { principalId: "team:engineering", level: "viewer" },
+}
+```
+
+The `scope` field accepts `"record"` (default) or `"resource"`. When `scope` is `"resource"`, omit `id` — the grant applies to all records in the resource namespace.
+
+#### `shareWith` fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `principalId` | `string` | **(recommended)** Target principal in `type:id` format (e.g. `"user:alice"`, `"team:ops"`). |
+| `userId` | `string` | **(deprecated)** Legacy field. Canonicalized to `principalId` at runtime (`"alice"` becomes `"user:alice"`). Emits a deprecation warning. |
+| `level` | `string` | Access level from the capability's `levels` array. Defaults to `"viewer"` if omitted on `share`. |
+
+> **Migration note:** `shareWith.userId` is accepted for backward compatibility but triggers a deprecation warning. Update all call sites to use `shareWith.principalId`.
+
+## Readonly Capability Fields
+
+When `timestamps`, `audit`, or `trash` are enabled, the server strips client-provided values for readonly capability fields from `record`.
+
+Examples of stripped fields:
+
+- `createdAt`, `updatedAt`
+- `createdBy`, `updatedBy`
+- `trashedAt`, `trashedBy`
+
+Server-generated values are authoritative.
+
+## Batch Mutations
+
+You can send arrays of mutations.
+
+```typescript
+[
+  { resource: "todos", version: 1, operation: "insert", id: "td:1", record: { title: "First" } },
+  { resource: "todos", version: 1, operation: "insert", id: "td:2", record: { title: "Second" } },
+]
+```
+
+## Guard Clause (`if`)
+
+`if` enables conditional writes. The mutation executes only if the guard matches current row state.
+
+```typescript
+{
+  resource: "todos",
+  version: 1,
+  operation: "merge",
+  id: "td:1",
+  record: { status: "completed" },
+  if: { status: "in_progress" },
+}
+```
+
+## Silent, System, Context, Debounce
+
+```typescript
+{
+  resource: "todos",
+  version: 1,
+  operation: "merge",
+  id: "td:1",
+  record: { title: "Typing..." },
+  context: { source: "editor" },
+  silent: false,
+  system: false,
+  debounceKey: "td:1:title",
+  debounceMs: 1500,
+}
+```
+
+## Related Docs
+
+- [Capabilities](/docs/documentation/concepts/capabilities)
+- [System Fields](/docs/dfql/schema/system-fields)
+- [Relations](/docs/dfql/schema/relations)

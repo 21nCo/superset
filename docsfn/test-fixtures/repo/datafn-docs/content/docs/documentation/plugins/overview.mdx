@@ -1,0 +1,155 @@
+---
+title: Plugin System
+description: Extend DataFn with pluggable hooks.
+audience: guide
+applies_to: both
+---
+
+DataFn provides a plugin system that lets you intercept and transform queries, mutations, and sync operations. Plugins run on the client, the server, or both, and are composed as an ordered chain.
+
+## DatafnPlugin Interface
+
+```typescript
+interface DatafnPlugin {
+  name: string;
+  runsOn: ("client" | "server")[];
+
+  // Query hooks
+  beforeQuery?(ctx: DatafnHookContext, query: unknown): unknown;
+  afterQuery?(ctx: DatafnHookContext, query: unknown, result: unknown): unknown;
+
+  // Mutation hooks
+  beforeMutation?(ctx: DatafnHookContext, mutation: unknown | unknown[]): unknown;
+  afterMutation?(ctx: DatafnHookContext, mutation: unknown, result: unknown): void;
+
+  // Sync hooks
+  beforeSync?(ctx: DatafnHookContext, payload: unknown, ...args: unknown[]): unknown;
+  afterSync?(ctx: DatafnHookContext, payload: unknown, result: unknown, ...args: unknown[]): void;
+}
+```
+
+## Hook Context
+
+Every hook receives a `DatafnHookContext`:
+
+```typescript
+interface DatafnHookContext {
+  env: "client" | "server";
+  schema: DatafnSchema;
+}
+```
+
+## Hook Semantics
+
+### Before Hooks (Fail-Closed)
+
+Before hooks run in order. Each hook receives the output of the previous hook. If any hook throws an error or returns a failure result, the entire operation is aborted and the error is returned to the caller.
+
+```typescript
+// Before hooks transform the input and can reject operations
+beforeQuery(ctx, query) {
+  // Transform the query
+  return { ...query, filters: { ...query.filters, tenantId: "t1" } };
+}
+
+beforeMutation(ctx, mutation) {
+  // Reject the mutation
+  throw new Error("Mutations are disabled during maintenance");
+}
+```
+
+### After Hooks (Fail-Open)
+
+After hooks run after the operation completes. Errors in after hooks are logged but do not affect the operation result. After hooks can observe results but generally should not transform them (except for `afterQuery` on the server, which supports result transformation).
+
+```typescript
+afterMutation(ctx, mutation, result) {
+  // Log the mutation for auditing (error here won't affect the result)
+  console.log("Mutation applied:", mutation);
+}
+```
+
+## Environment Filtering
+
+Plugins declare where they run via the `runsOn` property. The hook runner filters plugins based on the current environment:
+
+```typescript
+const auditPlugin: DatafnPlugin = {
+  name: "audit-log",
+  runsOn: ["server"],  // Only runs on the server
+  afterMutation(ctx, mutation, result) {
+    recordAuditEntry(mutation);
+  },
+};
+
+const tenantScopePlugin: DatafnPlugin = {
+  name: "tenant-scope",
+  runsOn: ["client"],  // Only runs on the client
+  beforeQuery(ctx, query) {
+    // Add tenant scope at query time
+  },
+};
+```
+
+## Registering Plugins
+
+### Client
+
+```typescript
+import { createDatafnClient } from "@datafn/client";
+import type { DatafnPlugin } from "@datafn/core";
+
+const tenantScopePlugin: DatafnPlugin = {
+  name: "tenant-scope",
+  runsOn: ["client"],
+  beforeQuery(ctx, query) {
+    return query;
+  },
+};
+
+const client = createDatafnClient({
+  schema,
+  plugins: [tenantScopePlugin],
+});
+```
+
+### Server
+
+```typescript
+import { createDatafnServer } from "@datafn/server";
+
+const server = createDatafnServer({
+  schema,
+  plugins: [auditPlugin, validationPlugin],
+});
+```
+
+## Hook Execution Order
+
+Hooks execute in the order plugins are registered. For before hooks, the output of each hook becomes the input of the next:
+
+```
+Plugin A: beforeQuery(ctx, query) -> transformedQuery
+Plugin B: beforeQuery(ctx, transformedQuery) -> finalQuery
+```
+
+## Sync Hooks
+
+Sync hooks intercept clone, pull, push, and seed operations:
+
+```typescript
+beforeSync(ctx, payload, ...args) {
+  // args[0] is the sync phase: "clone", "pull", "push", "seed"
+  console.log("Starting sync phase:", args[0]);
+  return payload;
+}
+
+afterSync(ctx, payload, result, ...args) {
+  console.log("Sync complete:", args[0]);
+}
+```
+
+## Built-In Plugins
+
+- [Capabilities](/docs/documentation/concepts/capabilities) -- Schema-driven lifecycle and sharing model.
+- [Client Search](/docs/documentation/plugins/client-search) -- Client-side full-text search.

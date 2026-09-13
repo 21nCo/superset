@@ -1,0 +1,115 @@
+@import "@21n/fonts/styles.css";
+@import "tailwindcss";
+@import "../../svelte/src/theme.css";
+
+/* Twenty One Native — same stack as @superfunctions/docs-theme / other monorepo docs */
+:root {
+  --docsfn-font-sans: "Twenty One Native", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, sans-serif;
+  /* Tailwind v4 sets html { font-family: var(--default-font-family) } from --font-sans; align it */
+  --font-sans: var(--docsfn-font-sans);
+  /* Component theme uses --docsfn-color-* (see @docsfn/svelte theme.css), not --docsfn-primary */
+  --docsfn-color-primary: hsl(154, 33%, 24%);
+  --docsfn-color-primary-hover: hsl(154, 33%, 20%);
+  --docsfn-color-accent-soft: hsl(154 33% 24% / 0.12);
+  /* Keep the sticky sidebar and table of contents below the shared top bar. */
+  --docsfn-sticky-top-offset: 3.5rem;
+
+  /* Whole docs chrome (left sidebar + article + right TOC) max width; centers as a group */
+  --docsfn-docs-shell-max-width: min(100rem, 100%);
+
+  /* Article column max inside the middle grid cell; justify-self:center centers it when capped */
+  --docsfn-main-column-max-width: 48rem;
+
+  /* Sidebar column + full-bleed gutter to the left when the docs shell is centered */
+  --docsfn-sidebar-panel-bg: #f4f4f5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --docsfn-sidebar-panel-bg: #232326;
+    --docsfn-color-primary: hsl(155, 39%, 58%);
+    --docsfn-color-primary-hover: hsl(155, 39%, 54%);
+    --docsfn-color-accent-soft: hsl(155 39% 58% / 0.12);
+  }
+}
+
+/*
+ * Tailwind @layer base wins over unscoped rules in the same file order for html — but unlayered
+ * rules beat @layer. Force the document font so we are not stuck on ui-sans-serif / system-ui.
+ */
+html,
+body {
+  font-family: var(--docsfn-font-sans);
+}
+
+/* ─── Site-specific layout (see @docsfn/svelte theme.css for defaults) ───── */
+
+/* Homepage / blog: keep top bar content centered with a comfortable max width */
+.docsfn-topbar-container {
+  max-width: var(--fd-layout-width, 1600px);
+  margin-inline: auto;
+  padding-inline: 1rem;
+  box-sizing: border-box;
+}
+
+.docsfn-route-view {
+  width: 100%;
+  min-width: 0;
+  min-height: calc(100vh - var(--docsfn-sticky-top-offset));
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.docsfn-navigation-progress {
+  position: fixed;
+  top: 3.5rem;
+  left: 0;
+  z-index: 80;
+  width: 100%;
+  height: 3px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 80ms ease;
+}
+
+.docsfn-navigation-progress--embedded {
+  top: 0;
+}
+
+.docsfn-navigation-progress span {
+  display: block;
+  width: 32%;
+  height: 100%;
+  transform: translateX(-110%);
+  background: var(--docsfn-color-primary);
+}
+
+.docsfn-navigation-progress--active {
+  opacity: 1;
+}
+
+.docsfn-navigation-progress--active span {
+  animation: docsfn-navigation-progress 700ms cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+@keyframes docsfn-navigation-progress {
+  to {
+    transform: translateX(325%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .docsfn-navigation-progress,
+  .docsfn-navigation-progress span {
+    transition: none;
+    animation: none;
+  }
+
+  .docsfn-navigation-progress--active span {
+    width: 100%;
+    transform: none;
+  }
+}

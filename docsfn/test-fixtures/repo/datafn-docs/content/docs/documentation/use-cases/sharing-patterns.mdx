@@ -1,0 +1,76 @@
+---
+title: "Sharing Patterns"
+description: "Canonical namespace, visibility, grant, and sync patterns for Collections, Memotron, Selftron, Pointron, Finatron, Feedtron, and Compoundum."
+audience: guide
+applies_to: both
+---
+
+This page maps each required domain to one canonical sharing pattern.
+
+## Canonical Matrix
+
+| Domain | Namespace | Visibility Model | Grant Type | Sync Behavior |
+| --- | --- | --- | --- | --- |
+| Collections | `user:{owner}` | Private by default, explicit share | Record grant | Backfill on share, revoke tombstone on unshare |
+| Memotron | `household:{id}` | Shared household space + private notes | Scope + record grants | Pull filters by principal membership |
+| Selftron | `user:{owner}` | Personal by default | Record grants only | Offline pull returns only actor-visible records |
+| Pointron | `org:{tenant}` | Team-scoped analytics | Scope grants for roles | Role updates change pull visibility |
+| Finatron | `org:{tenant}` | Strict role-bound finance data | Record grants, no cross-namespace share | Forbidden writes for viewer roles |
+| Feedtron | `community:{id}` | Mixed public + private moderation flows | Scope grant for moderators, record grants for escalations | Push denied if moderation principal missing |
+| Compoundum | `partner:{id}` | Cross-team collaboration with boundaries | Record grants with explicit principals | Reconcile preserves namespace boundaries |
+
+## Collections
+
+### Happy Path
+Owner shares one collection item with `user:bob` at viewer level.
+
+### Forbidden Case
+Non-owner attempts to share the same item and receives `FORBIDDEN`.
+
+## Memotron
+
+### Happy Path
+Household admin grants `scope=resource` access to `team:parents` for family notes.
+
+### Forbidden Case
+A child principal tries to revoke parent scope grant and is denied.
+
+## Selftron
+
+### Happy Path
+User shares one journal entry with therapist principal for review.
+
+### Forbidden Case
+Anonymous actor attempts merge on private entry and is denied.
+
+## Pointron
+
+### Happy Path
+Tenant admin grants viewer access to KPI dashboards for `team:ops`.
+
+### Forbidden Case
+External principal outside tenant namespace attempts read without grant.
+
+## Finatron
+
+### Happy Path
+Finance owner grants editor on one budget record to `user:controller`.
+
+### Forbidden Case
+Viewer role pushes a write mutation and server rejects with `FORBIDDEN`.
+
+## Feedtron
+
+### Happy Path
+Moderator scope grant lets moderation team pull flagged feed records.
+
+### Forbidden Case
+User without moderation principal attempts unshare and is denied.
+
+## Compoundum
+
+### Happy Path
+Partner lead shares project record with `user:partner-analyst` for collaboration.
+
+### Forbidden Case
+Cross-namespace principal receives share attempt on a resource with cross-namespace disabled.

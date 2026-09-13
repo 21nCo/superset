@@ -1,0 +1,43 @@
+{
+  "name": "@docsfn/admin",
+  "version": "0.1.0",
+  "description": "Function-owned Super Console administration capability for DocsFn",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "docsfn",
+    "admin",
+    "super-console",
+    "superfunctions"
+  ],
+  "author": "21n",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@docsfn/core": "0.0.6",
+    "@superfunctions/admin": "0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.4"
+  }
+}

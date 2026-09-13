@@ -1,0 +1,79 @@
+---
+title: Memory Adapter
+description: In-process full-text search using SearchFn's built-in engine.
+---
+
+The Memory Adapter runs SearchFn's built-in search engine entirely in-process. It builds an inverted index in memory, scores results with BM25, and supports fuzzy matching and field boosts — all with zero external dependencies. Data lives in memory and is lost when the process exits.
+
+## When to Use
+
+- Server-side in-process search where the dataset fits in memory
+- CLI tools and background workers with search capabilities
+- Unit and integration tests
+- Any environment where you want full-text search without external services
+
+## Installation
+
+```bash
+npm install @searchfn/adapter-memory
+```
+
+## Usage
+
+```typescript
+import { MemoryAdapter } from "@searchfn/adapter-memory";
+
+const adapter = new MemoryAdapter();
+
+await adapter.initialize({
+  resources: [{ name: "tasks", searchFields: ["title", "description"] }],
+});
+
+await adapter.index({
+  resource: "tasks",
+  documents: [
+    { id: "t-1", fields: { title: "Ship docs", description: "Write the guide" } },
+  ],
+});
+
+const ids = await adapter.search({ resource: "tasks", query: "docs", limit: 10 });
+```
+
+## Configuration
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `pipeline` | `PipelineOptions` | Internal defaults | Configure the text pipeline (tokenization, stemming, stop words, n-grams). |
+
+```typescript
+const adapter = new MemoryAdapter({
+  pipeline: {
+    // Custom pipeline options
+  },
+});
+```
+
+## Capabilities
+
+| Capability | Supported |
+| --- | --- |
+| `persistent` | No |
+| `searchAll` | Yes |
+| `fuzzy` | Yes |
+| `fieldBoosts` | Yes |
+
+## How It Works
+
+The Memory Adapter uses the full `@searchfn/core` search engine:
+
+1. **Indexing** — documents pass through the text pipeline (tokenize, normalize, stop words, stem). The resulting terms are stored in an in-memory inverted index (`Map<string, Map<docId, PostingInfo>>`) keyed by `field::term`.
+2. **Searching** — query text passes through the same pipeline. If fuzzy matching is enabled, terms are expanded via Levenshtein distance against the vocabulary. Postings are retrieved and scored using BM25 with length normalization.
+3. **Ranking** — results are sorted by score (descending) with deterministic tie-breaking by document ID.
+
+This is the same search engine that powers the [IndexedDB Adapter](/docs/reference/adapters/indexeddb), with the only difference being storage: memory vs IndexedDB.
+
+## Behavior
+
+- Results use deterministic tie-break ordering by document ID when scores are equal.
+- `searchAll` returns results sorted by score with deterministic ordering.
+- Calling `dispose()` clears all data. Call `initialize()` again before further operations.

@@ -1,0 +1,61 @@
+openapi: 3.1.0
+info:
+  title: Commerce API
+  version: 1.0.0
+  description: API reference rendered from an OpenAPI document in `content/api`.
+paths:
+  /orders:
+    get:
+      operationId: listOrders
+      summary: List orders
+      description: Return the most recent orders for a workspace.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of orders to return.
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: A paginated order list.
+    post:
+      operationId: createOrder
+      summary: Create order
+      description: Create a new order and queue fulfillment.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              customerId: cus_123
+              amount: 4200
+              currency: USD
+      responses:
+        "201":
+          description: Order created.
+  /orders/{orderId}:
+    get:
+      operationId: getOrder
+      summary: Retrieve order
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          description: Order identifier.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Order detail.
+components:
+  schemas:
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+        amount:
+          type: integer

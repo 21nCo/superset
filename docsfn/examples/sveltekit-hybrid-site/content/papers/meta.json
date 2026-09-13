@@ -1,0 +1,8 @@
+{
+  "title": "Papers",
+  "root": true,
+  "pages": [
+    { "key": "edge-computing", "label": "Edge Computing Handbook" },
+    { "key": "vector-playbook", "label": "Vector Retrieval Playbook" }
+  ]
+}

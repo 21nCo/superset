@@ -1,0 +1,113 @@
+---
+title: Idempotency
+description: Prevent duplicate mutations with idempotency tracking.
+audience: guide
+applies_to: both
+---
+
+DataFn deduplicates mutations using a `(clientId, mutationId)` pair. When the same mutation is received more than once (due to retries, network issues, or duplicate pushes), the server returns the cached result instead of re-executing the mutation.
+
+## How It Works
+
+1. Every mutation includes a `clientId` and `mutationId`.
+2. Before executing, the server checks the idempotency store for an existing result.
+3. If found, the cached result is returned with `deduped: true`.
+4. If not found, the mutation is executed and the result is stored.
+
+```typescript
+// Client-generated mutation
+{
+  resource: "todos",
+  operation: "insert",
+  id: "t1",
+  record: { title: "Buy milk" },
+  clientId: "client-abc-123",
+  mutationId: "mut-001",
+}
+```
+
+## Idempotency Stores
+
+DataFn provides two idempotency store implementations:
+
+### MemoryIdempotencyStore
+
+In-memory store suitable for single-instance deployments and development:
+
+```typescript
+import { MemoryIdempotencyStore } from "@datafn/server";
+
+const store = new MemoryIdempotencyStore({
+  ttlMs: 86_400_000,       // Entry TTL: 24 hours (default)
+  maxEntries: 100_000,     // Max entries before LRU eviction (default)
+});
+```
+
+**Characteristics:**
+
+- **TTL sweep**: A timer runs every 5 minutes, evicting entries older than `ttlMs`.
+- **LRU eviction**: When the store reaches `maxEntries`, the oldest entry (first in insertion order) is evicted on the next `set()`.
+- **LRU refresh**: `get()` moves the accessed entry to the end of the Map (most recently used).
+- **No overwrite**: Once a result is stored for a `(clientId, mutationId)` pair, subsequent `set()` calls for the same pair are silently ignored.
+- **Cleanup**: Call `store.destroy()` on shutdown to clear the sweep timer.
+
+### DbIdempotencyStore
+
+Database-backed store for durable deduplication across restarts and multi-instance deployments:
+
+```typescript
+import { DbIdempotencyStore } from "@datafn/server";
+
+const store = new DbIdempotencyStore(adapter, "my-namespace");
+```
+
+**Characteristics:**
+
+- Stores results in the `__datafn_idempotency` internal table.
+- Keyed by `namespace:clientId:mutationId`.
+- Results are JSON-serialized.
+- Survives server restarts.
+- Supports pruning by age.
+
+### Pruning
+
+The database store supports pruning old entries:
+
+```typescript
+// Delete entries older than 7 days
+const deletedCount = await store.pruneIdempotency(7);
+```
+
+## Mutation Result Type
+
+```typescript
+interface MutationResult {
+  ok: boolean;
+  mutationId: string;
+  affectedIds: string[];
+  errors: Array<{
+    code: string;
+    message: string;
+    path: string;
+    retryable: boolean;
+  }>;
+  deduped: boolean;  // true if this was a cached result
+}
+```
+
+## Client-Side Deduplication
+
+The client-side changelog also deduplicates by `(clientId, mutationId)`:
+
+- **IndexedDB**: Uses a unique compound index on `[clientId, mutationId]`.
+- **Memory**: Uses an O(1) Map index keyed by `clientId:mutationId`.
+
+If `changelogAppend` is called with a duplicate pair, the existing entry is returned without creating a new one.
+
+## Best Practices
+
+- Always include a unique `mutationId` with every mutation.
+- Use UUIDs or content-based hashes for mutation IDs.
+- Configure TTL based on your retry window (24 hours covers most scenarios).
+- For multi-instance deployments, use `DbIdempotencyStore` for durability.
+- Schedule periodic pruning to prevent unbounded table growth.

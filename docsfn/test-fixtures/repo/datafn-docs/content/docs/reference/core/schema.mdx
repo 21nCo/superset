@@ -1,0 +1,119 @@
+---
+title: "Schema Utilities"
+description: "Schema validation, capability resolution, and schema indexing helpers."
+audience: reference
+applies_to: typescript
+---
+
+## defineSchema
+
+Type-safe schema builder with literal-preserving inference for fields, indices, and capability declarations.
+
+```typescript
+function defineSchema<const T extends {
+  readonly capabilities?: readonly CapabilityEntry[];
+  readonly resources: readonly DatafnResourceBase[];
+  readonly relations?: readonly DatafnRelationSchema[];
+  readonly namespaced?: boolean;
+}>(schema: T): T & DatafnSchema;
+```
+
+## validateSchema
+
+Validates unknown input as DataFn schema and returns `DatafnEnvelope<DatafnSchema>`.
+
+```typescript
+function validateSchema(schema: unknown): DatafnEnvelope<DatafnSchema>;
+```
+
+Normalization on success:
+
+- capability declarations parsed and deduped,
+- resource fields expanded with capability-injected fields,
+- `indices: string[]` normalized to `{ base, search, vector }`,
+- `relations` defaults to `[]`,
+- `namespaced` defaults to `true`.
+
+## resolveCapabilities
+
+Resolve final capabilities for a resource from global + resource declarations.
+
+```typescript
+function resolveCapabilities(
+  globalCaps?: SchemaCapabilities,
+  resourceCaps?: ResourceCapabilities,
+): CapabilityEntry[];
+```
+
+## getCapabilityFields
+
+Return field definitions injected by resolved capabilities.
+
+```typescript
+function getCapabilityFields(resolvedCaps: CapabilityEntry[]): DatafnFieldSchema[];
+```
+
+## resolveRelationCapabilities
+
+Validate and canonicalize relation capability entries for `many-many` relations.
+
+```typescript
+function resolveRelationCapabilities(
+  capabilities: unknown,
+): DatafnEnvelope<RelationSimpleCapability[]>;
+```
+
+## isNamespaced
+
+```typescript
+function isNamespaced(schema: DatafnSchema): boolean;
+```
+
+Checks whether namespace isolation is enabled (defaults `true`).
+
+## ns
+
+```typescript
+function ns(...segments: string[]): string;
+```
+
+Composable namespace string helper. Joins non-empty segments by `:` and throws for empty output.
+
+## buildSchemaIndex
+
+Builds indexed lookup structures for resources, fields, and relations.
+
+```typescript
+function buildSchemaIndex(schema: DatafnSchema): SchemaIndex;
+```
+
+### SchemaIndex
+
+```typescript
+interface SchemaIndex {
+  resourcesByName: Map<string, DatafnResourceSchema>;
+  fieldsByResource: Map<string, Map<string, DatafnFieldSchema>>;
+  relationsByResource: Map<string, DatafnRelationSchema[]>;
+  relationsFromResource: Map<string, DatafnRelationSchema[]>;
+}
+```
+
+## Lookup helpers
+
+```typescript
+function getResource(index: SchemaIndex, name: string): DatafnResourceSchema | undefined;
+function getField(index: SchemaIndex, resource: string, field: string): DatafnFieldSchema | undefined;
+function getRelationsFrom(index: SchemaIndex, resource: string): DatafnRelationSchema[];
+function getRelation(index: SchemaIndex, fromResource: string, relationName: string): DatafnRelationSchema | undefined;
+function getRelationTarget(relation: DatafnRelationSchema): string;
+function findRelationBidirectional(
+  schema: DatafnSchema,
+  resource: string,
+  relationName: string,
+): DatafnRelationSchema | undefined;
+```
+
+## Related
+
+- [Capabilities](/docs/documentation/concepts/capabilities)
+- [Schema Definition](/docs/dfql/schema)

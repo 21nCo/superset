@@ -1,0 +1,73 @@
+---
+title: Meilisearch Adapter
+description: External Meilisearch adapter for hosted or self-hosted search backends.
+---
+
+The Meilisearch Adapter connects to a Meilisearch instance for fast, typo-tolerant search with automatic ranking.
+
+## When to Use
+
+- User-facing search with high relevance requirements
+- Applications that need typo tolerance out of the box
+- Dedicated search infrastructure (hosted or self-hosted Meilisearch)
+
+## Installation
+
+```bash
+npm install @searchfn/adapter-meilisearch
+```
+
+## Usage
+
+```typescript
+import { MeilisearchAdapter } from "@searchfn/adapter-meilisearch";
+
+const adapter = new MeilisearchAdapter({
+  host: process.env.MEILI_URL!,
+  apiKey: process.env.MEILI_API_KEY!,
+  indexPrefix: "myapp",
+});
+
+await adapter.initialize({
+  resources: [{ name: "tasks", searchFields: ["title", "description"] }],
+});
+
+await adapter.index({
+  resource: "tasks",
+  documents: [
+    { id: "t-1", fields: { title: "Ship docs", description: "Write the guide" } },
+  ],
+});
+
+const ids = await adapter.search({ resource: "tasks", query: "docs" });
+```
+
+## Configuration
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `host` | `string` | — | Required. Meilisearch HTTP endpoint. |
+| `apiKey` | `string` | — | Authentication key. Redacted in logs. |
+| `indexPrefix` | `string` | `"searchfn"` | Prefix for Meilisearch index names (`{prefix}-{resource}`). |
+| `requestTimeoutMs` | `number` | `30000` | Request timeout. |
+| `retry.maxRetries` | `number` | `2` | Retry attempts for transient failures. |
+| `retry.baseDelayMs` | `number` | `100` | Base delay between retries. |
+| `retry.maxDelayMs` | `number` | `5000` | Maximum delay between retries. |
+| `logger` | `AdapterLogger` | — | Optional adapter-level logger. |
+
+## Capabilities
+
+| Capability | Supported |
+| --- | --- |
+| `persistent` | Yes |
+| `searchAll` | Yes |
+| `fuzzy` | Yes |
+| `fieldBoosts` | No |
+
+## Behavior
+
+- Creates Meilisearch indexes automatically on `initialize`.
+- `index` performs document upserts — re-indexing the same ID updates the document.
+- `remove` and `clear` are idempotent — calling them on non-existent documents or empty indexes is safe.
+- Authentication failures (invalid API key, insufficient permissions) return `FORBIDDEN`.
+- Keep API keys in environment-level secrets — never hardcode them.

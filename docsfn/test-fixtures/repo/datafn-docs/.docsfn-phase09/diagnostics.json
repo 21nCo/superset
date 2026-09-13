@@ -1,0 +1,12 @@
+[
+  {
+    "code": "DOCS_ARTIFACT_INVALID",
+    "severity": "info",
+    "message": "dev rebuild invalidated 1 path(s)",
+    "details": {
+      "invalidatedPaths": [
+        "docs:index.mdx"
+      ]
+    }
+  }
+]

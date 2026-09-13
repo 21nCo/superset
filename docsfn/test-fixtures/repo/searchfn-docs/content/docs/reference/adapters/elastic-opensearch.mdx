@@ -1,0 +1,84 @@
+---
+title: Elasticsearch / OpenSearch Adapter
+description: Elastic-compatible adapter for Elasticsearch and OpenSearch clusters.
+---
+
+A single adapter implementation that supports both Elasticsearch and OpenSearch. Select your engine at construction time.
+
+## When to Use
+
+- Large-scale search with millions of documents
+- Advanced relevance tuning with field boosts and custom analyzers
+- Existing Elasticsearch or OpenSearch infrastructure
+
+## Installation
+
+```bash
+npm install @searchfn/adapter-elasticsearch @searchfn/adapter-opensearch
+```
+
+## Usage
+
+### Elasticsearch
+
+```typescript
+import { ElasticsearchAdapter } from "@searchfn/adapter-elasticsearch";
+
+const adapter = new ElasticsearchAdapter({
+  node: "https://es.example.com:9200",
+  engine: "elasticsearch",
+  auth: { apiKey: process.env.ES_API_KEY! },
+  indexPrefix: "myapp",
+});
+
+await adapter.initialize({
+  resources: [{ name: "tasks", searchFields: ["title", "description"] }],
+});
+
+const ids = await adapter.search({ resource: "tasks", query: "docs" });
+```
+
+### OpenSearch
+
+```typescript
+import { OpenSearchAdapter } from "@searchfn/adapter-opensearch";
+
+const adapter = new OpenSearchAdapter({
+  node: "https://opensearch.example.com:9200",
+  auth: { username: "admin", password: process.env.OS_PASSWORD! },
+  indexPrefix: "myapp",
+});
+```
+
+`OpenSearchAdapter` is a convenience wrapper that sets `engine: "opensearch"` automatically.
+
+## Configuration
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `node` | `string` | — | Required. Cluster endpoint URL. |
+| `engine` | `"elasticsearch" \| "opensearch"` | `"elasticsearch"` | Select the engine dialect. |
+| `auth` | `{ username, password } \| { apiKey }` | — | Cluster authentication credentials. |
+| `indexPrefix` | `string` | `"searchfn"` | Prefix for index names (`{prefix}-{resource}`). |
+| `requestTimeoutMs` | `number` | `30000` | Request timeout. |
+| `retry.maxRetries` | `number` | `2` | Retry attempts for transient failures. |
+| `retry.baseDelayMs` | `number` | `100` | Base delay between retries. |
+| `retry.maxDelayMs` | `number` | `5000` | Maximum delay between retries. |
+| `logger` | `AdapterLogger` | — | Optional adapter-level logger. |
+
+## Capabilities
+
+| Capability | Supported |
+| --- | --- |
+| `persistent` | Yes |
+| `searchAll` | Yes |
+| `fuzzy` | Yes |
+| `fieldBoosts` | Yes |
+
+## Behavior
+
+- Single implementation handles both Elasticsearch and OpenSearch with dialect-aware query generation.
+- Index lifecycle (create, delete) is deterministic and idempotent.
+- Results are ordered by score with deterministic tie-breaking.
+- Unsupported `engine` values return `DFQL_UNSUPPORTED`.
+- Keep auth credentials in secure runtime secrets — never hardcode them.

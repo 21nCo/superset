@@ -1,0 +1,149 @@
+---
+title: "Events"
+description: "Subscribe to mutation and sync events."
+audience: guide
+applies_to: typescript
+---
+
+## EventBus
+
+The client maintains an internal `EventBus` that dispatches events when mutations succeed, fail, or when sync operations complete. You subscribe to events through `client.subscribe()` or `client.table("name").subscribe()`.
+
+## Event Types
+
+| Type | Description |
+|---|---|
+| `mutation_applied` | A mutation executed successfully. |
+| `mutation_rejected` | A mutation failed. The `context` field contains error details. |
+| `sync_applied` | A sync operation (clone or pull) completed and applied changes locally. |
+| `sync_failed` | A sync operation failed. |
+| `sync_retry` | A sync push is retrying after a transient failure. |
+| `connectivity_changed` | Network connectivity changed. |
+| `ws_connected` | WebSocket connection established. |
+| `ws_disconnected` | WebSocket connection lost. |
+
+## DatafnEvent Structure
+
+Every event conforms to the `DatafnEvent` interface:
+
+```typescript
+interface DatafnEvent {
+  type: "mutation_applied" | "mutation_rejected" | "sync_applied" | ...;
+  resource?: string;        // affected resource name
+  ids?: string[];            // affected record IDs
+  mutationId?: string;       // unique mutation identifier
+  clientId?: string;         // originating client identifier
+  timestampMs: number;       // event timestamp in milliseconds
+  action?: string;           // mutation operation: "insert", "merge", "replace", "delete"
+  fields?: string[];         // sorted list of affected field names (excludes "id")
+  context?: unknown;         // user-provided context from the mutation
+  system?: boolean;          // true if the mutation was marked as system-initiated
+  fromRemoteTab?: boolean;   // true if the event was relayed from another browser tab
+}
+```
+
+## Subscribing to Events
+
+### Unfiltered Subscription
+
+Listen to all events:
+
+```typescript
+const unsubscribe = client.subscribe((event) => {
+  console.log(`${event.type} on ${event.resource}`, event.ids);
+});
+
+// Stop listening
+unsubscribe();
+```
+
+### Filtered Subscription
+
+Pass an `EventFilter` to receive only matching events:
+
+```typescript
+const unsubscribe = client.subscribe(
+  (event) => {
+    console.log("Todo mutation applied:", event.ids);
+  },
+  {
+    type: "mutation_applied",
+    resource: "todos",
+  },
+);
+```
+
+### Table-Scoped Subscription
+
+Subscribe through a table handle to automatically scope events to that resource:
+
+```typescript
+const unsubscribe = client.table("todos").subscribe(
+  (event) => {
+    if (event.action === "delete") {
+      console.log("Todo deleted:", event.ids);
+    }
+  },
+  { type: "mutation_applied" },
+);
+```
+
+## EventFilter
+
+All filter fields are optional. When multiple fields are specified, all must match (AND semantics). Each field accepts a single value or an array of values (OR within the field).
+
+```typescript
+interface EventFilter {
+  type?: string | string[];
+  resource?: string | string[];
+  ids?: string | string[];
+  mutationId?: string | string[];
+  action?: string | string[];
+  fields?: string | string[];
+  contextKeys?: string[];
+  context?: Record<string, unknown>;
+}
+```
+
+### Filter Examples
+
+Filter by multiple event types:
+
+```typescript
+client.subscribe(handler, {
+  type: ["mutation_applied", "mutation_rejected"],
+});
+```
+
+Filter by action and affected fields:
+
+```typescript
+client.subscribe(handler, {
+  type: "mutation_applied",
+  resource: "todos",
+  action: "merge",
+  fields: ["completed"],  // fires if "completed" is among the affected fields
+});
+```
+
+Filter by context keys (all specified keys must exist in the event context):
+
+```typescript
+client.subscribe(handler, {
+  type: "mutation_applied",
+  contextKeys: ["completedBy"],
+});
+```
+
+Filter by context values (shallow equality):
+
+```typescript
+client.subscribe(handler, {
+  type: "mutation_applied",
+  context: { completedBy: "user-123" },
+});
+```
+
+## Fault Tolerance
+
+The event bus uses fault-tolerant dispatch. If a subscriber's handler throws an error, the error is isolated and logged. Other subscribers still receive the event. This prevents a single broken handler from disrupting the entire event pipeline.

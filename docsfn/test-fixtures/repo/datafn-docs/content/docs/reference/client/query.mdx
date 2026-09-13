@@ -1,0 +1,41 @@
+---
+title: "Query Execution"
+description: "Client query execution internals."
+audience: reference
+applies_to: typescript
+---
+
+## Overview
+
+When you call `client.todos.query(...)` or `client.query(...)`, the client executes a multi-step pipeline that handles hooks, offline routing, date conversion, and caching.
+
+## Execution Flow
+
+1. **beforeQuery hooks** -- all client-side plugins with `beforeQuery` are called. The query payload may be transformed. If any hook rejects, the query fails immediately (fail-closed).
+
+2. **Storage check** -- if no storage adapter is configured, the query is sent directly to the remote server.
+
+3. **Hydration state routing** -- the client checks the hydration state of the target resource:
+   - `"ready"` -- query executes locally against storage.
+   - `"hydrating"` or `"notStarted"` -- query is sent to the remote server.
+
+4. **Date codec** -- date-typed fields in the response are converted from epoch milliseconds to the appropriate format based on the schema.
+
+5. **afterQuery hooks** -- all client-side plugins with `afterQuery` are called. Errors are logged but do not fail the query (fail-open).
+
+## Offline Query Execution
+
+When a resource is hydrated locally, queries are executed via `executeLocalQuery` against the storage adapter. The local query engine uses index-aware routing:
+
+| Condition | Strategy |
+|---|---|
+| Filter on `id` with `$eq` | `getRecord` -- single record lookup. |
+| Filter on single field with `$eq` | `findRecords` -- indexed field scan. |
+| All other queries | `listRecords` -- full scan with in-memory filtering. |
+
+After fetching records, the client applies:
+- Filter evaluation using `evaluateFilter`.
+- Sort using `sortRecords`.
+- Pagination using cursor or limit/offset.
+- Select field projection.
+- Relation expansion (if `expand` is specified).

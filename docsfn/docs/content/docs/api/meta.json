@@ -1,0 +1,13 @@
+{
+  "title": "API Reference",
+  "pages": [
+    "index",
+    "core",
+    "sveltekit",
+    "svelte",
+    "provider-fs",
+    "cli",
+    "next",
+    "react"
+  ]
+}

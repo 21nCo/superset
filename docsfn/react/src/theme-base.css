@@ -1,0 +1,386 @@
+/* @docsfn/react — structural base theme (layout only, no colors or fonts)
+ *
+ * Use this if you want to provide your own color scheme and only need the
+ * structural rules (display, flex, grid, position, overflow, padding).
+ *
+ * Usage:
+ *   import "@docsfn/react/theme-base.css";
+ */
+
+/* ─── Three-column page layout ──────────────────────────────────────────── */
+:root {
+  --docsfn-sidebar-width: 16rem;
+  --docsfn-toc-width: 14rem;
+  --docsfn-main-padding-inline: 2rem;
+  --docsfn-sticky-top-offset: 0px;
+  --docsfn-main-column-max-width: none;
+  --docsfn-docs-shell-max-width: none;
+  --docsfn-main-padding-block: 1rem;
+}
+
+.docsfn-layout {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.docsfn-container {
+  display: grid;
+  flex: 1;
+  width: 100%;
+  max-width: var(--docsfn-docs-shell-max-width, none);
+  margin-inline: auto;
+  box-sizing: border-box;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.docsfn-container:has(.docsfn-sidebar-col) {
+  grid-template-columns: var(--docsfn-sidebar-width) minmax(0, 1fr);
+}
+
+.docsfn-container:has(.docsfn-toc-col):not(:has(.docsfn-sidebar-col)) {
+  grid-template-columns: minmax(0, 1fr) var(--docsfn-toc-width);
+}
+
+.docsfn-container:has(.docsfn-sidebar-col):has(.docsfn-toc-col) {
+  grid-template-columns: var(--docsfn-sidebar-width) minmax(0, 1fr) var(--docsfn-toc-width);
+}
+
+.docsfn-sidebar-col {
+  position: sticky;
+  align-self: start;
+  top: var(--docsfn-sticky-top-offset);
+  height: calc(100vh - var(--docsfn-sticky-top-offset));
+  max-height: calc(100vh - var(--docsfn-sticky-top-offset));
+  overflow: visible;
+  padding: 1rem 0.75rem;
+  box-sizing: border-box;
+}
+
+.docsfn-sidebar-col > * {
+  position: relative;
+  z-index: 1;
+}
+
+.docsfn-main {
+  min-width: 0;
+  width: 100%;
+  max-width: var(--docsfn-main-column-max-width, none);
+  justify-self: center;
+  padding: var(--docsfn-main-padding-block) var(--docsfn-main-padding-inline);
+  box-sizing: border-box;
+}
+
+.docsfn-toc-col {
+  position: sticky;
+  align-self: start;
+  top: var(--docsfn-sticky-top-offset);
+  height: calc(100vh - var(--docsfn-sticky-top-offset));
+  max-height: calc(100vh - var(--docsfn-sticky-top-offset));
+  overflow-y: auto;
+  padding: 1rem 0.75rem;
+}
+
+.docsfn-mobile-backdrop {
+  display: none;
+}
+
+@media (max-width: 1279px) {
+  .docsfn-container:has(.docsfn-sidebar-col):has(.docsfn-toc-col) {
+    grid-template-columns: var(--docsfn-sidebar-width) minmax(0, 1fr);
+  }
+
+  .docsfn-toc-col {
+    display: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .docsfn-container:has(.docsfn-sidebar-col),
+  .docsfn-container:not(:has(.docsfn-sidebar-col)) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .docsfn-sidebar-col {
+    display: none;
+  }
+
+  .docsfn-mobile-backdrop {
+    display: block;
+  }
+}
+
+/* ─── Top bar container ──────────────────────────────────────────────────── */
+.docsfn-topbar-container {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0.65rem 1rem;
+}
+
+.docsfn-topbar-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 1rem;
+}
+
+.docsfn-topbar-dropdown-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font: inherit;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem 0;
+}
+
+.docsfn-sidebar {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.docsfn-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  align-items: stretch;
+}
+
+.docsfn-sidebar-link {
+  display: block;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.375rem;
+  text-decoration: none;
+  line-height: 1.35;
+}
+
+.docsfn-sidebar-separator {
+  border: none;
+  border-top-width: 1px;
+  margin: 0.5rem 0;
+}
+
+.docsfn-sidebar-group {
+  margin: 0.15rem 0;
+}
+
+.docsfn-sidebar-group-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  margin: 0;
+  font: inherit;
+  list-style: none;
+  cursor: pointer;
+  border-radius: 0.375rem;
+  background: transparent;
+  border: none;
+  text-align: left;
+}
+
+.docsfn-sidebar-group-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.docsfn-sidebar-group-icon {
+  flex-shrink: 0;
+}
+
+.docsfn-sidebar-group-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  padding: 0.15rem 0 0.25rem 0.5rem;
+  margin: 0.1rem 0 0.25rem;
+  border-left-width: 1px;
+}
+
+.docsfn-sidebar-viewport {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.docsfn-breadcrumbs {
+  margin: 0 0 0.5rem;
+}
+
+.docsfn-breadcrumbs-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.docsfn-breadcrumb-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.docsfn-breadcrumb-separator {
+  flex-shrink: 0;
+}
+
+.docsfn-pagination {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+}
+
+.docsfn-pagination-links {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 640px) {
+  .docsfn-pagination-links {
+    grid-template-columns: 1fr;
+  }
+}
+
+.docsfn-pagination-prev,
+.docsfn-pagination-next {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  border-width: 1px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.docsfn-pagination-spacer {
+  min-height: 1px;
+}
+
+.docsfn-toc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.docsfn-toc-item {
+  margin: 0.2rem 0;
+}
+
+.docsfn-toc-link {
+  display: block;
+  text-decoration: none;
+  line-height: 1.35;
+  padding: 0.2rem 0;
+  border-radius: 0.25rem;
+}
+
+.docsfn-toc-viewport {
+  max-height: min(100vh - 2rem, 100%);
+  overflow-y: auto;
+}
+
+.docsfn-content {
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.docsfn-content :where(ul, ol) {
+  margin: 0.75rem 0;
+  padding-left: 1.35rem;
+}
+
+.docsfn-content :where(li) {
+  margin: 0.3rem 0;
+}
+
+.docsfn-content :not(pre) > code {
+  font-size: 0.9em;
+  padding: 0.12em 0.35em;
+  border-radius: 0.25rem;
+}
+
+.docsfn-content pre[data-docsfn-code="true"],
+.docsfn-content pre[data-docsfn-mermaid="true"] {
+  padding: 1rem 1.1rem;
+  border-radius: 0.5rem;
+  border-width: 1px;
+  overflow-x: auto;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.docsfn-content aside[data-docsfn-callout] {
+  margin: 1.25rem 0;
+  padding: 0.85rem 1rem;
+  border-radius: 0.5rem;
+  border-width: 1px;
+}
+
+.docsfn-content [data-docsfn-tabs="true"] {
+  margin: 1.25rem 0;
+  border-width: 1px;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.docsfn-content [data-docsfn-tabs="true"] [role="tablist"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.5rem;
+}
+
+.docsfn-content [data-docsfn-tabs="true"] button[role="tab"] {
+  font: inherit;
+  padding: 0.35rem 0.65rem;
+  border-radius: 0.375rem;
+  border-width: 1px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.docsfn-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.docsfn-content :where(th, td) {
+  padding: 0.5rem 0.75rem;
+  border-width: 1px;
+  text-align: left;
+}
+
+.docsfn-content :where(th) {
+  font-weight: 600;
+}
+
+.docsfn-api-endpoints-scroll,
+.docsfn-api-schemas-scroll {
+  max-height: min(70vh, 32rem);
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.docsfn-search-results {
+  max-height: min(60vh, 24rem);
+  overflow-y: auto;
+}

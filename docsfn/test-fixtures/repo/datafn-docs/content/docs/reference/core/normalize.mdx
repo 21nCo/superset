@@ -1,0 +1,58 @@
+---
+title: "Normalization"
+description: "DFQL normalization for caching and comparison."
+audience: reference
+applies_to: typescript
+---
+
+## normalizeDfql
+
+Recursively normalizes a value for stable comparison and caching:
+
+- Object keys are sorted alphabetically.
+- `undefined` values are stripped (non-serializable).
+- `null` is preserved (explicit absence).
+- Arrays and primitives are preserved as-is.
+
+```typescript
+function normalizeDfql(value: unknown): unknown;
+```
+
+```typescript
+normalizeDfql({ b: 2, a: 1 });
+// { a: 1, b: 2 }
+
+normalizeDfql({ x: undefined, y: null });
+// { y: null }
+
+normalizeDfql([{ z: 3, a: 1 }]);
+// [{ a: 1, z: 3 }]
+```
+
+## dfqlKey
+
+Returns a stable string key for a DFQL value. This is the canonical form used for caching and comparison.
+
+```typescript
+function dfqlKey(value: unknown): string;
+```
+
+Internally calls `JSON.stringify(normalizeDfql(value))`.
+
+```typescript
+dfqlKey({ resource: "todos", filter: { completed: true } });
+// '{"filter":{"completed":true},"resource":"todos"}'
+
+// Order-independent:
+dfqlKey({ filter: { completed: true }, resource: "todos" });
+// '{"filter":{"completed":true},"resource":"todos"}'
+```
+
+## Null vs Undefined Semantics
+
+| Value | Behavior |
+|---|---|
+| `null` | Preserved. Represents explicit absence. Serializable to JSON. |
+| `undefined` | Stripped. Non-serializable. Treated as "not set". |
+
+This mirrors `JSON.stringify` behavior and ensures stable cache keys across environments.

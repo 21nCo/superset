@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "es2022"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [{ "name": "next" }],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"],
+      "@docsfn/core": ["../../core/src/index.ts"],
+      "@docsfn/core/browser": ["../../core/src/browser.ts"],
+      "@docsfn/provider-fs": ["../../provider-fs/src/index.ts"],
+      "@docsfn/react/DocsContent": ["../../react/src/DocsContent.tsx"],
+      "@docsfn/react/ApiReferenceRenderer": ["../../react/src/ApiReferenceRenderer.tsx"],
+      "@docsfn/react/EmbeddedPage": ["../../react/src/EmbeddedPage.tsx"],
+      "@docsfn/next": ["../../next/src/index.ts"],
+      "@searchfn/client": ["../../../searchfn/client/src/index.ts"],
+      "@searchfn/core": ["../../../searchfn/core/src/index.ts"],
+      "@searchfn/core/*": ["../../../searchfn/core/src/*"],
+      "@uifn/react": ["../../../uifn/react/src/index.ts"],
+      "@uifn/core": ["../../../uifn/core/src/index.ts"],
+      "@uifn/core/*": ["../../../uifn/core/src/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}

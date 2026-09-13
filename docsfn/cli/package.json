@@ -1,0 +1,43 @@
+{
+  "name": "@docsfn/cli",
+  "version": "0.0.3",
+  "description": "CLI workflows for docsfn",
+  "type": "module",
+  "bin": {
+    "docsfn": "./dist/index.js"
+  },
+  "dependencies": {
+    "@docsfn/core": "0.0.6",
+    "@docsfn/provider-fs": "0.0.3",
+    "@searchfn/client": "0.3.0",
+    "cac": "^6.7.0",
+    "chokidar": "^3.5.0",
+    "picocolors": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "node -e \"console.log('No tests configured')\""
+  },
+  "author": "21n",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/21nCo/super-functions/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/21nCo/super-functions.git",
+    "directory": "docsfn/cli"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ]
+}

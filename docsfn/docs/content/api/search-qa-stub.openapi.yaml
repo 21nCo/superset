@@ -1,0 +1,14 @@
+openapi: 3.0.3
+info:
+  title: Svelte components (search QA)
+  description: >
+    Minimal OpenAPI stub so the docs site indexes an api-scoped search document.
+    Mentions DocsContent and DocsSearch for end-to-end search verification.
+  version: "1.0.0"
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: OK

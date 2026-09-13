@@ -1,0 +1,24 @@
+{
+  "title": "Core Concepts",
+  "pages": [
+    "nested",
+    "index",
+    "configuration",
+    "content-format",
+    "sidebars",
+    "navigation",
+    "search",
+    "seo",
+    "theming",
+    "cli",
+    "content-providers",
+    "blog",
+    "versioning",
+    "openapi",
+    "security",
+    "analytics",
+    "rss",
+    "markdown-extensions",
+    "diagnostics"
+  ]
+}

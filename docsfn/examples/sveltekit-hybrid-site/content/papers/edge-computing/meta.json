@@ -1,0 +1,9 @@
+{
+  "title": "Edge Computing Handbook",
+  "root": true,
+  "pages": [
+    { "key": "index", "label": "Overview" },
+    { "key": "architecture", "label": "Architecture" },
+    { "key": "rollout", "label": "Rollout" }
+  ]
+}

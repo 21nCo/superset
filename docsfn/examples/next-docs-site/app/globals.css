@@ -1,0 +1,154 @@
+:root {
+  color-scheme: light;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: #111827;
+  background: #f8fafc;
+}
+
+.docs-example-shell {
+  min-height: 100vh;
+}
+
+.docs-example-grid {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  min-height: 100vh;
+}
+
+.docs-example-sidebar {
+  border-right: 1px solid #e5e7eb;
+  padding: 1rem;
+  background: #ffffff;
+}
+
+.docs-example-sidebar h2 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+
+.docs-example-sidebar-list {
+  list-style: none;
+  padding-left: 0;
+  margin: 0.5rem 0;
+}
+
+.docs-example-sidebar-list[data-depth="1"] {
+  padding-left: 0.9rem;
+}
+
+.docs-example-sidebar-list[data-depth="2"] {
+  padding-left: 1.2rem;
+}
+
+.docs-example-group-label {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-weight: 600;
+}
+
+.docs-example-sidebar-link {
+  color: #1f2937;
+  text-decoration: none;
+  display: inline-block;
+  margin-top: 0.35rem;
+}
+
+.docs-example-main {
+  padding: 1.2rem 1.6rem;
+}
+
+.docs-example-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.docs-example-topnav {
+  display: flex;
+  gap: 1rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.docs-example-breadcrumbs {
+  display: flex;
+  gap: 0.7rem;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.docs-example-versions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.docs-example-versions a {
+  text-decoration: none;
+  color: #1f2937;
+}
+
+.docs-example-versions a.active {
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.docs-example-article {
+  max-width: 960px;
+}
+
+.docs-example-content {
+  width: 100%;
+  overflow: auto;
+  padding: 0.9rem;
+  border-radius: 0.4rem;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+}
+
+.docs-example-search-status {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #374151;
+}
+
+.docs-example-toc {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+
+.docs-example-toc li {
+  margin: 0.25rem 0;
+}
+
+.docs-example-pagination {
+  margin-top: 1.2rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+@media (max-width: 900px) {
+  .docs-example-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .docs-example-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid #e5e7eb;
+  }
+}

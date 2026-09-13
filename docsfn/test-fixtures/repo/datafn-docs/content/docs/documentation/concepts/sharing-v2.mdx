@@ -1,0 +1,171 @@
+---
+title: "Sharing"
+description: "Guide to Sharing Permissions: namespace, principal, visibility, scope grants, relation inheritance, and compatibility behavior."
+audience: concept
+applies_to: both
+---
+
+Sharing capability is DataFn's sharing model for private and collaborative data.
+
+## Glossary
+
+- **Namespace**: The isolation boundary for data. A namespace usually represents a tenant, workspace, or account.
+- **Principal**: A share target identity. A principal can be a person (`user:alice`) or a group (`team:ops`).
+- **Visibility**: Who can read a record right now.
+- **Scope grant**: A share grant that applies to all records in a resource, not just one record.
+- **Relation inheritance**: Child records can inherit access from related parent records.
+- **Pull**: Download server changes to local state.
+- **Push**: Upload local changes to the server.
+- **Revoke**: Remove access that was previously granted.
+- **Backfill**: Emit visibility updates for existing records after a new grant is created.
+
+## Why SPV2 Exists
+
+SPV2 moves from per-resource legacy permission rows to a global principal-based permission table. This provides:
+
+- Consistent authorization decisions across query, mutation, and sync.
+- Group sharing through principal memberships.
+- Safer migrations with dual-read and dual-write compatibility windows.
+
+## Happy Path Example (Record Share)
+
+```json
+{
+  "resource": "notes",
+  "operation": "share",
+  "id": "note:1",
+  "shareWith": { "principalId": "user:bob", "level": "viewer" }
+}
+```
+
+Result: Bob can read `note:1` through query and sync pull.
+
+## Forbidden Example (Non-owner Share)
+
+```json
+{
+  "resource": "notes",
+  "operation": "share",
+  "id": "note:1",
+  "shareWith": { "principalId": "user:eve", "level": "viewer" }
+}
+```
+
+If the actor is not allowed to share that record, the server returns `FORBIDDEN`.
+
+## Scope Grant Example (Resource Share)
+
+```json
+{
+  "resource": "accounts",
+  "operation": "share",
+  "scope": "resource",
+  "shareWith": { "principalId": "team:finance", "level": "viewer" }
+}
+```
+
+Result: Members of `team:finance` can read all visible records in `accounts`.
+
+## Principal Hierarchy
+
+SPV2 supports multi-level principal hierarchies. A principal can be a member of one or more parent principals, forming a directed acyclic graph.
+
+### Concepts
+
+- **Direct membership**: An actor belongs to a principal group (e.g. `user:alice` is a member of `team:eng`).
+- **Hierarchy edge**: A principal has a parent principal (e.g. `team:eng` is under `org:acme`).
+- **Effective principals**: The full set of principals resolved by walking direct memberships and hierarchy edges upward.
+
+When evaluating access, the server resolves all effective principals for the actor and checks grants against the complete set.
+
+### Membership Table (`__datafn_principal_memberships`)
+
+Maps actors to their direct principal memberships within a namespace.
+
+| Column | Type | Description |
+| --- | --- | --- |
+| `id` | `text` (PK) | Unique row identifier. |
+| `namespace` | `text` | Namespace scope for the membership. |
+| `actorId` | `text` | The actor identifier (e.g. `"alice"`). |
+| `principalId` | `text` | The principal group the actor belongs to (e.g. `"team:eng"`). |
+| `grantedAt` | `bigint` | Epoch milliseconds when the membership was created. |
+| `revokedAt` | `bigint` (nullable) | Epoch milliseconds when revoked, or `null` if active. |
+
+**Indexes:** unique on `(namespace, actorId, principalId)`, plus lookup indexes on `(namespace, actorId)`, `(namespace, principalId)`, and `(namespace, actorId, revokedAt)`.
+
+### Hierarchy Table (`__datafn_principal_hierarchy`)
+
+Defines parent-child relationships between principals within a namespace.
+
+| Column | Type | Description |
+| --- | --- | --- |
+| `id` | `text` (PK) | Unique row identifier. |
+| `namespace` | `text` | Namespace scope. |
+| `principalId` | `text` | The child principal (e.g. `"team:eng"`). |
+| `parentPrincipalId` | `text` | The parent principal (e.g. `"org:acme"`). |
+| `createdAt` | `bigint` | Epoch milliseconds when the edge was created. |
+| `revokedAt` | `bigint` (nullable) | Epoch milliseconds when revoked, or `null` if active. |
+
+**Indexes:** unique on `(namespace, principalId, parentPrincipalId)`, plus lookup indexes on `(namespace, principalId)`, `(namespace, parentPrincipalId)`, and `(namespace, principalId, revokedAt)`.
+
+### Hierarchy Resolution Algorithm
+
+The server resolves effective principals using a recursive walk:
+
+1. Load the actor's direct memberships from `__datafn_principal_memberships`.
+2. For each membership, load parent edges from `__datafn_principal_hierarchy`.
+3. Walk parents recursively, collecting all transitive principals.
+4. **Cycle detection**: If a principal is encountered while it is already being expanded, the server throws `DFQL_INVALID` with message `"Principal hierarchy cycle detected"`.
+5. **Depth limit**: Maximum traversal depth is **16** levels. Exceeding this throws `DFQL_INVALID` with message `"Principal hierarchy maxDepth exceeded"`.
+6. Results are cached per `(namespace, actorId, maxDepth)` tuple for the duration of the request.
+
+### Example: User → Team → Org
+
+```
+user:alice  →  member of  →  team:eng
+team:eng    →  child of   →  org:acme
+```
+
+When `user:alice` performs a query, effective principals resolve to: `["user:alice", "team:eng", "org:acme"]`. Any grant to `team:eng` or `org:acme` is visible to Alice.
+
+## Global Permissions Table
+
+All SPV2 permission grants are stored in a single global table: `__datafn_permissions_global`.
+
+### Schema
+
+| Column | Type | Description |
+| --- | --- | --- |
+| `id` | `text` (PK) | Deterministic composite key: `resourceType:resourceNs:resourceIdOrStar:principalId`. For scope grants, `resourceId` is replaced with `*`. |
+| `resourceType` | `text` | Resource name (e.g. `"documents"`). |
+| `resourceNs` | `text` | Namespace the grant belongs to. |
+| `resourceId` | `text` (nullable) | Record ID for record-level grants, or `null` for scope grants. |
+| `principalId` | `text` | Target principal (e.g. `"user:bob"`, `"team:eng"`). |
+| `level` | `text` | Access level (`"viewer"`, `"editor"`, `"owner"`). |
+| `grantKind` | `text` | `"record"` for per-record grants, `"scope"` for resource-level grants. |
+| `sourceRef` | `text` (nullable) | Reserved for relation inheritance source tracking. |
+| `grantedBy` | `text` | Actor who created the grant (or `"system"`). |
+| `grantedAt` | `bigint` | Epoch milliseconds when the grant was created. |
+| `revokedAt` | `bigint` (nullable) | Epoch milliseconds when revoked, or `null` if active. |
+
+### Indexes
+
+| Index | Columns | Type |
+| --- | --- | --- |
+| `__datafn_permissions_global_resource_record_idx` | `(resourceType, resourceNs, resourceId, principalId)` | Unique |
+| `__datafn_permissions_global_scope_idx` | `(resourceType, resourceNs, principalId, grantKind)` | Unique |
+| `idx_perm_principal` | `(principalId)` | Standard |
+| `idx_perm_resource_ns_principal` | `(resourceNs, principalId)` | Standard |
+| `idx_perm_resource_lookup` | `(resourceType, resourceNs, resourceId)` | Standard |
+| `idx_perm_active_lookup` | `(resourceType, resourceNs, principalId, revokedAt)` | Standard |
+
+These tables are auto-generated by the DataFn CLI codegen when any resource in the schema has the `shareable` capability.
+
+## Legacy Compatibility
+
+Legacy payloads that used `shareWith.userId` are still accepted during compatibility windows.
+
+- Input like `"userId": "bob"` is canonicalized to `"principalId": "user:bob"`.
+- Compatibility warnings are deterministic, so migration dashboards can track old call shapes.
+
+See [SPV2 Migration](/docs/documentation/migrations/spv2) for rollout and rollback guidance.

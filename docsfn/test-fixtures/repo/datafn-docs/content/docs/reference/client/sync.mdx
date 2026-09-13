@@ -1,0 +1,94 @@
+---
+title: "Sync Engine"
+description: "Sync engine internals reference."
+audience: reference
+applies_to: typescript
+---
+
+## SyncEngine
+
+The `SyncEngine` class manages background synchronization between the client's local storage and the remote server.
+
+### Lifecycle
+
+1. **Initialization** -- created internally by `createDatafnClient` when `sync` config is provided.
+2. **Start** -- begins the hydration plan (clone boot resources, then background resources). Starts the push interval if configured.
+3. **Running** -- processes push cycles, responds to WebSocket cursor notifications, and handles connectivity changes.
+4. **Destroy** -- stops all timers, closes WebSocket, and cleans up event listeners.
+
+### Configuration
+
+The engine reads from `DatafnSyncConfig`:
+
+- `pushInterval` -- ms between automatic push cycles.
+- `pushBatchSize` -- max mutations per push batch (default: 100).
+- `pushMaxRetries` -- max retries per push round (default: 3).
+- `wsReconnect` -- exponential backoff for WebSocket reconnection.
+
+### Push Engine
+
+The push engine reads entries from the offline changelog and sends them to the server:
+
+1. Read up to `pushBatchSize` entries from `storage.changelogList()`.
+2. Send mutations to the server via `remote.push()`.
+3. On success, acknowledge entries via `storage.changelogAck()`.
+4. On failure, increment retry count and apply exponential backoff.
+5. Emit `sync_failed` or `sync_retry` events as appropriate.
+
+### Pull Engine
+
+Triggered by WebSocket cursor notifications or manual calls:
+
+1. Read the current cursor from `storage.getCursor()`.
+2. Send a pull request with the cursor to `remote.pull()`.
+3. Apply received changes to local storage.
+4. Update the cursor monotonically.
+5. Emit `sync_applied` events for each affected resource.
+
+## SyncFacade API
+
+The client exposes a `sync` object with these methods:
+
+```typescript
+interface SyncFacade {
+  /** Clone a resource from the server. */
+  clone(resource: string): Promise<void>;
+
+  /** Pull changes since the current cursor. */
+  pull(): Promise<void>;
+
+  /** Push pending offline mutations. */
+  push(): Promise<void>;
+
+  /** Clone and upload: full bidirectional sync initialization. */
+  cloneUp(options: CloneUpOptions): Promise<CloneUpResult>;
+}
+```
+
+## WebSocket Reconnection
+
+When the WebSocket disconnects, the engine applies exponential backoff with jitter:
+
+```
+delay = min(baseDelayMs * multiplier^attempt + random(0, jitterMs), maxDelayMs)
+```
+
+Default configuration:
+
+| Parameter | Default |
+|---|---|
+| `baseDelayMs` | 1000 |
+| `maxDelayMs` | 60000 |
+| `multiplier` | 2 |
+| `jitterMs` | 500 |
+
+On successful reconnection, the attempt counter resets to 0.
+
+## Hydration Plan
+
+During initial startup:
+
+1. **Boot resources** -- clone sequentially. The client blocks until all boot resources reach `"ready"` hydration state.
+2. **Background resources** -- clone concurrently after boot completes. The client does not block on these.
+
+Clone requests are paginated using `clonePageSize` (default or per-resource).

@@ -1,0 +1,54 @@
+---
+title: "Validate"
+description: "Validate your DataFn schema file."
+audience: reference
+applies_to: typescript
+---
+
+## Usage
+
+```bash
+datafn validate [--schema <path>]
+```
+
+The `validate` command checks your schema file for structural errors and reports them with detailed paths.
+
+## What Gets Validated
+
+The command uses `validateSchema()` from `@datafn/core` internally and checks:
+
+- **Structure** -- `resources` must be a non-empty array of objects. Each resource must have `name` (string), `version` (integer), and `fields` (array).
+- **Field types** -- each field must declare a valid `type`: `string`, `number`, `boolean`, `date`, `object`, `array`, `file`, or `json`.
+- **Uniqueness** -- resource names must be unique across the schema. Field names must be unique within each resource.
+- **Relation integrity** -- `from` and `to` in relations must reference declared resource names. `joinTable` must be a string. `joinColumns` must have `from` and `to` string properties.
+- **Index validation** -- index field names must match declared fields within each resource.
+- **Limits** -- maximum 100 resources, maximum 200 fields per resource.
+
+## Deterministic Rejection via Envelope
+
+Validation returns a `DatafnEnvelope<DatafnSchema>`. On failure, the envelope contains an error with a specific code, message, and path:
+
+```typescript
+{
+  ok: false,
+  error: {
+    code: "SCHEMA_INVALID",
+    message: "Invalid schema: duplicate field name: title",
+    details: { path: "resources" }
+  }
+}
+```
+
+On success, the envelope contains the normalized schema with indices converted to `{ base, search, vector }` form and relations defaulting to an empty array.
+
+## Example
+
+```bash
+# Validate using auto-discovered schema
+datafn validate
+
+# Validate a specific file
+datafn validate --schema ./config/schema.json
+```
+
+A valid schema prints a confirmation line (for example, `✓ Schema is valid: /abs/path/schema.datafn.ts`) and exits with code 0. An invalid schema prints the error details and exits with a non-zero code.

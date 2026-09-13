@@ -1,0 +1,477 @@
+---
+title: "Routes"
+description: "HTTP endpoints provided by the DataFn server."
+audience: guide
+applies_to: both
+---
+
+import { Tab, Tabs } from "fumadocs-ui/components/tabs";
+
+## Envelope Pattern
+
+All DataFn endpoints use a consistent response envelope:
+
+```typescript
+// Success
+{ ok: true, result: { /* endpoint-specific data */ } }
+
+// Error
+{ ok: false, error: { code: string, message: string, details: { path: string } } }
+```
+
+All POST endpoints accept `application/json` request bodies. The Python server uses the same envelope format.
+
+## Framework Integration
+
+The DataFn server provides route handlers that you mount on your HTTP framework of choice.
+
+<Tabs items={["TypeScript", "Python (FastAPI)", "Python (Starlette)"]}>
+  <Tab value="TypeScript">
+    `createDatafnServer()` returns a `DatafnServer` with a `router` that you mount on your HTTP server:
+
+    ```typescript
+    import { createDatafnServer } from "@datafn/server";
+
+    const server = await createDatafnServer({ schema, db });
+
+    // Bun
+    Bun.serve({ port: 3000, fetch: server.router.fetch });
+    ```
+  </Tab>
+  <Tab value="Python (FastAPI)">
+    `create_datafn_server()` returns a dictionary with a `routes` key mapping route strings to async handler functions:
+
+    ```python
+    from fastapi import FastAPI, Request
+    from datafn import create_datafn_server
+
+    app = FastAPI()
+    server = create_datafn_server(config)
+
+    @app.post("/datafn/query")
+    async def query(request: Request):
+        payload = await request.json()
+        ctx = {"user": request.state.user}
+        return await server["routes"]["POST /datafn/query"](ctx, payload)
+
+    @app.post("/datafn/mutation")
+    async def mutation(request: Request):
+        payload = await request.json()
+        ctx = {"user": request.state.user}
+        return await server["routes"]["POST /datafn/mutation"](ctx, payload)
+    ```
+  </Tab>
+  <Tab value="Python (Starlette)">
+    ```python
+    from starlette.applications import Starlette
+    from starlette.requests import Request
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
+    from datafn import create_datafn_server
+
+    server = create_datafn_server(config)
+
+    async def datafn_query(request: Request):
+        payload = await request.json()
+        ctx = {"user": request.state.user}
+        result = await server["routes"]["POST /datafn/query"](ctx, payload)
+        return JSONResponse(result)
+
+    app = Starlette(routes=[
+        Route("/datafn/query", datafn_query, methods=["POST"]),
+    ])
+    ```
+  </Tab>
+</Tabs>
+
+Each Python handler is an async function with signature `(ctx, payload) -> dict`.
+
+Python route availability currently includes:
+
+- `POST /datafn/query`
+- `POST /datafn/mutation`
+- `POST /datafn/transact`
+- `POST /datafn/seed`
+- `POST /datafn/clone`
+- `POST /datafn/pull`
+- `POST /datafn/push`
+
+`GET /datafn/status` and `POST /datafn/reconcile` are TypeScript-server routes and are not currently implemented in the Python package.
+
+## Available Routes
+
+---
+
+## GET /datafn/status
+
+Returns server metadata, capabilities, limits, and a schema hash for client-server schema agreement.
+This endpoint is currently TypeScript-server only.
+
+**Response:**
+
+```typescript
+{
+  ok: true,
+  result: {
+    schemaHash: "sha256:abc123...",
+    capabilities: [
+      "dfql.query",
+      "dfql.mutation",
+      "dfql.transact",
+      "dfql.sync",
+      "dfql.seed"
+    ],
+    limits: {
+      maxLimit: 100,
+      maxTransactSteps: 100,
+      maxPayloadBytes: 5242880
+    },
+    serverTimeMs: 1709251200000
+  }
+}
+```
+
+The `serverTimeMs` value is rounded to the nearest minute to prevent server fingerprinting. Returns HTTP 500 if the database health check fails.
+
+---
+
+## POST /datafn/query
+
+Execute a DFQL query against a resource. Supports single queries or batch queries (array).
+
+**Request (single):**
+
+```typescript
+{
+  resource: "tasks",
+  version: 1,
+  select: ["id", "title", "status", "assignee.*"],
+  filters: { status: { $eq: "active" } },
+  metadata: {
+    includeTrashed: false,
+    includeArchived: false
+  },
+  sort: ["createdAt:desc", "id:asc"],
+  limit: 25,
+  offset: 0
+}
+```
+
+**Request (batch):**
+
+```typescript
+[
+  { resource: "tasks", version: 1, filters: { status: { $eq: "active" } } },
+  { resource: "users", version: 1, select: ["id", "name"] }
+]
+```
+
+**Response (single):**
+
+```typescript
+{
+  ok: true,
+  result: {
+    data: [{ id: "task_1", title: "Write docs", status: "active" }],
+    hasMore: false
+  }
+}
+```
+
+For capability-enabled resources:
+
+- `trash` resources are filtered by default to exclude trashed rows unless `metadata.includeTrashed === true`.
+- `archivable` resources are filtered by default to exclude archived rows unless `metadata.includeArchived === true`.
+
+For shareable resources, private-default access filtering is also applied server-side.
+
+**Response (batch):**
+
+```typescript
+{
+  ok: true,
+  result: [
+    { data: [...], hasMore: false },
+    { data: [...], hasMore: false }
+  ]
+}
+```
+
+---
+
+## POST /datafn/mutation
+
+Execute a single DFQL mutation or a batch of mutations.
+
+**Request:**
+
+```typescript
+{
+  resource: "tasks",
+  version: 1,
+  operation: "merge",
+  id: "task_1",
+  clientId: "client_abc",
+  mutationId: "mut_001",
+  record: {
+    title: "Updated title",
+    status: "done"
+  }
+}
+```
+
+Valid operations:
+
+- Core: `insert`, `merge`, `replace`, `delete`
+- Capability: `trash`, `restore`, `archive`, `unarchive`, `share`, `unshare`
+- Relation: `relate`, `modifyRelation`, `unrelate`
+
+Capability operations are validated per resource. If a capability is not enabled on the target resource, the server returns `DFQL_UNSUPPORTED`.
+
+Readonly capability-managed fields are stripped from inbound records before execution (`createdAt`, `updatedAt`, `createdBy`, `updatedBy`, `trashedAt`, `trashedBy` when enabled).
+
+**Response:**
+
+```typescript
+{
+  ok: true,
+  result: {
+    id: "task_1",
+    serverSeq: 42
+  }
+}
+```
+
+The `clientId` and `mutationId` fields enable idempotency. Replaying the same mutation returns the cached result.
+
+---
+
+## POST /datafn/transact
+
+Execute multiple query and mutation steps atomically.
+
+**Request:**
+
+```typescript
+{
+  steps: [
+    {
+      type: "mutation",
+      mutation: {
+        resource: "accounts",
+        version: 1,
+        operation: "merge",
+        id: "acc_1",
+        clientId: "c1",
+        mutationId: "m1",
+        record: { balance: 900 }
+      }
+    },
+    {
+      type: "mutation",
+      mutation: {
+        resource: "accounts",
+        version: 1,
+        operation: "merge",
+        id: "acc_2",
+        clientId: "c1",
+        mutationId: "m2",
+        record: { balance: 1100 }
+      }
+    }
+  ]
+}
+```
+
+**Response:**
+
+```typescript
+{
+  ok: true,
+  result: {
+    results: [
+      { id: "acc_1", serverSeq: 43 },
+      { id: "acc_2", serverSeq: 44 }
+    ]
+  }
+}
+```
+
+The number of steps is bounded by `limits.maxTransactSteps` (default: 100).
+
+---
+
+## POST /datafn/seed
+
+Initialize a dataset for a client. Idempotent -- repeated calls with the same namespace return success without side effects.
+
+**Request:**
+
+```typescript
+{
+  clientId: "client_abc"
+}
+```
+
+**Response:**
+
+```typescript
+{ ok: true, result: { ok: true } }
+```
+
+---
+
+## POST /datafn/clone
+
+Clone the full dataset for initial sync. Returns all records and the current server sequence number.
+
+**Request:**
+
+```typescript
+{
+  clientId: "client_abc",
+  tables: ["tasks", "users"],
+  includeJoins: true
+}
+```
+
+**Response:**
+
+```typescript
+{
+  ok: true,
+  result: {
+    ok: true,
+    data: {
+      tasks: [{ id: "task_1", title: "...", ... }],
+      users: [{ id: "user_1", name: "...", ... }]
+    },
+    cursors: { tasks: "42", users: "38" },
+    joins: {},
+    next: { tasks: null, users: null }
+  }
+}
+```
+
+---
+
+## POST /datafn/pull
+
+Pull changes since a given cursor. Returns incremental changes for the client to apply.
+
+**Request:**
+
+```typescript
+{
+  clientId: "client_abc",
+  cursors: { tasks: "38", users: "40" },
+  includeJoins: true,
+  limit: 200
+}
+```
+
+**Response:**
+
+```typescript
+{
+  ok: true,
+  result: {
+    ok: true,
+    records: {
+      tasks: [{ id: "task_1", title: "Write docs" }],
+      users: []
+    },
+    merged: {
+      tasks: [{ id: "task_2", status: "done" }]
+    },
+    deleted: {
+      tasks: ["task_3"],
+      users: []
+    },
+    joins: {
+      "tasks.tags.tags": { upsert: [], delete: [] }
+    },
+    cursors: { tasks: "40", users: "40" },
+    hasMore: false
+  }
+}
+```
+The number of changes returned per pull is bounded by `limits.maxPullLimit` (default: 1000). When `hasMore` is `true`, the client should pull again with updated cursors.
+
+---
+
+## POST /datafn/push
+
+Push local mutations from the client to the server. Mutations are validated, executed, and tracked for sync.
+
+**Request:**
+
+```typescript
+{
+  clientId: "client_abc",
+  mutations: [
+    {
+      resource: "tasks",
+      version: 1,
+      operation: "insert",
+      id: "task_3",
+      mutationId: "mut_003",
+      record: { title: "New task", status: "pending" }
+    }
+  ]
+}
+```
+
+**Response:**
+
+```typescript
+{
+  ok: true,
+  result: {
+    ok: true,
+    applied: ["mut_003"],
+    errors: [],
+    cursor: "43",
+    cursorBefore: "42",
+    cursors: { tasks: "43" }
+  }
+}
+```
+
+After a successful push, connected WebSocket clients in the same namespace receive a cursor notification.
+
+Push uses the same capability normalization behavior as direct mutation routes:
+
+- readonly capability fields are stripped,
+- capability operations are validated and executed with the same rules as `/datafn/mutation`.
+
+---
+
+## POST /datafn/reconcile
+
+Reconcile client state with the server. Used to resolve conflicts after offline operations.
+This endpoint is currently TypeScript-server only.
+
+**Request:**
+
+```typescript
+{
+  clientId: "client_abc",
+  resources: ["tasks", "users"],
+  includeJoins: true
+}
+```
+
+**Response:**
+
+```typescript
+{
+  ok: true,
+  result: {
+    ok: true,
+    counts: { tasks: 120, users: 8 },
+    joinCounts: { "tasks.tags.tags": 42 },
+    latestCursor: "520"
+  }
+}
+```

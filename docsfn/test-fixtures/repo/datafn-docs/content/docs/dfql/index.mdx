@@ -1,0 +1,95 @@
+---
+title: "DFQL Overview"
+description: "DataFn Query Language - a JSON-based query and mutation language."
+audience: landing
+applies_to: both
+---
+
+DFQL (DataFn Query Language) is a structured, JSON-based language for querying and mutating data. Every operation -- whether reading a single record, filtering a large dataset, or executing a multi-step transaction -- is expressed as a plain JSON object with well-defined fields.
+
+## Design Principles
+
+DFQL is designed around three core principles:
+
+- **Uniform envelope pattern.** Queries, mutations, and transactions all share a common shape: a `resource` and `version` to identify the target, plus operation-specific fields.
+- **Isomorphic execution.** The same DFQL objects are used by both the client and server. A query written for the client executes identically on the server, enabling offline-first architectures with no translation layer.
+- **Composable operations.** Filters, sorting, pagination, select projections, and aggregations can be combined freely within a single query.
+
+## Operation Types
+
+DFQL supports three top-level operation types:
+
+### Queries
+
+Retrieve data from a resource. Queries support filtering, sorting, pagination, field selection, aggregation, and full-text search.
+
+```typescript
+const query: DfqlQuery = {
+  resource: "todos",
+  version: 1,
+  filters: { completed: false },
+  sort: ["priority:desc"],
+  limit: 20,
+};
+```
+
+### Mutations
+
+Create, update, or delete records. Mutations support core operations (`insert`, `merge`, `replace`, `delete`), capability operations (`trash`, `restore`, `archive`, `unarchive`, `share`, `unshare`), relation management, conditional guards, and debounced writes.
+
+```typescript
+const mutation: DfqlMutation = {
+  resource: "todos",
+  version: 1,
+  operation: "insert",
+  record: { title: "Buy groceries", completed: false },
+};
+```
+
+### Transactions
+
+Execute a sequence of queries and mutations as an atomic unit. If any step fails, all preceding mutations are rolled back.
+
+```typescript
+const transaction: DfqlTransact = {
+  atomic: true,
+  steps: [
+    { mutation: { resource: "accounts", version: 1, operation: "merge", id: "acc_1", record: { balance: 900 } } },
+    { mutation: { resource: "accounts", version: 1, operation: "merge", id: "acc_2", record: { balance: 1100 } } },
+  ],
+};
+```
+
+## Type Definitions
+
+All DFQL types are exported from `@datafn/core`:
+
+```typescript
+import type {
+  DfqlQuery,
+  DfqlMutation,
+  DfqlTransact,
+  DfqlSort,
+  DfqlCursor,
+} from "@datafn/core";
+```
+
+The `DfqlQueryFragment` and `DfqlMutationFragment` types omit the `resource` and `version` fields, which are useful when working through client table handles that inject those fields automatically.
+
+Capability semantics are schema-driven. See [Capabilities](/docs/documentation/concepts/capabilities).
+
+## Normalization and Caching
+
+DFQL objects can be normalized to a canonical form for use as cache keys:
+
+```typescript
+import { normalizeDfql, dfqlKey } from "@datafn/core";
+
+// Canonical JSON representation (sorted keys, stripped undefined)
+const normalized = normalizeDfql(query);
+
+// Stable string key for caching
+const key = dfqlKey(query);
+```
+
+`normalizeDfql` recursively sorts object keys alphabetically, strips `undefined` values, and preserves `null`. `dfqlKey` produces a deterministic JSON string from the normalized form.

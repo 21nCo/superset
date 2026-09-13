@@ -1,0 +1,56 @@
+---
+title: "SPV2 Migration"
+description: "Roll out Sharing Permissions V2 safely with backfill, dual-read, dual-write, and rollback controls."
+audience: guide
+applies_to: both
+---
+
+Use this guide to migrate from legacy per-resource permissions to SPV2 global principal permissions.
+
+## Migration Goals
+
+- Keep authorization decisions stable during rollout.
+- Canonicalize legacy user identifiers into principal identifiers.
+- Allow rollback if production checks fail.
+
+## Runtime Modes
+
+- `readMode: "v2"` (default): Read SPV2 only.
+- `readMode: "dual"`: Read both legacy and SPV2, combine decisions safely.
+- `readMode: "v1"`: Rollback read path to legacy.
+- `writeMode: "v2"` (default): Write SPV2 only.
+- `writeMode: "dual"`: Write SPV2 and mirror legacy rows.
+
+## Rollout Steps
+
+1. Deploy code with migration runtime flags available.
+2. Run backfill from legacy permission tables into global permissions.
+3. Switch to dual-read and dual-write during verification window.
+4. Validate equivalent access outcomes and sync visibility.
+5. Move to `readMode: "v2"` and `writeMode: "v2"`.
+
+## Backfill Behavior
+
+Backfill is idempotent:
+
+- Active legacy grants are migrated once.
+- Canonical principal format is enforced (`user:bob`, not plain `bob`).
+- Conflicting duplicate grants fail deterministically with `CONFLICT`.
+
+## Rollback Plan
+
+If cutover is halted:
+
+1. Set `readMode: "v1"`.
+2. Keep `writeMode: "dual"` during investigation.
+3. Resolve data issue.
+4. Re-run backfill if needed.
+5. Return to dual-read, then v2-only.
+
+## Compatibility Window
+
+Legacy API calls that send `shareWith.userId` are accepted during compatibility period and canonicalized to `shareWith.principalId`.
+
+This supports no-downtime upgrades for older clients while migration dashboards track deprecated payload usage.
+
+For operational runbook details, see `datafn/.conduct/migrations/spv2-rollout-runbook.md`.

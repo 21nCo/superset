@@ -1,0 +1,9 @@
+{
+  "title": "Vector Retrieval Playbook",
+  "root": true,
+  "pages": [
+    { "key": "index", "label": "Overview" },
+    { "key": "ingestion", "label": "Ingestion" },
+    { "key": "evaluation", "label": "Evaluation" }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "title": "Evaluation",
+  "root": true,
+  "pages": [
+    { "key": "index", "label": "Overview" },
+    { "key": "offline", "label": "Offline evaluation" }
+  ]
+}

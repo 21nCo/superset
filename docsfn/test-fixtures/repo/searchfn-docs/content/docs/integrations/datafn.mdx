@@ -1,0 +1,125 @@
+---
+title: DataFn Integration
+description: Connect SearchFn adapters to DataFn as a search provider.
+---
+
+The `@searchfn/datafn-provider` package bridges any SearchFn adapter into DataFn's search provider interface. This lets DataFn use SearchFn for full-text search without coupling to a specific search backend.
+
+## Installation
+
+```bash
+npm install @searchfn/datafn-provider @searchfn/adapter-meilisearch
+```
+
+## Usage
+
+Create a search provider by passing any SearchFn adapter to `createSearchProvider`:
+
+```typescript
+import { createSearchProvider } from "@searchfn/datafn-provider";
+import { MeilisearchAdapter } from "@searchfn/adapter-meilisearch";
+
+const adapter = new MeilisearchAdapter({
+  host: process.env.MEILI_URL!,
+  apiKey: process.env.MEILI_API_KEY!,
+});
+
+const provider = createSearchProvider(adapter, {
+  resourceFields: {
+    tasks: ["title", "description"],
+    notes: ["content", "tags"],
+  },
+});
+```
+
+Then pass the provider to your DataFn server:
+
+```typescript
+import { createDatafnServer } from "@datafn/server";
+
+const server = await createDatafnServer({
+  schema,
+  db: drizzleAdapter({ db, dialect: "postgres" }),
+  search: provider,
+});
+```
+
+### Client-Side Setup
+
+Pass the same provider (or a client-appropriate adapter) to `createDatafnClient` for local-first search:
+
+```typescript
+import { createDatafnClient } from "@datafn/client";
+import { createSearchProvider } from "@searchfn/datafn-provider";
+import { IndexedDbAdapter } from "@searchfn/adapter-indexeddb";
+
+const searchProvider = createSearchProvider(
+  new IndexedDbAdapter({
+    dbName: "my-app-search",
+    defaults: { prefix: true, fuzzy: 0.2 },
+  }),
+  {
+    resourceFields: {
+      tasks: ["title", "description"],
+      notes: ["content", "tags"],
+    },
+  },
+);
+
+const client = createDatafnClient({
+  schema,
+  clientId,
+  storage,
+  searchProvider,
+});
+```
+
+With `searchProvider` configured on the client, DFQL `search` blocks and `client.search()` calls execute locally using the IndexedDB adapter. The client falls back to server search when the local index is not yet ready.
+
+## Configuration
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `resourceFields` | `Record<string, string[]>` | Maps resource names to the record fields that should be indexed for search. Falls back to all fields except `id` when omitted. |
+
+### Resource Fields
+
+The `resourceFields` option controls which record fields become searchable. When DataFn indexes a record, only the fields listed here are sent to the search adapter:
+
+```typescript
+const provider = createSearchProvider(adapter, {
+  resourceFields: {
+    tasks: ["title", "description"],
+    notes: ["content"],
+  },
+});
+```
+
+If `resourceFields` is omitted or a resource is not listed, the provider indexes all record fields except `id`.
+
+## Provider Methods
+
+The provider implements DataFn's `SearchProvider` interface:
+
+| Method | Description |
+| --- | --- |
+| `search` | Search a single resource. Calls `adapter.search` and returns IDs as strings. |
+| `searchAll` | Search across resources. Uses `adapter.searchAll` when available, otherwise runs per-resource searches concurrently (max 10) and merges results by score. |
+| `updateIndices` | Called by DataFn on mutations. For `upsert`, maps records to search documents using `resourceFields` and calls `adapter.index`. For `delete`, calls `adapter.remove`. |
+| `initialize` | Delegates to `adapter.initialize` when the adapter supports it. |
+| `dispose` | Delegates to `adapter.dispose` when the adapter supports it. |
+
+## Behavior
+
+- **Abort signals** — all provider methods forward abort signals to the underlying adapter.
+- **searchAll fallback** — if the adapter does not implement `searchAll`, the provider runs per-resource `search` calls concurrently (up to 10 at a time) and merges results with deterministic score-based ordering.
+- **ID coercion** — the provider returns all IDs as strings to match DataFn's ID format.
+
+## Adapter Recommendations
+
+| Use case | Recommended adapter |
+| --- | --- |
+| Development and tests | `MemoryAdapter` |
+| Small production apps | `PostgresAdapter` |
+| User-facing search | `MeilisearchAdapter` |
+| Large-scale search | `ElasticsearchAdapter` |

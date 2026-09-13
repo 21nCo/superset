@@ -1,0 +1,243 @@
+---
+title: Custom Plugins
+description: Build your own DataFn plugins.
+audience: guide
+applies_to: both
+---
+
+This guide walks through building a custom DataFn plugin from scratch.
+
+## Plugin Structure
+
+A plugin is an object implementing the `DatafnPlugin` interface:
+
+```typescript
+import type { DatafnPlugin, DatafnHookContext } from "@datafn/core";
+
+const myPlugin: DatafnPlugin = {
+  name: "my-plugin",
+  runsOn: ["client", "server"],
+
+  beforeQuery(ctx, query) { /* ... */ },
+  afterQuery(ctx, query, result) { /* ... */ },
+  beforeMutation(ctx, mutation) { /* ... */ },
+  afterMutation(ctx, mutation, result) { /* ... */ },
+  beforeSync(ctx, payload, ...args) { /* ... */ },
+  afterSync(ctx, payload, result, ...args) { /* ... */ },
+};
+```
+
+All hooks are optional. Implement only the ones you need.
+
+## Before Hook Return Values
+
+Before hooks can either pass through, transform, or reject:
+
+```typescript
+// Pass through (return the input unchanged)
+beforeQuery(ctx, query) {
+  return query;
+}
+
+// Transform (return modified input)
+beforeQuery(ctx, query) {
+  return { ...query, limit: Math.min(query.limit ?? 100, 1000) };
+}
+
+// Reject (throw an error)
+beforeMutation(ctx, mutation) {
+  if (mutation.resource === "settings" && ctx.env === "client") {
+    throw new Error("Settings can only be modified on the server");
+  }
+  return mutation;
+}
+```
+
+### BeforeHookResult Type
+
+The core hook runner uses a result type internally:
+
+```typescript
+type BeforeHookResult =
+  | { ok: true; value: unknown }
+  | { ok: false; error: HookError };
+
+type HookError = {
+  code: string;
+  message: string;
+  pluginName?: string;
+};
+```
+
+Before hooks are **fail-closed**: the first error stops the chain and the operation is rejected.
+
+## After Hook Behavior
+
+After hooks are **fail-open**: errors are logged but do not affect the operation result.
+
+```typescript
+afterMutation(ctx, mutation, result) {
+  // This error is caught and logged, not propagated
+  sendAnalyticsEvent(mutation);
+}
+```
+
+On the server, `afterQuery` hooks can transform the result:
+
+```typescript
+afterQuery(ctx, query, result) {
+  // Redact sensitive fields from the result
+  if (Array.isArray(result)) {
+    return result.map(record => {
+      const { ssn, ...rest } = record;
+      return rest;
+    });
+  }
+  return result;
+}
+```
+
+## Hook Utilities
+
+DataFn provides `runBeforeHook` and `runAfterHook` utilities in `@datafn/core`:
+
+```typescript
+import { runBeforeHook, runAfterHook } from "@datafn/core";
+
+// Run before hooks with environment filtering
+const result = await runBeforeHook(
+  plugins,
+  "server",          // Environment filter
+  "beforeQuery",     // Hook name
+  hookContext,        // DatafnHookContext
+  queryPayload,      // Input
+);
+
+if (!result.ok) {
+  console.error("Hook rejected:", result.error);
+}
+
+// Run after hooks (fail-open)
+await runAfterHook(
+  plugins,
+  "server",
+  "afterQuery",
+  hookContext,
+  queryPayload,
+  queryResult,
+);
+```
+
+## Example: Audit Logging Plugin
+
+A plugin that logs all mutations to an audit trail:
+
+```typescript
+import type { DatafnPlugin, DatafnHookContext } from "@datafn/core";
+
+interface AuditEntry {
+  timestamp: string;
+  resource: string;
+  operation: string;
+  recordId: string;
+  userId?: string;
+}
+
+export function createAuditPlugin(options: {
+  onAudit: (entry: AuditEntry) => void;
+}): DatafnPlugin {
+  return {
+    name: "audit-log",
+    runsOn: ["server"],
+
+    afterMutation(ctx: DatafnHookContext, mutation: unknown, result: unknown) {
+      const m = mutation as Record<string, unknown>;
+      options.onAudit({
+        timestamp: new Date().toISOString(),
+        resource: m.resource as string,
+        operation: m.operation as string,
+        recordId: m.id as string,
+      });
+    },
+  };
+}
+
+// Usage
+const auditPlugin = createAuditPlugin({
+  onAudit: (entry) => db.insert("audit_log", entry),
+});
+```
+
+## Example: Field Transformation Plugin
+
+A plugin that normalizes email addresses to lowercase on mutations:
+
+```typescript
+export function createEmailNormalizerPlugin(options: {
+  resources: string[];
+  emailField?: string;
+}): DatafnPlugin {
+  const resourceSet = new Set(options.resources);
+  const field = options.emailField ?? "email";
+
+  return {
+    name: "email-normalizer",
+    runsOn: ["client", "server"],
+
+    beforeMutation(ctx: DatafnHookContext, mutation: unknown) {
+      const m = mutation as Record<string, unknown>;
+
+      if (!resourceSet.has(m.resource as string)) return mutation;
+
+      const record = m.record as Record<string, unknown> | undefined;
+      if (!record || typeof record[field] !== "string") return mutation;
+
+      return {
+        ...m,
+        record: {
+          ...record,
+          [field]: (record[field] as string).toLowerCase().trim(),
+        },
+      };
+    },
+  };
+}
+```
+
+## Example: Query Limit Plugin
+
+A plugin that enforces a maximum query limit to prevent accidental full-table scans:
+
+```typescript
+export function createMaxLimitPlugin(maxLimit: number = 1000): DatafnPlugin {
+  return {
+    name: "max-limit",
+    runsOn: ["server"],
+
+    beforeQuery(ctx: DatafnHookContext, query: unknown) {
+      const q = query as Record<string, unknown>;
+      const currentLimit = q.limit as number | undefined;
+
+      if (!currentLimit || currentLimit > maxLimit) {
+        return { ...q, limit: maxLimit };
+      }
+
+      return query;
+    },
+  };
+}
+```
+
+## Registration Order
+
+Plugins execute in the order they are registered. Place plugins that modify data before plugins that validate data:
+
+```typescript
+const client = createDatafnClient({
+  schema,
+  plugins: [
+    createEmailNormalizerPlugin({ resources: ["users"] }),  // Transform first
+    createMaxLimitPlugin(500),                               // Then enforce limits
+  ],
+});
+```

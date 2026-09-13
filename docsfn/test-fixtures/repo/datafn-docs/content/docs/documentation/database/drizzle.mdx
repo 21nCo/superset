@@ -1,0 +1,144 @@
+---
+title: Drizzle Adapter
+description: Use Drizzle ORM as your database backend.
+audience: guide
+applies_to: both
+---
+
+The Drizzle adapter connects DataFn to PostgreSQL, MySQL, or SQLite databases using [Drizzle ORM](https://orm.drizzle.team).
+
+## Supported Databases
+
+| Database | Dialect | JSON Type |
+|----------|---------|-----------|
+| PostgreSQL | `postgres` | `jsonb` |
+| MySQL | `mysql` | `json` |
+| SQLite | `sqlite` | `text` (JSON-serialized) |
+
+## Setup
+
+```typescript
+import { drizzle } from "drizzle-orm/node-postgres";
+import { drizzleAdapter } from "@superfunctions/db/adapters";
+
+const db = drizzle(connectionString);
+
+const adapter = drizzleAdapter({
+  db,
+  dialect: "postgres",
+  schema: drizzleSchema,          // Generated Drizzle schema
+  rowLevelNamespace: {
+    enabled: true,                // Enable multi-tenant isolation
+  },
+});
+```
+
+## Type Mapping
+
+DataFn field types map to database column types:
+
+| DataFn Type | PostgreSQL | MySQL | SQLite |
+|-------------|-----------|-------|--------|
+| `string` | `text` | `text` | `text` |
+| `number` | `integer` | `integer` | `integer` |
+| `boolean` | `boolean` | `boolean` | `integer` |
+| `date` | `timestamp` | `timestamp` | `text` |
+| `json` / `object` | `jsonb` | `json` | `text` |
+| `file` | `varchar` | `varchar` | `text` |
+| `array` | `jsonb` | `json` | `text` |
+
+## Namespace Column
+
+When row-level namespace isolation is enabled, every table includes a `__ns` column. The adapter automatically:
+
+- Adds `__ns` to all `INSERT` statements.
+- Filters all `SELECT`, `UPDATE`, and `DELETE` queries by `__ns`.
+- Prevents cross-tenant data access at the query level.
+
+The namespace value is derived from the authenticated user's tenant on the server. It is never supplied by the client.
+
+```sql
+-- What the adapter generates internally:
+SELECT * FROM todos WHERE __ns = 'tenant-abc' AND status = 'active';
+INSERT INTO todos (id, title, __ns) VALUES ('t1', 'Buy milk', 'tenant-abc');
+```
+
+## CLI Codegen
+
+The DataFn CLI generates Drizzle schema files from your DataFn schema:
+
+```bash
+datafn generate --adapter drizzle --database postgres --schema ./schema.datafn.ts --output ./
+```
+
+This produces a Drizzle-compatible schema with:
+
+- Table definitions for each resource.
+- Column types mapped from DataFn field types.
+- The `__ns` column for namespace isolation.
+- Capability-injected fields when enabled (for example `createdAt`, `updatedAt`, `createdBy`, `updatedBy`, `trashedAt`, `trashedBy`, `isArchived`).
+- Foreign key columns inferred from relations.
+- Join tables for many-many relations.
+
+Example generated output:
+
+```typescript
+import { pgTable, text, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+
+export const todos = pgTable("todos", {
+  id: text("id").primaryKey(),
+  __ns: text("__ns").notNull(),
+  title: text("title").notNull(),
+  status: text("status"),
+  priority: integer("priority"),
+  createdAt: timestamp("createdAt"),
+  updatedAt: timestamp("updatedAt"),
+});
+```
+
+The exact capability columns are generated from your schema's resolved capabilities per resource.
+
+## Internal Tables
+
+The Drizzle adapter creates internal tables using raw SQL (via `adapter.internal`), bypassing the Drizzle ORM schema resolution. These tables follow the `__datafn_*` naming convention:
+
+```sql
+CREATE TABLE IF NOT EXISTS __datafn_meta (
+  id TEXT PRIMARY KEY,
+  namespace TEXT,
+  next_server_seq INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS __datafn_changes (
+  id TEXT PRIMARY KEY,
+  namespace TEXT,
+  server_seq INTEGER,
+  resource TEXT,
+  record_id TEXT,
+  op TEXT,
+  record TEXT,
+  created_at TEXT
+);
+```
+
+## Dialect-Aware Execution
+
+The adapter detects the dialect and uses the appropriate execution method:
+
+- **PostgreSQL / MySQL**: Uses `db.execute()` for queries.
+- **SQLite**: Uses `db.run()` for writes and `db.all()` for reads.
+
+## Transaction Support
+
+The Drizzle adapter delegates transactions to the underlying Drizzle instance:
+
+```typescript
+await adapter.transaction(async (trx) => {
+  await trx.create({ model: "todos", data: { id: "t1", title: "Buy milk" } });
+  await trx.update({
+    model: "projects",
+    where: [{ field: "id", operator: "eq", value: "p1" }],
+    data: { todoCount: 5 },
+  });
+});
+```

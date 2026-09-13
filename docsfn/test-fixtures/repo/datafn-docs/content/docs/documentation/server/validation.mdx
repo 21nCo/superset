@@ -1,0 +1,141 @@
+---
+title: "Validation"
+description: "Request validation and schema compliance checks."
+audience: guide
+applies_to: both
+---
+
+## Overview
+
+Every query and mutation is validated against the schema before execution. Validation catches structural errors, unknown fields, limit violations, and prototype pollution attempts. Errors are returned as structured objects with a `code`, `message`, and `path` pointing to the invalid location.
+
+## Query Validation
+
+The following checks are applied to every query:
+
+| Check | Description |
+|-------|-------------|
+| Resource exists | The `resource` field must reference a resource defined in the schema. |
+| Field names valid | Fields in `select`, `filters`, `sort`, `groupBy`, `having`, and `search.fields` must exist in the schema. |
+| Relation names valid | Relation tokens in `select` and `filters` must reference defined relations. |
+| Select tokens parseable | Each token in `select` is parsed and validated (e.g., `"assignee.*"`, `"tags.#"`). |
+| Filter depth bounded | Filter nesting depth is capped at 10 levels. |
+| Relation depth bounded | Relation expansion depth in select tokens is capped at 5 levels. |
+| Prototype pollution | Filter objects are checked for disallowed keys (`__proto__`, `constructor`, `prototype`). |
+
+Capability-injected fields are included in query field validation based on resolved capabilities for the target resource.
+
+### Query Limits
+
+| Limit | Default | Config Key | Description |
+|-------|---------|------------|-------------|
+| Max select tokens | 50 | `maxSelectTokens` | Maximum number of tokens in a `select` array. |
+| Max filter keys per level | 20 | `maxFilterKeysPerLevel` | Maximum number of keys at each filter nesting level. |
+| Max sort fields | 10 | `maxSortFields` | Maximum number of fields in a `sort` array. |
+| Max aggregations | 20 | `maxAggregations` | Maximum number of aggregation definitions. |
+| Max LIKE pattern length | 200 | -- | Maximum character length for `$like` and `$ilike` patterns. |
+| Max search query length | 1000 | -- | Maximum character length for `search.query`. |
+
+When a limit is exceeded, the server returns a `DFQL_INVALID` or `LIMIT_EXCEEDED` error:
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "DFQL_INVALID",
+    "message": "Select exceeds limit: 55 tokens (max 50)",
+    "details": { "path": "select" }
+  }
+}
+```
+
+### Cursor Validation
+
+When cursor-based pagination is used (`cursor.after` or `cursor.before`), the query must include a `sort` with `id` as the last tie-breaker field. If `sort` is absent, it defaults to `["id:asc"]`.
+
+## Mutation Validation
+
+The following checks are applied to every mutation:
+
+| Check | Description |
+|-------|-------------|
+| Mutation is object | The body must be a plain object (not array, null, or primitive). |
+| Resource exists | The `resource` field must reference a defined resource. |
+| Operation valid | Must be one of: `insert`, `merge`, `replace`, `delete`, `trash`, `restore`, `archive`, `unarchive`, `share`, `unshare`, `relate`, `modifyRelation`, `unrelate`. |
+| ID is string | The `id` field must be a string within `maxIdLength` (default: 255). |
+| ID prefix matches | If the resource defines `idPrefix`, the ID must start with that prefix. |
+| Record keys match schema | For `insert`, `merge`, and `replace`, all keys in `record` must be recognized fields or relations. |
+| Required fields present | For `insert` and `replace`, required fields without defaults must be present. |
+| Field types valid | Field values are validated against their declared types in the schema. |
+| Relation names valid | For `relate`, `modifyRelation`, `unrelate`, the `relations` object keys must reference defined relations. |
+| Guard filter valid | The optional `if` guard object keys must reference readable fields. |
+| clientId / mutationId | If present, must be non-empty strings of at most 255 characters. |
+| version | If present, must be a positive integer. |
+| Prototype pollution | The entire mutation object is checked for disallowed keys. |
+
+### Capability-aware validation rules
+
+- `trash`/`restore` require `trash` capability on the resource.
+- `archive`/`unarchive` require `archivable` capability.
+- `share`/`unshare` require `shareable` capability and validate `shareWith`.
+- readonly capability fields are stripped before execution routes process records.
+
+### Mutation Limits
+
+| Limit | Default | Config Key | Description |
+|-------|---------|------------|-------------|
+| Max ID length | 255 | `maxIdLength` | Maximum character length for the `id` field. |
+| Max transact steps | 100 | `maxTransactSteps` | Maximum steps in a `/datafn/transact` request. |
+| Max payload bytes | 5,242,880 | `maxPayloadBytes` | Maximum request body size. |
+
+## Batch Validation
+
+Both query and mutation endpoints accept batch requests (JSON arrays). Each item in the batch is validated independently. On failure, the error includes an `index` property identifying which item failed:
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "DFQL_UNKNOWN_RESOURCE",
+    "message": "Unknown resource: nonexistent",
+    "details": { "path": "$[2].resource", "index": 2 }
+  }
+}
+```
+
+## Push Validation
+
+The `/datafn/push` endpoint validates all mutations in the `mutations` array and collects all errors (non-fail-fast). This allows clients to see every validation issue in a single response rather than fixing them one at a time.
+
+## Prototype Pollution Protection
+
+All filter objects, mutation bodies, and record objects are scanned for keys that could trigger prototype pollution:
+
+- `__proto__`
+- `constructor`
+- `prototype`
+
+If any of these keys are detected, the request is rejected with `DFQL_INVALID`:
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "DFQL_INVALID",
+    "message": "Disallowed key: __proto__",
+    "details": { "path": "filters" }
+  }
+}
+```
+
+## Error Codes
+
+| Code | HTTP Status | Description |
+|------|-------------|-------------|
+| `DFQL_INVALID` | 400 | Structural error in the request body. |
+| `DFQL_UNKNOWN_RESOURCE` | 400 | The referenced resource does not exist in the schema. |
+| `DFQL_UNKNOWN_FIELD` | 400 | A field name is not recognized for the resource. |
+| `DFQL_UNKNOWN_RELATION` | 400 | A relation name is not recognized for the resource. |
+| `DFQL_UNSUPPORTED` | 400 | The request uses an unsupported feature (e.g., `filters.$or`). |
+| `LIMIT_EXCEEDED` | 400 | A configured limit was exceeded. |
+| `FORBIDDEN` | 403 | Authorization denied. |

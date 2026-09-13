@@ -1,0 +1,83 @@
+---
+title: Cross-Tab Sync
+description: Synchronize state between browser tabs.
+audience: guide
+applies_to: both
+---
+
+DataFn supports cross-tab synchronization using the browser `BroadcastChannel` API. When enabled, mutation events from one tab are relayed to all other tabs sharing the same namespace, providing near-instant reactivity across browser tabs.
+
+## Enabling Cross-Tab Sync
+
+```typescript
+const client = createDatafnClient({
+  schema,
+  sync: { crossTab: true },
+});
+```
+
+## How It Works
+
+The `CrossTabRelay` creates a `BroadcastChannel` scoped to the DataFn namespace (`datafn:<namespace>`). Each tab generates a unique `tabId` on initialization.
+
+When a mutation is applied locally, the event is sanitized and broadcast to other tabs. Receiving tabs emit the event on their local event bus, triggering UI updates.
+
+### Broadcast Flow
+
+1. Tab A applies a mutation.
+2. Tab A's event bus emits a `mutation_applied` event.
+3. The `CrossTabRelay` sanitizes the event (strips record data) and broadcasts it.
+4. Tab B receives the broadcast via `BroadcastChannel.onmessage`.
+5. Tab B validates the message shape, checks it did not originate from itself, and emits the event on its local event bus.
+
+## Sanitized Payloads
+
+For security and performance, broadcast messages contain only metadata. Full record data is never sent between tabs:
+
+```typescript
+interface RelayEvent {
+  sourceTabId: string;
+  event: {
+    type: string;        // e.g., "mutation_applied"
+    resource?: string;   // Resource name
+    ids?: string[];      // Affected record IDs
+    mutationId?: string;
+    clientId?: string;
+    timestampMs: number;
+    action?: string;     // e.g., "insert", "merge", "delete"
+    fields?: string[];   // Changed fields
+    system?: boolean;
+  };
+}
+```
+
+## Echo Prevention
+
+Each tab has a unique `tabId`. When a tab receives a broadcast, it checks the `sourceTabId` and discards messages that originated from itself. This prevents infinite relay loops.
+
+## Message Validation
+
+Incoming messages are validated with a runtime type guard before processing. Messages with an invalid shape or unknown event types are silently discarded. This protects against malformed messages from rogue browser extensions or XSS attacks.
+
+Valid event types:
+
+- `mutation_applied`
+- `mutation_rejected`
+- `sync_applied`
+- `sync_failed`
+- `sync_retry`
+- `connectivity_changed`
+- `ws_connected`
+- `ws_disconnected`
+
+## Cleanup
+
+The relay channel is closed when the client is destroyed:
+
+```typescript
+await client.destroy(); // Stops sync and closes BroadcastChannel resources
+```
+
+## Environment Support
+
+`BroadcastChannel` is available in all modern browsers. In environments where it is not available (such as server-side rendering or older browsers), the relay is silently disabled. No errors are thrown.

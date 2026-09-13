@@ -1,0 +1,190 @@
+---
+title: Getting Started
+description: Install SearchFn, index documents, and run your first search query in minutes.
+---
+
+## Packages
+
+SearchFn is split into focused packages. Install only what you need:
+
+| Package | Purpose |
+| --- | --- |
+| `@searchfn/core` | Built-in search engine (text pipeline, BM25 scoring, inverted index, fuzzy matching) |
+| `@searchfn/adapter-contracts` | Shared adapter interface and types (`SearchAdapter`, params, capabilities) |
+| `@searchfn/adapter-memory` | In-process adapter backed by `@searchfn/core` |
+| `@searchfn/adapter-indexeddb` | Browser-persistent adapter backed by `@searchfn/core` |
+| `@searchfn/adapter-postgres` | Postgres adapter (`tsvector`/`tsquery`) |
+| `@searchfn/adapter-meilisearch` | Meilisearch adapter |
+| `@searchfn/adapter-elasticsearch` | Elasticsearch adapter |
+| `@searchfn/adapter-opensearch` | OpenSearch adapter |
+| `@searchfn/client` | Client API for app code that calls search directly (browser or Node) |
+| `@searchfn/server` | HTTP server exposing `/searchfn/*` endpoints with authorization and logging |
+| `@searchfn/datafn-provider` | DataFn integration — maps any adapter into a DataFn SearchProvider |
+
+## Installation
+
+For client-side or in-process search (uses the built-in search engine):
+
+```bash
+npm install @searchfn/client @searchfn/adapter-memory
+```
+
+For server-side HTTP search API:
+
+```bash
+npm install @searchfn/server @searchfn/adapter-memory
+```
+
+## Quick Start
+
+The quickstart uses `MemoryAdapter`, which runs SearchFn's built-in search engine in-process. No external services required — this is the same engine that powers production in-process and offline-first search.
+
+### 1. Create a Client
+
+```typescript
+import { createSearchClient } from "@searchfn/client";
+import { MemoryAdapter } from "@searchfn/adapter-memory";
+
+const client = createSearchClient({
+  adapter: new MemoryAdapter(),
+  defaults: {
+    limit: 20,
+    limitPerResource: 10,
+    fuzzy: true,
+  },
+});
+```
+
+### 2. Initialize Resources
+
+Before indexing, declare which resources exist and which fields are searchable:
+
+```typescript
+await client.initialize?.({
+  resources: [
+    { name: "tasks", searchFields: ["title", "description"] },
+    { name: "notes", searchFields: ["content"] },
+  ],
+});
+```
+
+### 3. Index Documents
+
+```typescript
+await client.index({
+  resource: "tasks",
+  documents: [
+    { id: "t-1", fields: { title: "Ship docs", description: "Write getting started guide" } },
+    { id: "t-2", fields: { title: "Fix bug", description: "Handle retry logic" } },
+    { id: "t-3", fields: { title: "Plan launch", description: "Coordinate docs and release" } },
+  ],
+});
+```
+
+### 4. Search
+
+```typescript
+const ids = await client.search({
+  resource: "tasks",
+  query: "docs",
+  limit: 5,
+});
+
+console.log(ids); // ["t-1", "t-3"]
+```
+
+### 5. Search Across Resources
+
+```typescript
+const results = await client.searchAll({
+  query: "docs",
+  resources: ["tasks", "notes"],
+  limitPerResource: 5,
+});
+
+// [{ resource: "tasks", id: "t-1", score: 1.2 }, ...]
+```
+
+## Server Quick Start
+
+The server wraps any adapter behind HTTP endpoints with built-in validation, authorization, and structured logging.
+
+```typescript
+import { createSearchFnServer } from "@searchfn/server";
+import { MemoryAdapter } from "@searchfn/adapter-memory";
+
+const server = await createSearchFnServer({
+  adapter: new MemoryAdapter(),
+  basePath: "/searchfn",
+});
+
+// Mount server.router with your @superfunctions/http adapter (Express, Fastify, Hono, etc.)
+```
+
+The server exposes these endpoints under the configured `basePath`:
+
+| Endpoint | Method | Description |
+| --- | --- | --- |
+| `/searchfn/status` | GET | Health check and adapter info |
+| `/searchfn/index` | POST | Index documents into a resource |
+| `/searchfn/search` | POST | Search a single resource |
+| `/searchfn/search-all` | POST | Search across multiple resources |
+| `/searchfn/remove` | POST | Remove documents by ID |
+| `/searchfn/clear` | POST | Clear all documents in a resource |
+
+## Convenience Constructors
+
+For common setups, use the built-in shorthand constructors:
+
+```typescript
+import { createMemorySearchClient, createIndexedDbSearchClient } from "@searchfn/client";
+
+const memoryClient = createMemorySearchClient({
+  defaults: { limit: 20, fuzzy: true },
+});
+
+const browserClient = createIndexedDbSearchClient({
+  adapterConfig: { dbName: "my-app-search" },
+  defaults: { limit: 20, fuzzy: true },
+});
+```
+
+## Breaking Change and Migration
+
+The legacy aggregate adapters package has been removed. SearchFn now ships one package per adapter plus `@searchfn/adapter-contracts`.
+
+### Package Mapping
+
+| Legacy package (aggregate) | New package(s) |
+| --- | --- |
+| `searchfn adapters aggregate` | `@searchfn/adapter-contracts` + one or more leaf adapter packages |
+
+### Import Mapping
+
+| Legacy import (aggregate package path) | New import |
+| --- | --- |
+| `import { MemoryAdapter } from "<legacy-adapters-package>"` | `import { MemoryAdapter } from "@searchfn/adapter-memory"` |
+| `import { IndexedDbAdapter } from "<legacy-adapters-package>"` | `import { IndexedDbAdapter } from "@searchfn/adapter-indexeddb"` |
+| `import { PostgresAdapter, getPostgresMigrationSQL } from "<legacy-adapters-package>"` | `import { PostgresAdapter, getPostgresMigrationSQL } from "@searchfn/adapter-postgres"` |
+| `import { MeilisearchAdapter } from "<legacy-adapters-package>"` | `import { MeilisearchAdapter } from "@searchfn/adapter-meilisearch"` |
+| `import { ElasticsearchAdapter } from "<legacy-adapters-package>"` | `import { ElasticsearchAdapter } from "@searchfn/adapter-elasticsearch"` |
+| `import { OpenSearchAdapter } from "<legacy-adapters-package>"` | `import { OpenSearchAdapter } from "@searchfn/adapter-opensearch"` |
+
+### Dependency Mapping
+
+| Legacy dependency (aggregate package) | New dependency |
+| --- | --- |
+| `searchfn adapters aggregate` | `@searchfn/adapter-memory` (if using `MemoryAdapter`) |
+| `searchfn adapters aggregate` | `@searchfn/adapter-indexeddb` (if using `IndexedDbAdapter`) |
+| `searchfn adapters aggregate` | `@searchfn/adapter-postgres` (if using `PostgresAdapter`) |
+| `searchfn adapters aggregate` | `@searchfn/adapter-meilisearch` (if using `MeilisearchAdapter`) |
+| `searchfn adapters aggregate` | `@searchfn/adapter-elasticsearch` (if using `ElasticsearchAdapter`) |
+| `searchfn adapters aggregate` | `@searchfn/adapter-opensearch` (if using `OpenSearchAdapter`) |
+
+## Next Steps
+
+- [Architecture](/docs/architecture) — search engine internals and adapter contract.
+- [Adapters](/docs/reference/adapters) — choose the right adapter for your use case.
+- [Client API](/docs/reference/client) — full method reference.
+- [Server API](/docs/reference/server) — endpoint details and authorization.
+- [Operations](/docs/operations/setup) — deployment, limits, and production setup.

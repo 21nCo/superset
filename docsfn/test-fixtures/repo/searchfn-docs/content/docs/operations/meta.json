@@ -1,0 +1,9 @@
+{
+  "title": "Operations",
+  "pages": [
+    "setup",
+    "security",
+    "observability",
+    "troubleshooting"
+  ]
+}

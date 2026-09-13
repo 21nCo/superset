@@ -1,0 +1,122 @@
+---
+title: Clone Up
+description: Upload offline changes to the remote server.
+audience: guide
+applies_to: both
+---
+
+Clone Up is the inverse of clone. It uploads all locally stored records to the remote server, typically used when a client has been creating data offline and needs to sync everything to the server in bulk.
+
+## Usage
+
+```typescript
+const result = await client.sync.cloneUp({
+  resources: ["todos", "projects"],
+  recordOperation: "merge",
+  batchSize: 100,
+  maxRetries: 3,
+});
+```
+
+## Options
+
+```typescript
+type CloneUpOptions = {
+  resources?: string[];               // Which resources to upload (default: all)
+  includeManyMany?: boolean;           // Include join rows (default: true)
+  recordOperation?: "merge" | "replace" | "insert";  // How to apply records (default: "merge")
+  batchSize?: number;                  // Records per push batch (default: 100)
+  maxRetries?: number;                 // Retry count for transport errors (default: 3)
+  failFast?: boolean;                  // Stop on first error (default: true)
+  clearChangelogOnSuccess?: boolean;   // Drain changelog after upload (default: true)
+  setGlobalCursorOnSuccess?: boolean;  // Update global cursor (default: true)
+  pullAfter?: boolean;                 // Pull to catch up after upload (default: true)
+  mutationIdPrefix?: string;           // Prefix for generated mutation IDs (default: "cloneup")
+};
+```
+
+## Result
+
+```typescript
+type CloneUpResult = {
+  ok: boolean;
+  cursor: string;
+  stats: {
+    resources: Record<string, { records: number; mutations: number }>;
+    joinStores: Record<string, { rows: number; mutations: number }>;
+    batches: number;
+  };
+  errors: Array<{
+    mutationId: string;
+    code: string;
+    message: string;
+    path: string;
+  }>;
+};
+```
+
+## How It Works
+
+Clone Up proceeds in two stages:
+
+### Stage A: Upload Records
+
+For each resource in scope:
+
+1. Read all records from local storage.
+2. Sort records by ID for deterministic ordering.
+3. Filter record fields to only include fields defined in the schema.
+4. Compute a content hash for each record to generate a deterministic `mutationId`.
+5. Batch mutations and push to the server with retry logic.
+
+### Stage B: Upload Join Rows (Many-Many)
+
+For each many-many relation involving the uploaded resources:
+
+1. Read all join rows from the local join store.
+2. Sort by `from` and `to` for deterministic ordering.
+3. Generate `relate` mutations with content-hashed mutation IDs.
+4. Batch and push to the server.
+
+### Finalization
+
+After all uploads complete:
+
+1. **Pull catch-up**: If `pullAfter` is not disabled, perform incremental pulls from the starting cursor to apply any changes made by other clients during the upload.
+2. **Cursor update**: Set the global cursor to the highest cursor returned by push responses.
+3. **Changelog drain**: If `clearChangelogOnSuccess` is not disabled, remove all entries from the changelog.
+
+## Idempotency
+
+Mutation IDs are derived from the record content using a deterministic hash. This means re-running clone up with the same data produces the same mutation IDs, and the server deduplicates them automatically.
+
+```
+mutationId = "cloneup:rec:todos:t1:<content-hash>"
+```
+
+## Error Handling
+
+With `failFast: true` (default), the first server error aborts the entire operation. Set `failFast: false` to continue uploading remaining records and collect all errors:
+
+```typescript
+const result = await client.sync.cloneUp({ failFast: false });
+
+if (!result.ok) {
+  console.error(`${result.errors.length} mutations failed`);
+  for (const err of result.errors) {
+    console.error(`  ${err.mutationId}: ${err.message}`);
+  }
+}
+```
+
+## Events
+
+Clone Up emits a `sync_applied` event on success or `sync_failed` on error:
+
+```typescript
+client.subscribe((event) => {
+  if (event.type === "sync_applied" && event.context.phase === "cloneUp") {
+    console.log("Upload complete:", event.context.stats);
+  }
+});
+```

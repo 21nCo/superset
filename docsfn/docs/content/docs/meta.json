@@ -1,0 +1,10 @@
+{
+  "title": "docsfn",
+  "pages": [
+    "index",
+    { "key": "getting-started", "icon": "rocket" },
+    { "key": "core-concepts", "icon": "boxes" },
+    { "key": "guides", "icon": "book-open" },
+    { "key": "api", "icon": "code-2" }
+  ]
+}

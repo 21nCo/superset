@@ -1,0 +1,11 @@
+{
+  "title": "Adapters",
+  "pages": [
+    "index",
+    "memory",
+    "indexeddb",
+    "postgres",
+    "meilisearch",
+    "elastic-opensearch"
+  ]
+}

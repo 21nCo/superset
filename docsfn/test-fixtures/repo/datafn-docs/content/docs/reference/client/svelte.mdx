@@ -1,0 +1,108 @@
+---
+title: "@datafn/svelte"
+description: "API reference for the DataFn Svelte adapter package."
+audience: reference
+applies_to: typescript
+---
+
+## Package
+
+```bash
+npm install @datafn/svelte
+```
+
+**Peer dependencies**: `svelte ^3.0.0 || ^4.0.0`
+
+---
+
+## `toSvelteStore<T>(signal)`
+
+Converts a `DatafnSignal<T>` to a Svelte `Readable` store.
+
+```typescript
+function toSvelteStore<T>(signal: DatafnSignal<T>): DatafnSvelteStore<T>;
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `signal` | `DatafnSignal<T>` | A signal from a table handle, e.g. `client.todos.signal({ ... })`. |
+
+### Returns
+
+A `DatafnSvelteStore<T>` — a Svelte `Readable` store that emits signal state.
+
+### Example
+
+```typescript
+import { toSvelteStore } from "@datafn/svelte";
+
+const todosStore = toSvelteStore(
+  client.todos.signal({ sort: ["-createdAt"] })
+);
+```
+
+```svelte
+{#if $todosStore.loading}
+  <p>Loading...</p>
+{:else}
+  {#each $todosStore.data ?? [] as todo}
+    <p>{todo.title}</p>
+  {/each}
+{/if}
+```
+
+---
+
+## `DatafnSvelteStore<T>`
+
+```typescript
+type DatafnSvelteStore<T> = Readable<{
+  data: T;
+  loading: boolean;
+  error: DatafnError | null;
+  refreshing: boolean;
+  nextCursor?: string | null;
+}>;
+```
+
+### Properties
+
+| Property | Type | Description |
+|---|---|---|
+| `data` | `T` | Current query result value. |
+| `loading` | `boolean` | `true` during initial fetch. |
+| `error` | `DatafnError \| null` | Non-null if the last fetch failed. |
+| `refreshing` | `boolean` | `true` while refreshing after mutation/sync changes. |
+| `nextCursor` | `string \| null` | Cursor for next page, or `null`. |
+
+---
+
+## `toSvelteStore<T, C>(clientRef, signalFactory)`
+
+Overload for client-reference driven signal creation.
+
+```typescript
+function toSvelteStore<T, C>(
+  clientRef: ClientRef<C>,
+  signalFactory: (client: C) => DatafnSignal<T>,
+): DatafnSvelteStore<T>;
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `clientRef` | `ClientRef<C>` | A subscribable client reference. |
+| `signalFactory` | `(client: C) => DatafnSignal<T>` | Creates a signal from the current client. |
+
+---
+
+## `ClientRef<C>`
+
+```typescript
+type ClientRef<C> = {
+  subscribe(fn: (client: C) => void): () => void;
+};
+```

@@ -1,0 +1,89 @@
+---
+title: "Sorting"
+description: "Sort query results by one or more fields."
+audience: reference
+applies_to: both
+---
+
+The `sort` field in a DFQL query controls the order of returned records. It is an array of string terms, each specifying a field and direction.
+
+## Sort Term Formats
+
+| Format | Direction | Example |
+|---|---|---|
+| `"field"` | Ascending (default) | `"createdAt"` |
+| `"field:asc"` | Ascending (explicit) | `"createdAt:asc"` |
+| `"field:desc"` | Descending (explicit) | `"priority:desc"` |
+| `"-field"` | Descending (shorthand) | `"-priority"` |
+
+## Basic Usage
+
+```typescript
+const query: DfqlQuery = {
+  resource: "todos",
+  version: 1,
+  sort: ["priority:desc", "createdAt:asc"],
+};
+```
+
+This sorts by `priority` descending first, then by `createdAt` ascending as a tiebreaker.
+
+## Multiple Sort Fields
+
+When multiple sort terms are provided, they are applied in order. The first term is the primary sort key; subsequent terms break ties.
+
+```typescript
+{
+  resource: "articles",
+  version: 1,
+  sort: ["-publishedAt", "title"],
+}
+// Primary: publishedAt descending
+// Secondary: title ascending
+```
+
+## Default Sort
+
+When no `sort` is specified, records are returned in `id:asc` order. This ensures deterministic results across queries and is required for stable cursor pagination.
+
+## Null Semantics
+
+Null and undefined values are handled consistently:
+
+- **Ascending order:** null values sort after all non-null values.
+- **Descending order:** null values sort before all non-null values.
+
+This means nulls always appear at the "end" of the sort direction.
+
+## Stable Sort with ID Tiebreaker
+
+The sort implementation uses a stable sort algorithm. When all specified sort fields produce equal comparisons between two records, `id` is used as a final tiebreaker (ascending). This guarantees deterministic ordering even when sort fields contain duplicate values.
+
+## Parsing Sort Terms
+
+Use `parseSortTerms` to convert sort strings into structured `SortTerm` objects:
+
+```typescript
+import { parseSortTerms, type SortTerm } from "@datafn/core";
+
+const terms: SortTerm[] = parseSortTerms(["priority:desc", "createdAt"]);
+// [
+//   { field: "priority", direction: "desc" },
+//   { field: "createdAt", direction: "asc" },
+// ]
+```
+
+Returns an empty array for `undefined` or empty input.
+
+## Sorting Records in Memory
+
+The `sortRecords` function applies sort terms to an array of records:
+
+```typescript
+import { sortRecords, parseSortTerms } from "@datafn/core";
+
+const terms = parseSortTerms(["priority:desc"]);
+const sorted = sortRecords(records, terms);
+```
+
+`sortRecords` does not mutate the input array. It returns a new sorted array.

@@ -1,0 +1,83 @@
+---
+title: Postgres Adapter
+description: Production-grade full-text search using Postgres tsvector.
+---
+
+The Postgres Adapter uses native Postgres full-text search (`tsvector`/`tsquery`) for production-grade search with no additional infrastructure beyond your existing database.
+
+## When to Use
+
+- Production apps already running Postgres
+- Server-side search that needs SQL-level durability and transactions
+- Moderate document volumes where a dedicated search engine is unnecessary
+
+## Installation
+
+```bash
+npm install @searchfn/adapter-postgres
+```
+
+## Setup
+
+The adapter requires search tables and indexes in your Postgres database. Run the migration SQL shipped with the package:
+
+```typescript
+import { getPostgresMigrationSQL } from "@searchfn/adapter-postgres";
+
+const sql = getPostgresMigrationSQL();
+// Execute this SQL against your database to create required tables and indexes
+```
+
+## Usage
+
+```typescript
+import { PostgresAdapter } from "@searchfn/adapter-postgres";
+
+const adapter = new PostgresAdapter({
+  connectionString: process.env.SEARCH_DB_URL!,
+  schema: "public",
+  queryTimeoutMs: 15000,
+});
+
+await adapter.initialize({
+  resources: [{ name: "tasks", searchFields: ["title", "description"] }],
+});
+
+await adapter.index({
+  resource: "tasks",
+  documents: [
+    { id: "t-1", fields: { title: "Ship docs", description: "Write the guide" } },
+  ],
+});
+
+const ids = await adapter.search({ resource: "tasks", query: "docs" });
+```
+
+## Configuration
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `connectionString` | `string` | — | Required. Postgres connection string (DSN). |
+| `schema` | `string` | `"public"` | Target database schema. |
+| `queryTimeoutMs` | `number` | `30000` | Timeout for individual queries. |
+| `maxBatchSize` | `number` | `10000` | Maximum documents per index batch. |
+| `retry.maxRetries` | `number` | `2` | Retry attempts for transient failures. |
+| `retry.baseDelayMs` | `number` | `100` | Base delay between retries (with jitter). |
+| `retry.maxDelayMs` | `number` | `5000` | Maximum delay between retries. |
+| `logger` | `PostgresAdapterLogger` | — | Optional adapter-level logger. |
+
+## Capabilities
+
+| Capability | Supported |
+| --- | --- |
+| `persistent` | Yes |
+| `searchAll` | Yes |
+| `fuzzy` | Yes |
+| `fieldBoosts` | No |
+
+## Behavior
+
+- Uses Postgres native `tsvector` full-text search.
+- Supports bounded retries with exponential backoff and jitter for transient database failures.
+- `index` operations use batch inserts up to `maxBatchSize`.
+- Keep connection strings in a secure secret store — never hardcode them.

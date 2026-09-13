@@ -1,0 +1,121 @@
+---
+title: "System Fields"
+description: "Capability-injected lifecycle fields and server ownership rules."
+audience: reference
+applies_to: both
+---
+
+## Overview
+
+DataFn uses capability-resolved lifecycle fields per resource.
+
+`id` always exists. Other lifecycle fields appear only when the corresponding capability is enabled.
+
+## Resource Lifecycle Fields
+
+| Field | Added by capability | Type | Client writable | Notes |
+| --- | --- | --- | --- | --- |
+| `id` | always | `string` | yes (for explicit IDs) | Always present |
+| `createdAt` | `timestamps` | `date` | no | Set on insert |
+| `updatedAt` | `timestamps` | `date` | no | Set on insert/update |
+| `createdBy` | `audit` | `string` | no | Set from actor on insert |
+| `updatedBy` | `audit` | `string` | no | Set from actor on update |
+| `trashedAt` | `trash` | `date` | no | Set by `trash`, cleared by `restore` |
+| `trashedBy` | `trash` | `string` | no | Set by `trash`, cleared by `restore` |
+| `isArchived` | `archivable` | `boolean` | yes | Set by `archive`/`unarchive` or direct `merge` |
+
+## Ownership and Stripping
+
+For readonly lifecycle fields (`createdAt`, `updatedAt`, `createdBy`, `updatedBy`, `trashedAt`, `trashedBy`):
+
+- server values are authoritative,
+- client-supplied values are stripped before mutation execution,
+- stripping is capability-aware (only fields for enabled capabilities are stripped).
+
+This applies to direct mutation routes and sync push routes.
+
+### Example
+
+```typescript
+await client.table("tasks").mutate({
+  operation: "insert",
+  record: {
+    title: "Write docs",
+    createdAt: 1, // ignored when timestamps capability is enabled
+  },
+});
+```
+
+## Capability Operations and Fields
+
+Use capability operations instead of manually managing lifecycle fields:
+
+```typescript
+// trash capability
+await client.table("tasks").trash?.("tsk:1");
+await client.table("tasks").restore?.("tsk:1");
+
+// archivable capability
+await client.table("tasks").archive?.("tsk:1");
+await client.table("tasks").unarchive?.("tsk:1");
+```
+
+`delete` remains hard delete.
+
+## Query Defaults for Lifecycle Fields
+
+When capabilities are enabled:
+
+- `trash` auto-excludes rows where `trashedAt` is set,
+- `archivable` auto-excludes rows where `isArchived === true`.
+
+Override for specific queries:
+
+```typescript
+await client.table("tasks").query({
+  metadata: {
+    includeTrashed: true,
+    includeArchived: true,
+  },
+});
+```
+
+## Date Storage Semantics
+
+`date` fields in DataFn accept ISO strings or epoch numbers. Capability date fields follow the same convention.
+
+```typescript
+import { toEpochMs, fromEpochMs } from "@datafn/core";
+
+const epoch = toEpochMs(new Date("2025-01-15T10:30:00Z"));
+const date = fromEpochMs(epoch);
+```
+
+## Relation Capability Fields
+
+Many-many relation join rows can opt into relation capabilities (`timestamps`, `audit`) via `relations[].capabilities`.
+
+```typescript
+relations: [
+  {
+    from: "todos",
+    to: "categories",
+    type: "many-many",
+    relation: "tags",
+    capabilities: ["timestamps", "audit"],
+  },
+]
+```
+
+Join-row fields when enabled:
+
+| Field | Capability | Behavior |
+| --- | --- | --- |
+| `createdAt`, `updatedAt` | `timestamps` | Server-managed join-row timestamps |
+| `createdBy`, `updatedBy` | `audit` | Server-managed join-row actor attribution |
+
+Relation capability fields are also readonly from clients; client-provided values are stripped on `relate`/`modifyRelation` payloads.
+
+## Notes
+
+If you need app-controlled metadata with similar names, choose non-capability field names to avoid collisions.

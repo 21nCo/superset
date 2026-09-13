@@ -1,0 +1,75 @@
+---
+title: "Date Utilities"
+description: "Date conversion between formats."
+audience: reference
+applies_to: typescript
+---
+
+## toEpochMs
+
+Converts a `Date`, ISO string, or number to epoch milliseconds. Idempotent: if the value is already a number, it is returned directly.
+
+```typescript
+function toEpochMs(value: unknown): number;
+```
+
+```typescript
+toEpochMs(new Date("2024-01-01T00:00:00Z")); // 1704067200000
+toEpochMs("2024-01-01T00:00:00Z");            // 1704067200000
+toEpochMs(1704067200000);                      // 1704067200000
+```
+
+Throws `DFQL_INVALID` on invalid dates.
+
+## fromEpochMs
+
+Converts an epoch number, ISO string, or `Date` to a `Date` object. Idempotent: if the value is already a `Date`, it is returned directly.
+
+```typescript
+function fromEpochMs(value: unknown): Date;
+```
+
+```typescript
+fromEpochMs(1704067200000);            // Date(2024-01-01T00:00:00Z)
+fromEpochMs("2024-01-01T00:00:00Z");   // Date(2024-01-01T00:00:00Z)
+```
+
+Throws `DFQL_INVALID` on invalid dates.
+
+## coerceDateFieldsToEpoch
+
+Mutates a record in-place, converting all `date`-typed fields to epoch milliseconds. Skips `null` and `undefined` values.
+
+```typescript
+function coerceDateFieldsToEpoch(
+  record: Record<string, unknown>,
+  fields: Array<{ name: string; type: string }>,
+): Record<string, unknown>;
+```
+
+```typescript
+const fields = [{ name: "createdAt", type: "date" }];
+const record = { createdAt: new Date("2024-01-01") };
+coerceDateFieldsToEpoch(record, fields);
+// record.createdAt is now 1704067200000
+```
+
+## parseDateFieldsToDate
+
+Mutates a record in-place, converting all `date`-typed fields to `Date` objects. Skips `null` and `undefined` values.
+
+```typescript
+function parseDateFieldsToDate(
+  record: Record<string, unknown>,
+  fields: Array<{ name: string; type: string }>,
+): Record<string, unknown>;
+```
+
+```typescript
+const fields = [{ name: "createdAt", type: "date" }];
+const record = { createdAt: 1704067200000 };
+parseDateFieldsToDate(record, fields);
+// record.createdAt is now Date(2024-01-01T00:00:00Z)
+```
+
+Both `coerceDateFieldsToEpoch` and `parseDateFieldsToDate` intentionally mutate in-place and return the same record reference. If you need a non-mutating variant, copy the record before calling.

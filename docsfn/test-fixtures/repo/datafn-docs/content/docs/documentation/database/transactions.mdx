@@ -1,0 +1,144 @@
+---
+title: Database Transactions
+description: Atomic operations with database transactions.
+audience: guide
+applies_to: both
+---
+
+DataFn supports database transactions for atomic operations that span multiple reads and writes. Transactions ensure that either all operations succeed or none are applied.
+
+## Using Transactions
+
+The adapter provides a `transaction` method that wraps a callback in a database transaction:
+
+```typescript
+await adapter.transaction(async (trx) => {
+  // All operations within this callback are atomic
+  const todo = await trx.findOne({
+    model: "todos",
+    where: [{ field: "id", operator: "eq", value: "t1" }],
+    namespace: "tenant-1",
+  });
+
+  await trx.update({
+    model: "todos",
+    where: [{ field: "id", operator: "eq", value: "t1" }],
+    data: { status: "done" },
+    namespace: "tenant-1",
+  });
+
+  await trx.create({
+    model: "activity_log",
+    data: { todoId: "t1", action: "completed", timestamp: new Date() },
+    namespace: "tenant-1",
+  });
+});
+```
+
+## TransactionAdapter
+
+Inside a transaction callback, you receive a `TransactionAdapter` that has the same interface as the main adapter, minus the `transaction` and `close` methods:
+
+```typescript
+interface TransactionAdapter extends Omit<Adapter, 'transaction' | 'close'> {
+  commit(): Promise<void>;
+  rollback(): Promise<void>;
+}
+```
+
+The transaction commits automatically when the callback resolves. If the callback throws, the transaction rolls back.
+
+## Internal Usage
+
+DataFn uses transactions internally for several operations:
+
+### Transact Endpoint
+
+The `/datafn/transact` endpoint executes multiple mutations atomically:
+
+```typescript
+// Client request
+await client.transact([
+  { resource: "todos", operation: "insert", id: "t1", record: { title: "A" } },
+  { resource: "todos", operation: "insert", id: "t2", record: { title: "B" } },
+]);
+```
+
+All mutations within a transact call run in a single database transaction. If any mutation fails, all are rolled back.
+
+### Guard Evaluation
+
+[Guards](/docs/documentation/advanced/guards) (conditional mutations) run within the same transaction as the mutation they protect. This prevents TOCTOU (time-of-check-to-time-of-use) race conditions:
+
+```typescript
+// The guard check and the update happen in the same transaction
+{
+  resource: "todos",
+  operation: "merge",
+  id: "t1",
+  record: { status: "done" },
+  if: { status: "active" },  // Guard: only update if status is still "active"
+}
+```
+
+### Sequence Store Operations
+
+The `DatabaseSequenceStore` uses compare-and-swap (CAS) retry loops within the database to allocate monotonic sequence numbers:
+
+```typescript
+// Pseudocode for CAS sequence allocation
+const meta = await db.findOne("__datafn_meta", { namespace });
+const affected = await db.update("__datafn_meta",
+  { namespace, next_server_seq: meta.next_server_seq },  // CAS condition
+  { next_server_seq: meta.next_server_seq + 1 },
+);
+if (affected === 0) {
+  // Retry -- another process incremented first
+}
+```
+
+## Isolation Levels
+
+The adapter factory supports configurable isolation levels:
+
+```typescript
+const adapter = drizzleAdapter({
+  db,
+  dialect: "postgres",
+  transaction: {
+    enabled: true,
+    isolationLevel: "read_committed",  // Default
+    timeout: 30000,                     // 30 second timeout
+  },
+});
+```
+
+Available isolation levels:
+
+| Level | Description |
+|-------|-------------|
+| `read_uncommitted` | Allows dirty reads |
+| `read_committed` | Default for PostgreSQL |
+| `repeatable_read` | Snapshot isolation |
+| `serializable` | Full serializability |
+
+## Error Handling
+
+When a transaction fails, the database automatically rolls back. DataFn wraps transaction errors with context:
+
+```typescript
+try {
+  await adapter.transaction(async (trx) => {
+    // ...operations that may fail
+  });
+} catch (error) {
+  // Transaction was rolled back automatically
+  console.error("Transaction failed:", error);
+}
+```
+
+## Limitations
+
+- **Nested transactions** are not supported. Calling `transaction()` inside a transaction callback is undefined behavior in most databases.
+- **Long-running transactions** should be avoided. Keep transaction callbacks short to minimize lock contention.
+- **The `TransactionAdapter`** cannot call `close()` or start sub-transactions.

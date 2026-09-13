@@ -1,0 +1,140 @@
+---
+title: Debouncing
+description: Coalesce rapid mutations for better performance.
+audience: guide
+applies_to: both
+---
+
+The `DebouncerMap` coalesces rapid mutations on the same record into a single mutation. This is useful for scenarios like live text editing, slider adjustments, or any UI interaction that generates many updates in quick succession.
+
+## How It Works
+
+When a debounced mutation is submitted:
+
+1. If no pending mutation exists for the key, a new timer is started.
+2. If a pending mutation already exists, the new record fields are merged into the pending mutation and the timer is reset.
+3. When the timer fires, the coalesced mutation is executed.
+
+```
+t=0ms   set("t1", {title: "H"})       -> timer starts (300ms)
+t=50ms  set("t1", {title: "He"})      -> merge + reset timer
+t=100ms set("t1", {title: "Hel"})     -> merge + reset timer
+t=400ms                                -> timer fires, execute {title: "Hel"}
+```
+
+## Usage on the Client
+
+Add `debounceKey` and `debounceMs` to a mutation:
+
+```typescript
+await client.table("todos").mutate({
+  operation: "merge",
+  id: "t1",
+  record: { title: inputValue },
+  debounceKey: "t1",       // Group mutations by this key
+  debounceMs: 300,         // Wait 300ms after last keystroke
+});
+```
+
+## DebouncerMap API
+
+```typescript
+import { DebouncerMap } from "@datafn/client";
+
+const debouncer = new DebouncerMap();
+```
+
+### set(key, mutation, delayMs, executor)
+
+Schedule a debounced mutation. If a mutation with the same key is already pending, merge the records and reset the timer.
+
+```typescript
+await debouncer.set(
+  "t1",                                  // Debounce key
+  { resource: "todos", operation: "merge", id: "t1", record: { title: "Hello" } },
+  300,                                   // Delay in ms
+  async (mutation) => {                  // Executor function
+    await remoteMutate(mutation);
+  },
+);
+```
+
+**Record merging**: When successive mutations target the same key, their `record` fields are shallow-merged:
+
+```typescript
+// First call
+set("t1", { record: { title: "A", color: "red" } }, 300, exec);
+// Second call (before timer fires)
+set("t1", { record: { title: "B" } }, 300, exec);
+// Executed mutation: { record: { title: "B", color: "red" } }
+```
+
+**Promise resolution**: When a pending mutation is replaced, the previous caller's promise resolves immediately (data is not lost because it was merged into the new mutation).
+
+### flush(key?)
+
+Execute the pending mutation for a specific key immediately, bypassing the timer:
+
+```typescript
+await debouncer.flush("t1");
+```
+
+### flushAll()
+
+Execute all pending mutations immediately:
+
+```typescript
+await debouncer.flushAll();
+```
+
+All mutations are executed in parallel using `Promise.allSettled`.
+
+### destroy()
+
+Clear all timers without executing pending mutations. Use this when tearing down the client:
+
+```typescript
+debouncer.destroy();
+```
+
+## Automatic Flush on Page Unload
+
+The DataFn client automatically flushes all pending debounced mutations before the page unloads, ensuring no data is lost when the user navigates away.
+
+## Example: Live Text Editor
+
+```typescript
+function handleTextChange(todoId: string, newTitle: string) {
+  client.table("todos").mutate({
+    operation: "merge",
+    id: todoId,
+    record: { title: newTitle },
+    debounceKey: todoId,
+    debounceMs: 500,
+  });
+}
+
+// Each keystroke calls handleTextChange.
+// Only the final value is sent after 500ms of inactivity.
+```
+
+## Example: Slider Control
+
+```typescript
+function handlePriorityChange(todoId: string, priority: number) {
+  client.table("todos").mutate({
+    operation: "merge",
+    id: todoId,
+    record: { priority },
+    debounceKey: `${todoId}:priority`,
+    debounceMs: 200,
+  });
+}
+```
+
+## Behavior Details
+
+- Only `merge` operations benefit from debouncing. Other operations (insert, delete, replace) should execute immediately.
+- The `mutationId` from the first call in a debounce group is preserved for tracking.
+- Each debounce key is independent. Mutations on different keys do not interact.
+- The executor function is called with the fully merged mutation after the delay.

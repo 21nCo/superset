@@ -1,0 +1,4 @@
+{
+  "title": "Client",
+  "pages": ["setup", "queries", "mutations", "transactions", "signals", "frameworks", "events", "kv", "tables"]
+}

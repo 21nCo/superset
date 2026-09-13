@@ -1,0 +1,224 @@
+---
+title: "Capabilities"
+description: "Opt-in resource behaviors for lifecycle fields, mutation operations, auto-filters, and sharing."
+audience: concept
+applies_to: both
+---
+
+## Overview
+
+DataFn uses a **capability model** to control lifecycle behavior on resources. Capabilities are declared in the schema and resolved per resource.
+
+Capabilities can:
+
+- inject fields into a resource,
+- make some fields server-owned (readonly from clients),
+- add mutation operations (`trash`, `restore`, `archive`, `unarchive`, `share`, `unshare`),
+- auto-apply query filters,
+- expose extra client table methods.
+
+This keeps behavior explicit and opt-in.
+
+## Capability Types
+
+DataFn supports these resource capabilities:
+
+| Capability | Injected fields | Client writable | Key behavior |
+| --- | --- | --- | --- |
+| `timestamps` | `createdAt`, `updatedAt` | No | Server sets create/update timestamps |
+| `audit` | `createdBy`, `updatedBy` | No | Server sets actor attribution |
+| `trash` | `trashedAt`, `trashedBy` | No | Soft-delete lifecycle (`trash`/`restore`) + default query exclusion |
+| `archivable` | `isArchived` | Yes | Archive lifecycle (`archive`/`unarchive`) + default query exclusion |
+| `shareable` | none on main table (uses permissions table) | n/a | Per-record ACL (`share`/`unshare`/`getPermissions`) |
+
+`shareable` requires `audit`.
+
+## Schema Declaration
+
+Capabilities can be declared:
+
+- globally on `schema.capabilities`,
+- per-resource on `resource.capabilities`.
+
+```typescript
+import { defineSchema } from "@datafn/core";
+
+const schema = defineSchema({
+  capabilities: ["timestamps", "audit", "trash"],
+  resources: [
+    {
+      name: "todos",
+      version: 1,
+      capabilities: ["archivable"],
+      fields: [{ name: "title", type: "string", required: true }],
+    },
+    {
+      name: "auditLogs",
+      version: 1,
+      capabilities: { exclude: ["trash"] },
+      fields: [{ name: "message", type: "string", required: true }],
+    },
+    {
+      name: "documents",
+      version: 1,
+      capabilities: [
+        {
+          shareable: {
+            levels: ["viewer", "editor", "owner"],
+            visibilityDefault: "private",
+            supportsScopeGrants: true,
+          },
+        },
+      ],
+      fields: [{ name: "title", type: "string", required: true }],
+    },
+  ],
+});
+```
+
+### Resolution Rules
+
+For each resource:
+
+1. start with `schema.capabilities`,
+2. merge resource entries (additive),
+3. apply resource exclusions (`{ exclude: [...] }`),
+4. dedupe in deterministic order.
+
+If a capability is not resolved for a resource, its fields and behavior do not apply.
+
+## Server-Owned Fields and Stripping
+
+Readonly capability fields are **server authoritative**:
+
+- `timestamps`: `createdAt`, `updatedAt`
+- `audit`: `createdBy`, `updatedBy`
+- `trash`: `trashedAt`, `trashedBy`
+
+When clients send values for these fields in mutation records, DataFn strips them before execution (mutation route and push route).
+
+If you need app-controlled fields with similar meaning, use different names (for example, `appCreatedAt`) or disable the capability for that resource.
+
+## Capability Operations
+
+Depending on resolved capabilities, the server accepts these mutation operations:
+
+- Always available: `insert`, `merge`, `replace`, `delete`, `relate`, `modifyRelation`, `unrelate`
+- `trash` capability: `trash`, `restore`
+- `archivable` capability: `archive`, `unarchive`
+- `shareable` capability: `share`, `unshare`
+
+If an operation is used on a resource without the required capability, the request is rejected with `DFQL_UNSUPPORTED`.
+
+## Query Auto-Filters
+
+DataFn injects default filters for capability-enabled resources:
+
+- `trash`: excludes records where `trashedAt` is set,
+- `archivable`: excludes records where `isArchived === true`.
+
+Use query metadata to opt out per request:
+
+```typescript
+await client.table("todos").query({
+  metadata: { includeTrashed: true, includeArchived: true },
+});
+```
+
+## Shareable Capability
+
+`shareable` adds per-record and per-resource permissions through a global permissions table (`__datafn_permissions_global`), not new columns on the resource itself.
+
+### Shareable Configuration Reference
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `levels` | `("viewer" \| "editor" \| "owner")[]` | **(required)** | Access levels available for grants. Must include at least one. |
+| `default` | `"private" \| "shared"` | Derived from `visibilityDefault` | Legacy visibility default. Either `default` or `visibilityDefault` must be provided. |
+| `visibilityDefault` | `"ns" \| "private" \| "shared"` | Derived from `default` | SPV2 visibility default. `"ns"` = visible to all principals in the namespace, `"private"` = visible only to creator and granted principals, `"shared"` = visible to all. |
+| `supportsScopeGrants` | `boolean` | `true` | When `true`, allows resource-level scope grants (share all records of a resource with a principal). |
+| `crossNsShareable` | `boolean` | `true` | When `true`, allows sharing with principals outside the current namespace. |
+| `principalMode` | `"opaque-id"` | `"opaque-id"` | Principal identity mode. `"opaque-id"` treats principal strings as opaque identifiers with `type:id` format. |
+| `relationInheritance` | `object` | `undefined` | Configures access inheritance through relations. See below. |
+
+#### `relationInheritance` Object
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `enabled` | `boolean` | **(required)** | Whether child records inherit parent access. |
+| `relations` | `string[]` | `undefined` | Restrict inheritance to specific relation names. If omitted, all relations are eligible. |
+| `requireRelateConsent` | `boolean` | `true` | When `true`, creating a relation that would inherit permissions requires the actor to have share-level access on the parent. |
+
+### Minimal Example
+
+```typescript
+{
+  shareable: {
+    levels: ["viewer", "editor", "owner"],
+    default: "private",
+  },
+}
+```
+
+### Full SPV2 Example
+
+```typescript
+{
+  shareable: {
+    levels: ["viewer", "editor", "owner"],
+    visibilityDefault: "private",
+    supportsScopeGrants: true,
+    crossNsShareable: false,
+    principalMode: "opaque-id",
+    relationInheritance: {
+      enabled: true,
+      relations: ["parent"],
+      requireRelateConsent: true,
+    },
+  },
+}
+```
+
+### Client Table Methods
+
+SPV2 client table methods (exposed only for shareable resources):
+
+```typescript
+// SPV2 principal-based API (recommended)
+table.share({ id: "doc:1", principalId: "user:bob", level: "editor", scope: "record" });
+table.unshare({ id: "doc:1", principalId: "user:bob", scope: "record" });
+
+// Resource-level scope grant
+table.share({ principalId: "team:eng", level: "viewer", scope: "resource" });
+table.unshare({ principalId: "team:eng", scope: "resource" });
+
+// Legacy positional API (deprecated, emits console warning)
+table.share(id, userId, level);
+table.unshare(id, userId);
+
+// Permissions query
+table.getPermissions(id);
+```
+
+For resources with `visibilityDefault: "private"` (or `default: "private"`), server queries are auto-scoped to IDs the caller can access.
+
+## Client API Surface
+
+Table methods are capability-gated:
+
+- `trash` + `restore` only on `trash` resources,
+- `archive` + `unarchive` only on `archivable` resources,
+- `share` + `unshare` + `getPermissions` only on `shareable` resources.
+
+`delete` always remains a hard delete operation.
+
+## Relation Capabilities
+
+Many-many relations support separate relation-level capabilities (`timestamps`, `audit`) for join rows. These are independent from resource capabilities and must be explicitly declared on each relation.
+
+See [Relations](/docs/dfql/schema/relations) for relation capability behavior.
+
+## Related
+
+- [System Fields](/docs/dfql/schema/system-fields)
+- [Mutations](/docs/dfql/mutations)

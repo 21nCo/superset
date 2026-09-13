@@ -1,0 +1,82 @@
+---
+title: Setup
+description: Deploy SearchFn in production with proper configuration, limits, and resilience.
+---
+
+## Deployment Steps
+
+1. **Choose an adapter** — pick the adapter that matches your infrastructure. See [Adapters](/docs/reference/adapters) for a comparison.
+2. **Run backend infrastructure** — set up Postgres, Meilisearch, or Elasticsearch/OpenSearch if using a server-side adapter.
+3. **Run migrations** — for PostgresAdapter, execute the migration SQL to create required tables and indexes.
+4. **Initialize resources** — call `initialize()` with your resource definitions before indexing traffic.
+5. **Create the server** — use `createSearchFnServer()` to expose search over HTTP.
+6. **Mount the router** — attach the server router to your HTTP framework using a `@superfunctions/http` adapter.
+
+```typescript
+import { createSearchFnServer } from "@searchfn/server";
+import { PostgresAdapter } from "@searchfn/adapter-postgres";
+
+const server = await createSearchFnServer({
+  adapter: new PostgresAdapter({
+    connectionString: process.env.SEARCH_DB_URL!,
+  }),
+  basePath: "/searchfn",
+});
+
+// Mount server.router with Express, Fastify, Hono, etc.
+```
+
+## Default Limits
+
+The server enforces these limits by default. Override them in the `limits` configuration:
+
+| Limit | Default | Description |
+| --- | --- | --- |
+| `maxQueryLength` | `1,000` | Maximum search query string length. |
+| `maxLimit` | `10,000` | Maximum `limit` parameter value. |
+| `maxLimitPerResource` | `1,000` | Maximum `limitPerResource` parameter value. |
+| `maxResourcesPerSearchAll` | `50` | Maximum resources in a `searchAll` request. |
+| `maxIndexBatch` | `10,000` | Maximum documents per index request. |
+| `maxPayloadBytes` | `1,048,576` | Maximum request body size (1 MB). |
+
+```typescript
+const server = await createSearchFnServer({
+  adapter,
+  limits: {
+    maxQueryLength: 500,
+    maxIndexBatch: 5000,
+  },
+});
+```
+
+## Resilience
+
+For external adapters (Postgres, Meilisearch, Elasticsearch/OpenSearch), configure timeouts and retries to handle transient failures:
+
+```typescript
+const adapter = new PostgresAdapter({
+  connectionString: process.env.SEARCH_DB_URL!,
+  queryTimeoutMs: 15000,
+  retry: {
+    maxRetries: 3,
+    baseDelayMs: 200,
+    maxDelayMs: 10000,
+  },
+});
+```
+
+- Use conservative timeouts that match your SLA requirements.
+- Bounded retries with exponential backoff and jitter prevent thundering herd problems.
+- Monitor retry rates to detect degraded backends early.
+
+## Environment Variables
+
+Keep all credentials in environment variables or a secret store:
+
+| Variable | Used by | Description |
+| --- | --- | --- |
+| `SEARCH_DB_URL` | PostgresAdapter | Postgres connection string |
+| `MEILI_URL` | MeilisearchAdapter | Meilisearch endpoint |
+| `MEILI_API_KEY` | MeilisearchAdapter | Meilisearch API key |
+| `ES_NODE` | ElasticsearchAdapter | Elasticsearch/OpenSearch endpoint |
+| `ES_API_KEY` | ElasticsearchAdapter | Elasticsearch API key |

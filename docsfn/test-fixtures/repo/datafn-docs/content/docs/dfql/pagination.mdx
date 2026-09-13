@@ -1,0 +1,122 @@
+---
+title: "Pagination"
+description: "Paginate query results with limit/offset or cursors."
+audience: reference
+applies_to: both
+---
+
+DFQL supports two pagination modes: limit/offset and cursor-based. Both can be combined with sorting and filtering.
+
+## Limit/Offset Pagination
+
+The simplest pagination mode. Set `limit` to cap the number of returned records and `offset` to skip records.
+
+```typescript
+// First page
+const page1: DfqlQuery = {
+  resource: "todos",
+  version: 1,
+  sort: ["createdAt:desc"],
+  limit: 20,
+  offset: 0,
+};
+
+// Second page
+const page2: DfqlQuery = {
+  resource: "todos",
+  version: 1,
+  sort: ["createdAt:desc"],
+  limit: 20,
+  offset: 20,
+};
+```
+
+Limit/offset is straightforward but has a known limitation: for large offsets, the database must scan and discard all preceding rows, which degrades performance. For large datasets, prefer cursor-based pagination.
+
+## Cursor-Based Pagination
+
+Cursor pagination uses sort-field values from a boundary record to efficiently seek to the next page. It avoids the performance cliff of large offsets.
+
+### Cursor Structure
+
+```typescript
+type DfqlCursor = {
+  after?: Record<string, unknown>;  // Fetch records after this position
+  before?: Record<string, unknown>; // Fetch records before this position
+};
+```
+
+The cursor object contains the sort-field values of the boundary record. For example, if sorting by `["createdAt:desc", "id:asc"]`, the cursor contains `{ createdAt: ..., id: ... }`.
+
+### Forward Pagination
+
+```typescript
+// First page
+const page1: DfqlQuery = {
+  resource: "todos",
+  version: 1,
+  sort: ["createdAt:desc", "id:asc"],
+  limit: 20,
+};
+// Response: { data: [...], nextCursor: { createdAt: 1700000000, id: "todo_42" } }
+
+// Next page: use nextCursor as cursor.after
+const page2: DfqlQuery = {
+  resource: "todos",
+  version: 1,
+  sort: ["createdAt:desc", "id:asc"],
+  limit: 20,
+  cursor: {
+    after: { createdAt: 1700000000, id: "todo_42" },
+  },
+};
+```
+
+### Backward Pagination
+
+Use `cursor.before` to paginate backward:
+
+```typescript
+const prevPage: DfqlQuery = {
+  resource: "todos",
+  version: 1,
+  sort: ["createdAt:desc", "id:asc"],
+  limit: 20,
+  cursor: {
+    before: { createdAt: 1700050000, id: "todo_10" },
+  },
+};
+```
+
+### How nextCursor is Computed
+
+The server internally fetches `limit + 1` records. If more than `limit` records are returned, a next page exists and `nextCursor` is computed from the sort-field values of the last record on the current page. If exactly `limit` or fewer records are returned, `nextCursor` is `null`.
+
+### Performance
+
+The cursor implementation uses binary search to find the first record after the cursor position in already-sorted result sets. This gives `O(log n)` seek time compared to `O(n)` for a linear scan.
+
+## Count Queries
+
+Set `count: true` to include a total count of matching records (before pagination) in the response:
+
+```typescript
+const query: DfqlQuery = {
+  resource: "todos",
+  version: 1,
+  filters: { completed: false },
+  count: true,
+  limit: 10,
+};
+// Response: { data: [...], count: 42, nextCursor: ... }
+```
+
+On the server with push-down queries, count is executed via a separate `db.count()` call with the same filter conditions. For in-memory queries, count is derived from the filtered record set before pagination is applied.
+
+## Combining Pagination Modes
+
+Limit/offset and cursor pagination are mutually exclusive in practice. If both `offset` and `cursor` are provided, the cursor takes precedence and `offset` is ignored.
+
+## Sort Requirement for Cursors
+
+Cursor pagination requires a sort order that includes `id` as a tiebreaker to ensure deterministic positioning. If the sort does not include an `id` field, the server returns a validation error.

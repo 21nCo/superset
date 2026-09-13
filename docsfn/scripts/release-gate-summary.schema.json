@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "DocsReleaseGateSummary",
+  "title": "DocsReleaseGateSummary",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "schemaPath",
+    "generatedAt",
+    "docsfnRoot",
+    "repoRoot",
+    "status",
+    "code",
+    "bootstrap",
+    "artifacts",
+    "steps",
+    "checks"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "schemaPath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "docsfnRoot": {
+      "type": "string",
+      "minLength": 1
+    },
+    "repoRoot": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["PENDING", "PASS", "FAIL"]
+    },
+    "code": {
+      "type": "string",
+      "minLength": 1
+    },
+    "bootstrap": {
+      "type": "object",
+      "required": ["cleanCheckoutCommands"],
+      "properties": {
+        "cleanCheckoutCommands": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "artifacts": {
+      "type": "object",
+      "required": ["summaryPath", "migrationSummaryPath"],
+      "properties": {
+        "summaryPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "migrationSummaryPath": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "detail", "commands"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": ["PENDING", "PASS", "FAIL", "SKIPPED"]
+          },
+          "code": {
+            "type": ["string", "null"]
+          },
+          "detail": {
+            "type": ["string", "null"]
+          },
+          "commands": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "checks": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

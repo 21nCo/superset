@@ -1,0 +1,177 @@
+---
+title: "Server Configuration"
+description: "Full configuration reference for createDatafnServer."
+audience: reference
+applies_to: both
+---
+
+## DatafnServerConfig\<TContext\>
+
+Complete configuration for `createDatafnServer`.
+
+```typescript
+interface DatafnServerConfig<TContext = any> {
+  /** Required. DataFn schema (validated at startup). */
+  schema: DatafnSchema;
+
+  /** Database adapter for persistence. */
+  db?: Adapter;
+
+  /** Client-side and server-side plugins. */
+  plugins?: DatafnPlugin[];
+
+  /** Authorization callback. Called after JSON parsing, before execution. */
+  authorize?: (
+    ctx: TContext,
+    action: "status" | "query" | "mutation" | "transact"
+      | "seed" | "clone" | "pull" | "push" | "reconcile",
+    payload: unknown,
+  ) => Promise<boolean> | boolean;
+
+  /** Server-side limits. */
+  limits?: {
+    maxLimit?: number;              // Default: 100
+    maxTransactSteps?: number;
+    maxPayloadBytes?: number;       // Default: 5MB
+    maxPullLimit?: number;          // Default: 1000
+    maxSelectTokens?: number;       // Default: 50
+    maxFilterKeysPerLevel?: number; // Default: 20
+    maxSortFields?: number;         // Default: 10
+    maxAggregations?: number;       // Default: 20
+    maxIdLength?: number;           // Default: 255
+    maxBatchSize?: number;          // Default: 500
+    maxBatchQueryConcurrency?: number; // Default: 20
+  };
+
+  /** Debug mode for verbose error messages. Default: true in non-production. */
+  debug?: boolean;
+
+  /** Allow queries on resources without authorization policy. Default: false. */
+  allowUnknownResources?: boolean;
+
+  /** Custom server time provider (for testing). */
+  getServerTime?: () => number;
+
+  /** Enable REST endpoint generation. Default: false. */
+  rest?: boolean;
+
+  /** Namespace provider for data isolation. */
+  namespaceProvider?: {
+    getNamespace: (ctx: TContext) => string | Promise<string>;
+    getActorId?: (ctx: TContext) => string | Promise<string>;
+  };
+
+  /** Redis adapter for atomic operations. */
+  redis?: RedisAdapter;
+
+  /** KV store adapter for simple key-value operations. */
+  kvStore?: KVStoreAdapter;
+
+  /** Database mapping: which database to use for each feature. */
+  dbMapping?: DbMapping;
+
+  /** Row-level namespace isolation. false to disable, object to configure. */
+  rowLevelNamespace?: false | RowLevelNamespaceConfig;
+
+  /** Data retention configuration. */
+  retention?: RetentionConfig;
+
+  /** Rate limiting configuration. */
+  rateLimit?: RateLimitConfig<TContext>;
+
+  /** Observability (timing events). */
+  observability?: ObservabilityConfig;
+
+  /** WebSocket limits and heartbeat. */
+  ws?: WsManagerConfig;
+
+  /** Graceful shutdown drain timeout in ms. Default: 10000. */
+  shutdownTimeoutMs?: number;
+
+  /** Pluggable logger. Default: console-based. */
+  logger?: DatafnLogger;
+}
+```
+
+## RetentionConfig
+
+```typescript
+interface RetentionConfig {
+  /** Days to retain change log entries. Default: unlimited. */
+  changeLogDays?: number;
+  /** Days to retain idempotency records. Default: unlimited. */
+  idempotencyDays?: number;
+  /** Run pruning on server startup. Default: false. */
+  pruneOnStartup?: boolean;
+  /** Interval in ms for periodic pruning. Minimum: 60000. */
+  pruneIntervalMs?: number;
+}
+```
+
+## RateLimitConfig\<TContext\>
+
+```typescript
+interface RateLimitConfig<TContext = any> {
+  /** Enable rate limiting. Default: false. */
+  enabled: boolean;
+  /** Max requests per window per client. Default: 100. */
+  maxRequests?: number;
+  /** Window duration in seconds. Default: 60. */
+  windowSeconds?: number;
+  /** Per-endpoint overrides. */
+  endpoints?: Partial<Record<
+    "query" | "mutation" | "transact" | "push" | "pull" | "clone" | "reconcile" | "seed",
+    { maxRequests: number; windowSeconds: number }
+  >>;
+  /** Key extractor for identifying clients. */
+  keyExtractor?: (ctx: TContext) => string | Promise<string>;
+}
+```
+
+## ObservabilityConfig
+
+```typescript
+interface ObservabilityConfig {
+  /** Emit execution timing events. Default: false. */
+  timing?: boolean;
+  /** Custom timing event handler. Default: console.debug. */
+  onTiming?: (event: ExecutionTimingEvent) => void;
+}
+```
+
+## WsManagerConfig
+
+```typescript
+interface WsManagerConfig {
+  /** Max total WS connections. Default: 10000. */
+  maxConnections?: number;
+  /** Max connections per namespace. Default: 100. */
+  maxConnectionsPerNamespace?: number;
+  /** Heartbeat ping interval in ms. Default: 30000. */
+  heartbeatIntervalMs?: number;
+  /** Max time to wait for pong. Default: 10000. */
+  heartbeatTimeoutMs?: number;
+}
+```
+
+## Defaults Summary
+
+| Option | Default |
+|---|---|
+| `limits.maxLimit` | 100 |
+| `limits.maxPayloadBytes` | 5,242,880 (5 MB) |
+| `limits.maxPullLimit` | 1000 |
+| `limits.maxSelectTokens` | 50 |
+| `limits.maxFilterKeysPerLevel` | 20 |
+| `limits.maxSortFields` | 10 |
+| `limits.maxAggregations` | 20 |
+| `limits.maxIdLength` | 255 |
+| `limits.maxBatchSize` | 500 |
+| `limits.maxBatchQueryConcurrency` | 20 |
+| `debug` | `process.env.NODE_ENV !== "production"` |
+| `allowUnknownResources` | `false` |
+| `shutdownTimeoutMs` | 10000 |
+| `ws.maxConnections` | 10000 |
+| `ws.maxConnectionsPerNamespace` | 100 |
+| `ws.heartbeatIntervalMs` | 30000 |
+| `ws.heartbeatTimeoutMs` | 10000 |

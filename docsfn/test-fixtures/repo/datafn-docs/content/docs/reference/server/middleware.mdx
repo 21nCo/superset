@@ -1,0 +1,122 @@
+---
+title: "Middleware"
+description: "Rate limiting and timing middleware reference."
+audience: reference
+applies_to: both
+---
+
+## Rate Limiting
+
+### RateLimiter Interface
+
+```typescript
+interface RateLimiter {
+  check(
+    key: string,
+    maxRequests: number,
+    windowSeconds: number,
+  ): Promise<{ allowed: boolean; remaining: number }>;
+}
+```
+
+### RedisRateLimiter
+
+Redis-backed rate limiter using atomic `INCR` with TTL. Key format: `ratelimit:{endpoint}:{clientKey}:{windowId}`.
+
+```typescript
+class RedisRateLimiter implements RateLimiter {
+  constructor(redis: RedisAdapter);
+}
+```
+
+Uses an atomic Lua script when the Redis client supports `eval()`:
+
+```lua
+local c = redis.call('incr', KEYS[1])
+if c == 1 then redis.call('expire', KEYS[1], ARGV[1]) end
+return c
+```
+
+Falls back to non-atomic `INCR` + `SET` for clients that do not support `eval`.
+
+### MemoryRateLimiter
+
+In-memory sliding window limiter. Single-process only.
+
+```typescript
+class MemoryRateLimiter implements RateLimiter {
+  constructor(sweepIntervalMs?: number); // Default: 60000
+  destroy(): void;
+}
+```
+
+Uses a `Map<string, { count, resetAt }>` with periodic sweep to remove expired entries. Call `destroy()` on shutdown to stop the sweep timer and allow the process to exit.
+
+### Rate Limit Middleware
+
+Applied **before** JSON parsing and authorization. Returns `null` if the request is allowed, or a `429` response with `Retry-After` header if rate-limited.
+
+```typescript
+function createRateLimitMiddleware(config: {
+  limiter: RateLimiter;
+  maxRequests: number;
+  windowSeconds: number;
+  endpoints?: Partial<Record<string, { maxRequests: number; windowSeconds: number }>>;
+  keyExtractor: (ctx: any) => string | Promise<string>;
+}): (endpoint: string, ctx: any) => Promise<Response | null>;
+```
+
+## Execution Timing
+
+### ExecutionTimer
+
+Tracks named execution phases sequentially.
+
+```typescript
+class ExecutionTimer {
+  /** Start a named phase. Ends any in-progress phase. */
+  startPhase(name: string): void;
+
+  /** End the current phase. */
+  endPhase(): void;
+
+  /** Build the final timing event. */
+  build(endpoint: string, resource?: string, operation?: string): ExecutionTimingEvent;
+}
+```
+
+### ExecutionTimingEvent
+
+```typescript
+interface ExecutionTimingEvent {
+  endpoint: string;
+  resource?: string;
+  operation?: string;
+  phases: Record<string, number>; // phase name -> duration ms
+  totalMs: number;
+  timestamp: string; // ISO 8601
+}
+```
+
+### TimingEmitter
+
+Created from `ObservabilityConfig`. Returns `null` if timing is disabled (no runtime overhead). Custom `onTiming` handler errors are caught and logged.
+
+```typescript
+function createTimingEmitter(config?: {
+  timing?: boolean;
+  onTiming?: (event: ExecutionTimingEvent) => void;
+}, logger?: DatafnLogger): TimingEmitter | null;
+```
+
+Usage in route handlers:
+
+```typescript
+const timer = new ExecutionTimer();
+timer.startPhase("validate");
+// ... validation ...
+timer.startPhase("execute");
+// ... execution ...
+const event = timer.build("query", "todos");
+timingEmitter?.(event);
+```

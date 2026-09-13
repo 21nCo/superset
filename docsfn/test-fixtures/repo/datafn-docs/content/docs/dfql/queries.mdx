@@ -1,0 +1,126 @@
+---
+title: "Queries"
+description: "Retrieve data with DFQL queries."
+audience: reference
+applies_to: both
+---
+
+A DFQL query is a JSON object that describes what data to retrieve from a resource. Queries support filtering, sorting, pagination, field selection, aggregation, search, and cancellation.
+
+## Query Structure
+
+```typescript
+type DfqlQuery = {
+  resource: string;         // Target resource name
+  version: number;          // Schema version
+  select?: string[];        // Fields and relations to include
+  omit?: string[];          // Fields to exclude
+  filters?: Record<string, unknown>;  // Filter conditions
+  search?: Record<string, unknown>;   // Full-text search block
+  sort?: string[];          // Sort terms
+  limit?: number;           // Maximum records to return
+  offset?: number;          // Skip N records (limit/offset pagination)
+  cursor?: DfqlCursor;      // Cursor pagination
+  count?: boolean;          // Include total count in response
+  groupBy?: string[];       // Group results by fields
+  aggregations?: Record<string, unknown>; // Aggregate functions
+  having?: Record<string, unknown>;       // Filter on aggregated groups
+  signal?: AbortSignal;     // Cancel the query
+};
+```
+
+## Basic Queries
+
+Retrieve all records from a resource:
+
+```typescript
+const query: DfqlQuery = {
+  resource: "todos",
+  version: 1,
+};
+```
+
+Add filters, sorting, and pagination:
+
+```typescript
+const query: DfqlQuery = {
+  resource: "todos",
+  version: 1,
+  filters: { completed: false },
+  sort: ["priority:desc", "createdAt:asc"],
+  limit: 20,
+  offset: 0,
+};
+```
+
+## Count Queries
+
+Request a total count alongside results by setting `count: true`:
+
+```typescript
+const query: DfqlQuery = {
+  resource: "todos",
+  version: 1,
+  filters: { completed: false },
+  count: true,
+  limit: 10,
+};
+// Response includes: { data: [...], count: 42, nextCursor: ... }
+```
+
+## Batch Queries
+
+Pass an array of queries to execute multiple queries in a single request:
+
+```typescript
+const queries: DfqlQuery[] = [
+  { resource: "todos", version: 1, filters: { completed: false } },
+  { resource: "users", version: 1, limit: 10 },
+];
+```
+
+## Cancellation
+
+Pass an `AbortSignal` to cancel a query in progress:
+
+```typescript
+const controller = new AbortController();
+
+const query: DfqlQuery = {
+  resource: "todos",
+  version: 1,
+  signal: controller.signal,
+};
+
+// Cancel the query
+controller.abort();
+```
+
+## Query Normalization
+
+DFQL queries can be normalized to a canonical form for caching and comparison. This is useful when the same logical query is constructed from different code paths that may produce different key orderings.
+
+```typescript
+import { normalizeDfql, dfqlKey } from "@datafn/core";
+
+const key = dfqlKey({
+  resource: "todos",
+  version: 1,
+  filters: { completed: false },
+});
+// Produces a deterministic string: sorted keys, undefined stripped
+```
+
+`normalizeDfql` sorts object keys alphabetically and removes `undefined` values. `dfqlKey` wraps this in `JSON.stringify` to produce a stable cache key.
+
+## Server-Side Query Classification
+
+On the server, queries are classified into one of three execution strategies:
+
+| Strategy | Description |
+|---|---|
+| **Full pushdown** | The entire query (filters, sort, limit) is pushed to the database adapter. Used when the query has no relation expansion or aggregation. |
+| **Partial pushdown** | Filters, sort, and pagination for the primary resource are pushed to the adapter. Related records are loaded on demand and projected in memory. Used when the query includes relation expansion tokens in `select`. |
+| **In-memory** | All records are loaded into memory, then filtered, sorted, paginated, and projected. Used for queries with aggregation, groupBy, or server-side search. |
+
+The classification is automatic and transparent. The server always selects the most efficient strategy for a given query shape.

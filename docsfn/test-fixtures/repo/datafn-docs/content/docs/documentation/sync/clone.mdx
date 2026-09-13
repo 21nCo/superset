@@ -1,0 +1,134 @@
+---
+title: Clone
+description: Full dataset retrieval for initial client setup.
+audience: guide
+applies_to: both
+---
+
+Clone is the initial sync phase that downloads a complete dataset from the server to the client. It runs automatically on first launch or when a resource has not yet been hydrated.
+
+## How Clone Works
+
+1. The sync engine checks the hydration state of each resource.
+2. Resources with state `"notStarted"` are marked as `"hydrating"`.
+3. A clone request is sent to the server with the list of resources to clone.
+4. The server returns all records for the requested resources, including join table data for many-many relations.
+5. Records are written to local storage and per-table cursors are set.
+6. Hydration state transitions to `"ready"`.
+
+## Server Endpoint
+
+```
+POST /datafn/clone
+```
+
+Request body:
+
+```json
+{
+  "clientId": "client-abc-123",
+  "tables": ["todos", "projects"],
+  "includeJoins": true
+}
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "todos": [{ "id": "t1", "title": "Buy milk", "status": "active" }],
+    "projects": [{ "id": "p1", "name": "Work" }]
+  },
+  "cursors": {
+    "todos": "42",
+    "projects": "38"
+  },
+  "next": null
+}
+```
+
+## Auto-Pagination
+
+When a resource exceeds the configured page size, clone automatically paginates using cursor-based pagination:
+
+```typescript
+sync: {
+  hydration: {
+    bootResources: ["todos", "projects"],
+    clonePageSize: 5000,  // Global page size
+  },
+}
+```
+
+You can also set per-resource page sizes:
+
+```typescript
+sync: {
+  hydration: {
+    bootResources: ["todos", "projects"],
+    clonePageSize: {
+      todos: 10000,
+      projects: 1000,
+    },
+  },
+}
+```
+
+During paginated clone, the engine sends requests with an `afterId` cursor and iterates until the server returns no more pages:
+
+```json
+{
+  "clientId": "client-abc-123",
+  "tables": ["todos"],
+  "page": {
+    "table": "todos",
+    "afterId": "t500",
+    "limit": 5000
+  },
+  "includeJoins": true
+}
+```
+
+## Selective Clone
+
+You can clone a subset of resources instead of the entire schema:
+
+```typescript
+// Clone only specific resources
+await client.sync.clone({
+  clientId: "client-abc-123",
+  tables: ["todos", "projects"],
+  includeJoins: true,
+});
+```
+
+Resources marked as `isRemoteOnly` in the schema are excluded from clone operations.
+
+## Join Table Data
+
+When `includeJoins: true` (the default), clone also downloads join rows for many-many relations. Join store keys follow the format `fromResource.relationName.toResource`, such as `todos.tags.tags`.
+
+## Events
+
+Clone emits a `sync_applied` event on success:
+
+```typescript
+client.subscribe((event) => {
+  if (event.type === "sync_applied" && event.context.phase === "clone") {
+    console.log("Cloned resources:", event.context.resources);
+    console.log("Cursors:", event.context.cursors);
+  }
+});
+```
+
+On failure, a `sync_failed` event is emitted with the error details:
+
+```typescript
+client.subscribe((event) => {
+  if (event.type === "sync_failed" && event.context.phase === "clone") {
+    console.error("Clone failed:", event.context.error.message);
+  }
+});
+```

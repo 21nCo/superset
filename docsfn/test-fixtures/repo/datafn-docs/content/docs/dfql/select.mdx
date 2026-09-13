@@ -1,0 +1,168 @@
+---
+title: "Select and Expand"
+description: "Control which fields are returned and expand relations."
+audience: reference
+applies_to: both
+---
+
+The `select` and `omit` fields control which fields appear in query results. The `select` field also supports relation expansion tokens that inline related records into the response.
+
+## Basic Field Selection
+
+When `select` is omitted, all schema-defined fields plus `id` are returned:
+
+```typescript
+// Returns all fields
+{ resource: "todos", version: 1 }
+```
+
+Specify `select` to return only the listed fields:
+
+```typescript
+{
+  resource: "todos",
+  version: 1,
+  select: ["id", "title", "completed"],
+}
+```
+
+The `id` field is always included in results, even if not listed in `select`.
+
+## Wildcard
+
+Use `"*"` to select all base fields of the resource:
+
+```typescript
+{
+  resource: "todos",
+  version: 1,
+  select: ["*", "assignee.*"],
+}
+// All todo fields + expanded assignee relation
+```
+
+## Omit
+
+Use `omit` to exclude specific fields from results. The `id` field can never be omitted.
+
+```typescript
+{
+  resource: "todos",
+  version: 1,
+  omit: ["description", "internalNotes"],
+}
+```
+
+## Select Tokens
+
+Select tokens are strings that describe what to include. They follow a dot-separated path syntax.
+
+| Token | Description | Example |
+|---|---|---|
+| `"field"` | Include a base field | `"title"` |
+| `"relation"` | Include related record IDs only | `"tags"` |
+| `"relation.*"` | Expand relation with all fields | `"assignee.*"` |
+| `"relation.{id,name}"` | Expand with specific fields | _(planned)_ |
+| `"relation.#"` | Include raw join rows (many-many) | `"tags.#"` |
+| `"relation.*#"` | Expand with `$relation_metadata` | `"tags.*#"` |
+
+### Relation ID Token
+
+A bare relation name returns the IDs of related records:
+
+```typescript
+{
+  resource: "todos",
+  version: 1,
+  select: ["title", "tags"],
+}
+// Result: { id: "1", title: "...", tags: ["tag_1", "tag_2"] }
+```
+
+For many-one relations, this returns a single ID (or null). For one-many and many-many, it returns an array of IDs.
+
+### Expand All Fields
+
+Use `relation.*` to inline the full related record(s):
+
+```typescript
+{
+  resource: "todos",
+  version: 1,
+  select: ["title", "assignee.*"],
+}
+// Result: { id: "1", title: "...", assignee: { id: "user_1", name: "Alice", ... } }
+```
+
+For one-many and many-many relations, the expanded value is an array of records.
+
+### Join Row Token
+
+For many-many relations, `relation.#` returns the raw join rows with `from`, `to`, and any metadata fields:
+
+```typescript
+{
+  resource: "todos",
+  version: 1,
+  select: ["title", "tags.#"],
+}
+// Result: { id: "1", title: "...", tags: [{ from: "1", to: "tag_1", order: 0 }, ...] }
+```
+
+### Expand with Metadata
+
+For many-many relations with metadata, `relation.*#` expands the related records and attaches metadata in a `$relation_metadata` field:
+
+```typescript
+{
+  resource: "todos",
+  version: 1,
+  select: ["title", "tags.*#"],
+}
+// Result:
+// {
+//   id: "1",
+//   title: "...",
+//   tags: [
+//     { id: "tag_1", name: "urgent", $relation_metadata: { order: 0 } },
+//   ]
+// }
+```
+
+## Nested Relation Expansion
+
+Select tokens can traverse multiple levels of relations using dot notation:
+
+```typescript
+{
+  resource: "projects",
+  version: 1,
+  select: ["name", "tasks.tags.*"],
+}
+// Expands: project -> tasks -> tags (with all tag fields)
+```
+
+Each level is resolved recursively. The intermediate records (tasks) are expanded first, then the nested relation (tags) is expanded within each intermediate record.
+
+## FK Field Auto-Omission
+
+When a relation is expanded, the underlying foreign key field is automatically omitted from the result. For example, if a `todo` has a `many-one` relation to `user` via an `assigneeId` FK field, and you expand `assignee.*`, the `assigneeId` field is removed from the todo record in the response. This avoids redundant data, since the related record is already inlined.
+
+## ParseSelectToken
+
+Use `parseSelectToken` to decompose a select token string into its structured components:
+
+```typescript
+import { parseSelectToken, type SelectToken } from "@datafn/core";
+
+parseSelectToken("title");
+// { path: ["title"], baseName: "title", directive: undefined }
+
+parseSelectToken("tags.*");
+// { path: ["tags", "*"], baseName: "tags", directive: "*" }
+
+parseSelectToken("tasks.tags.*");
+// { path: ["tasks", "tags", "*"], baseName: "tasks", directive: "tags.*" }
+```
+
+The `baseName` is always the first segment. The `directive` is everything after the first dot, or `undefined` for bare field tokens.

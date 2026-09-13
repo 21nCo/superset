@@ -1,0 +1,160 @@
+---
+title: "Mutations"
+description: "Execute core and capability-aware mutations from the DataFn client."
+audience: guide
+applies_to: typescript
+---
+
+## Mutation Operations
+
+Client table handles support:
+
+- core operations: `insert`, `merge`, `replace`, `delete`,
+- capability operations (schema-gated): `trash`, `restore`, `archive`, `unarchive`, `share`, `unshare`.
+
+For full DFQL payload details, see [DFQL Mutations](/docs/dfql/mutations).
+
+## Core Mutations
+
+### Insert
+
+```typescript
+const result = await client.table("todos").mutate({
+  operation: "insert",
+  record: {
+    title: "Buy groceries",
+    completed: false,
+  },
+});
+```
+
+If `id` is omitted, the table handle auto-generates one using the resource `idPrefix`.
+
+### Merge
+
+```typescript
+await client.table("todos").mutate({
+  operation: "merge",
+  id: "td:1",
+  record: { completed: true },
+});
+```
+
+### Replace
+
+```typescript
+await client.table("todos").mutate({
+  operation: "replace",
+  id: "td:1",
+  record: {
+    title: "Rewritten task",
+    completed: false,
+    priority: 1,
+  },
+});
+```
+
+### Delete
+
+```typescript
+await client.table("todos").mutate({
+  operation: "delete",
+  id: "td:1",
+});
+```
+
+`delete` is hard delete.
+
+## Capability Convenience Methods
+
+These methods appear only when the resource enables corresponding capabilities:
+
+```typescript
+await client.table("todos").trash?.("td:1");
+await client.table("todos").restore?.("td:1");
+
+await client.table("todos").archive?.("td:1");
+await client.table("todos").unarchive?.("td:1");
+
+await client.table("docs").share?.("doc:1", "user:alice", "editor");
+await client.table("docs").unshare?.("doc:1", "user:alice");
+```
+
+See [Capabilities](/docs/documentation/concepts/capabilities) and [Tables](/docs/documentation/client/tables).
+
+## Batch Mutations
+
+```typescript
+await client.table("todos").mutate([
+  { operation: "insert", record: { title: "First", completed: false } },
+  { operation: "insert", record: { title: "Second", completed: false } },
+  { operation: "delete", id: "td:old-item" },
+]);
+```
+
+## Readonly Capability Field Sanitization
+
+When `timestamps`, `audit`, or `trash` are enabled, client mutation payloads are sanitized before outbound transport and changelog persistence:
+
+- `createdAt`, `updatedAt`
+- `createdBy`, `updatedBy`
+- `trashedAt`, `trashedBy`
+
+This keeps server-owned fields authoritative and prevents push-route validation issues.
+
+## Optimistic Capability Injection
+
+In local-first/offline flows, optimistic records are enriched for enabled capabilities:
+
+- insert: timestamps + audit create/update fields
+- merge/replace: update timestamp/audit fields
+
+This keeps local UI state aligned with server lifecycle semantics.
+
+## Context
+
+Attach JSON-serializable metadata with `context`:
+
+```typescript
+await client.table("todos").mutate({
+  operation: "merge",
+  id: "td:1",
+  record: { completed: true },
+  context: { source: "keyboard-shortcut", userId: "user-123" },
+});
+```
+
+## Silent and System Flags
+
+```typescript
+await client.table("todos").mutate({
+  operation: "merge",
+  id: "td:1",
+  record: { syncedAt: Date.now() },
+  silent: true,
+  system: true,
+});
+```
+
+- `silent: true` suppresses mutation events.
+- `system: true` marks event payloads as system-initiated.
+
+## Debounced Mutations
+
+```typescript
+await client.table("todos").mutate({
+  operation: "merge",
+  id: "td:1",
+  record: { title: "Buy gr" },
+  debounceKey: "todo-title-td:1",
+  debounceMs: 1500,
+});
+```
+
+Use `client.flush(key)` or `client.flushAll()` to force execution.
+
+## Events
+
+Successful mutations emit `mutation_applied`; failures emit `mutation_rejected`.
+
+See [Events](/docs/documentation/client/events).

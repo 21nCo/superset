@@ -1,0 +1,164 @@
+---
+title: "Signals"
+description: "Reactive query results that auto-refresh on mutations."
+audience: guide
+applies_to: typescript
+---
+
+## Overview
+
+Signals provide reactive, cached query results that automatically refresh when mutations affect their data. They are the primary way to bind DataFn data to UI frameworks.
+
+## Creating a Signal
+
+Create a signal through a table handle. The signal is lazy -- it fetches data on the first `subscribe()` call. Signals accept all standard [DFQL query options](/docs/dfql/queries) including [filters](/docs/dfql/filters), [sorting](/docs/dfql/sorting), and [select projections](/docs/dfql/select).
+
+```typescript
+const todosSignal = client.table("todos").signal({
+  filters: { completed: { eq: false } },
+  sort: [{ field: "createdAt", direction: "desc" }],
+  limit: 50,
+});
+```
+
+## The DatafnSignal Interface
+
+```typescript
+interface DatafnSignal<T> {
+  /** Synchronous access to the current cached value. */
+  get(): T;
+
+  /** Subscribe to value changes. Returns an unsubscribe function. */
+  subscribe(handler: (value: T) => void): () => void;
+
+  /** True during the initial fetch (before any data is available). */
+  readonly loading: boolean;
+
+  /** Non-null if the last fetch failed. */
+  readonly error: DatafnError | null;
+
+  /** True when re-fetching after a mutation (data is still available). */
+  readonly refreshing: boolean;
+
+  /** Cursor for loading the next page, or null if no more pages. */
+  readonly nextCursor: string | null;
+
+  /** Tear down the signal: unsubscribe from events, remove from cache. */
+  dispose(): void;
+}
+```
+
+## Subscribing
+
+The `subscribe()` method registers a callback that fires whenever the signal's value changes. If data is already cached, the callback fires immediately with the current value.
+
+```typescript
+const unsubscribe = todosSignal.subscribe((todos) => {
+  console.log("Todos updated:", todos);
+  renderTodoList(todos);
+});
+
+// Later, stop receiving updates
+unsubscribe();
+```
+
+## Synchronous Access
+
+Use `get()` to read the current cached value without subscribing. Returns `undefined` before the initial fetch completes.
+
+```typescript
+const currentTodos = todosSignal.get();
+```
+
+## Auto-Refresh
+
+Signals listen to `mutation_applied` and `sync_applied` events on the client's event bus. When a mutation affects a resource in the signal's footprint, the signal automatically re-fetches.
+
+### Footprint Derivation
+
+The footprint is the set of resources that can affect a signal's results:
+
+- The primary resource from the query (e.g., `"todos"`).
+- Resources referenced by relation expansion tokens in the `select` array (e.g., `"author.*"` adds the `users` resource if `author` is a relation targeting `users`).
+
+Mutations on any resource in the footprint trigger a refresh.
+
+### Optimistic Patching
+
+For `merge` operations on the primary resource, the signal attempts an optimistic patch before re-fetching. If the mutation's target IDs match cached records, the signal updates in-place immediately and then schedules a background re-fetch for eventual consistency.
+
+Disable optimistic patching per-signal:
+
+```typescript
+const signal = client.table("todos").signal(
+  { filters: { completed: { eq: false } } },
+  { disableOptimistic: true },
+);
+```
+
+## Signal Caching
+
+Signals are cached by a normalized query key (`dfqlKey`). Creating a signal with the same query parameters returns the same cached instance, ensuring referential stability and preventing duplicate fetches.
+
+```typescript
+// These return the same signal instance
+const s1 = client.table("todos").signal({ limit: 10 });
+const s2 = client.table("todos").signal({ limit: 10 });
+// s1 === s2
+```
+
+## Cursor-Based Pagination
+
+Use `nextCursor` to implement paginated loading:
+
+```typescript
+const signal = client.table("todos").signal({ limit: 20 });
+
+signal.subscribe((todos) => {
+  renderList(todos);
+
+  if (signal.nextCursor) {
+    showLoadMoreButton();
+  }
+});
+```
+
+## Disposal
+
+Always dispose signals when they are no longer needed. This unsubscribes from the event bus and removes the signal from the cache.
+
+```typescript
+todosSignal.dispose();
+```
+
+After disposal, `get()` returns the last cached value (no re-fetch), and the signal stops reacting to mutations.
+
+## Framework Integration
+
+Signals integrate with UI frameworks through thin adapter packages. Each adapter converts a `DatafnSignal<T>` into the framework's native reactive primitive.
+
+### Svelte
+
+Use `@datafn/svelte` to convert signals to Svelte readable stores:
+
+```typescript
+import { toSvelteStore } from "@datafn/svelte";
+
+const todosStore = toSvelteStore(
+  client.todos.signal({ sort: ["-createdAt"] })
+);
+```
+
+The store provides `data`, `loading`, `error`, and `refreshing` properties:
+
+```svelte
+{#if $todosStore.loading}
+  <p>Loading...</p>
+{:else}
+  {#each $todosStore.data ?? [] as todo}
+    <p>{todo.title}</p>
+  {/each}
+{/if}
+```
+
+See [Framework Adapters](/docs/documentation/client/frameworks) for full documentation and other framework options.

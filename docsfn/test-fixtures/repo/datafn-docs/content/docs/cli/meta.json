@@ -1,0 +1,12 @@
+{
+  "title": "CLI",
+  "description": "Command-line tools",
+  "root": true,
+  "pages": [
+    "index",
+    "generate",
+    "validate",
+    "type-codegen",
+    "drizzle-codegen"
+  ]
+}

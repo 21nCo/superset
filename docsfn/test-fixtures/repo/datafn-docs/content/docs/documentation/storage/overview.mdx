@@ -1,0 +1,114 @@
+---
+title: Storage Overview
+description: Persistent offline storage adapters.
+audience: guide
+applies_to: both
+---
+
+DataFn uses a pluggable storage adapter system for client-side persistence. The storage adapter provides the local data layer that enables offline-first operation, including record storage, join rows for many-many relations, sync cursors, hydration state, and the mutation changelog.
+
+## DatafnStorageAdapter Interface
+
+Every storage adapter implements the `DatafnStorageAdapter` interface:
+
+```typescript
+interface DatafnStorageAdapter {
+  // Records
+  getRecord(resource: string, id: string): Promise<Record<string, unknown> | null>;
+  listRecords(resource: string): Promise<Record<string, unknown>[]>;
+  upsertRecord(resource: string, record: Record<string, unknown>): Promise<void>;
+  deleteRecord(resource: string, id: string): Promise<void>;
+  mergeRecord(
+    resource: string,
+    id: string,
+    partial: Record<string, unknown>,
+  ): Promise<Record<string, unknown>>;
+
+  // Join rows (many-many relations)
+  listJoinRows(relationKey: string): Promise<Array<Record<string, unknown>>>;
+  getJoinRows(relationKey: string, fromId: string): Promise<Array<Record<string, unknown>>>;
+  getJoinRowsInverse(relationKey: string, toId: string): Promise<Array<Record<string, unknown>>>;
+  upsertJoinRow(relationKey: string, row: Record<string, unknown>): Promise<void>;
+  setJoinRows(relationKey: string, rows: Array<Record<string, unknown>>): Promise<void>;
+  deleteJoinRow(relationKey: string, from: string, to: string): Promise<void>;
+
+  // Convenience query
+  findRecords(resource: string, field: string, value: unknown): Promise<Record<string, unknown>[]>;
+
+  // Sync state
+  getCursor(resource: string): Promise<string | null>;
+  setCursor(resource: string, cursor: string | null): Promise<void>;
+  getHydrationState(resource: string): Promise<DatafnHydrationState>;
+  setHydrationState(resource: string, state: DatafnHydrationState): Promise<void>;
+
+  // Changelog
+  changelogAppend(entry: Omit<DatafnChangelogEntry, "seq">): Promise<DatafnChangelogEntry>;
+  changelogList(options?: { limit?: number }): Promise<DatafnChangelogEntry[]>;
+  changelogAck(options: { throughSeq: number }): Promise<void>;
+
+  // Counts (for reconcile)
+  countRecords(resource: string): Promise<number>;
+  countJoinRows(relationKey: string): Promise<number>;
+
+  // Lifecycle
+  close(): Promise<void>;
+  clearAll(): Promise<void>;
+  healthCheck(): Promise<{ ok: boolean; issues: string[] }>;
+}
+```
+
+## Key Concepts
+
+### Merge Record
+
+The `mergeRecord` method performs an atomic read-modify-write operation. It reads the existing record, shallow-merges the provided fields, and writes the result back in a single transaction. For object-type fields, it performs one-level-deep merge.
+
+```typescript
+// Existing record: { id: "t1", title: "Buy milk", meta: { color: "red", size: 3 } }
+await storage.mergeRecord("todos", "t1", { meta: { color: "blue" } });
+// Result: { id: "t1", title: "Buy milk", meta: { color: "blue", size: 3 } }
+```
+
+### Join Rows
+
+Many-many relations are stored in join stores with composite keys `(from, to)`. The relation key follows the pattern `fromResource.relationName.toResource`:
+
+```typescript
+await storage.upsertJoinRow("todos.tags.tags", { from: "t1", to: "tag1" });
+const tags = await storage.getJoinRows("todos.tags.tags", "t1");
+const todos = await storage.getJoinRowsInverse("todos.tags.tags", "tag1");
+```
+
+### Changelog
+
+The changelog is a write-ahead log for offline mutations. It deduplicates entries by `(clientId, mutationId)` pair to prevent duplicate writes from retries.
+
+### Hydration State
+
+Each resource tracks its hydration state independently: `"notStarted"`, `"hydrating"`, or `"ready"`. State transitions are validated to prevent invalid sequences.
+
+## Storage Factory
+
+For applications with namespace-based isolation, use a `DatafnStorageFactory` to create isolated storage instances per namespace:
+
+```typescript
+import type { DatafnStorageFactory } from "@datafn/client";
+import { IndexedDbStorageAdapter, ns } from "@datafn/client";
+
+const storageFactory: DatafnStorageFactory = (namespace) => {
+  return IndexedDbStorageAdapter.createForNamespace(
+    "my-app",
+    namespace,
+  );
+};
+```
+
+The factory is called with the namespace string when the client is configured with `namespace`. See [Namespaces](/docs/documentation/concepts/multi-tenancy) for details.
+
+## Available Adapters
+
+| Adapter | Persistence | Use Case |
+|---------|------------|----------|
+| [IndexedDB](/docs/documentation/storage/indexeddb) | Browser IndexedDB | Production browser apps |
+| [Memory](/docs/documentation/storage/memory) | In-memory (ephemeral) | Testing, SSR, non-browser environments |
+| [Custom](/docs/documentation/storage/custom) | Your implementation | Specialized storage needs |

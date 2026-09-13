@@ -1,0 +1,182 @@
+---
+title: "Resources"
+description: "Define resources, permissions, and per-resource capabilities."
+audience: reference
+applies_to: both
+---
+
+## DatafnResourceSchema
+
+A resource is a collection of records (similar to a table). It defines fields, indexing, permissions, and optional capability overrides.
+
+```typescript
+type DatafnResourceSchema = {
+  name: string;
+  version: number;
+  idPrefix?: string;
+  isRemoteOnly?: boolean;
+  capabilities?: ResourceCapabilities;
+  fields: DatafnFieldSchema[];
+  indices?:
+    | { base?: string[]; search?: string[]; vector?: string[] }
+    | string[];
+  permissions?: DatafnPermissionsPolicy;
+};
+```
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `name` | `string` | Unique resource name used in DFQL operations. |
+| `version` | `number` | Integer schema version for schema updates. |
+| `idPrefix` | `string` | Prefix used by default client ID generation. |
+| `isRemoteOnly` | `boolean` | Skip local hydration/offline storage for this resource. |
+| `capabilities` | `ResourceCapabilities` | Per-resource capability entries or global exclusions. |
+| `fields` | `DatafnFieldSchema[]` | Declared user fields (capability fields are injected automatically). |
+| `indices` | object or `string[]` | Query index configuration. |
+| `permissions` | `DatafnPermissionsPolicy` | Field-level read/write authorization policy. |
+
+## Resource Capabilities
+
+Resource capability declarations are resolved with schema-level capabilities.
+
+```typescript
+type ResourceCapabilities =
+  | CapabilityEntry[]
+  | { exclude: SimpleCapability[] };
+```
+
+### Additive declaration
+
+```typescript
+{
+  name: "tasks",
+  version: 1,
+  capabilities: ["archivable"],
+  fields: [...]
+}
+```
+
+### Exclusion declaration
+
+```typescript
+{
+  name: "logs",
+  version: 1,
+  capabilities: { exclude: ["trash"] },
+  fields: [...]
+}
+```
+
+Use exclusions when a capability is globally enabled but should be disabled for a specific resource.
+
+## Defining a Resource
+
+```typescript
+import { defineSchema } from "@datafn/core";
+
+const schema = defineSchema({
+  capabilities: ["timestamps", "audit"],
+  resources: [
+    {
+      name: "articles",
+      version: 1,
+      idPrefix: "art",
+      capabilities: ["trash", "archivable"],
+      fields: [
+        { name: "title", type: "string", required: true, maxLength: 500 },
+        { name: "body", type: "string", required: true },
+        { name: "publishedAt", type: "date", required: false },
+        { name: "viewCount", type: "number", required: false, default: 0 },
+      ],
+      indices: {
+        base: ["title", "publishedAt"],
+        search: ["body"],
+      },
+    },
+  ],
+});
+```
+
+## Indices
+
+| Category | Purpose |
+| --- | --- |
+| `base` | Equality/range queries |
+| `search` | Full-text search |
+| `vector` | Vector similarity |
+
+Shorthand form:
+
+```typescript
+indices: ["title", "publishedAt"]
+```
+
+Normalized form:
+
+```typescript
+indices: {
+  base: ["title", "publishedAt"],
+  search: [],
+  vector: [],
+}
+```
+
+Index fields must match resource fields (including capability-injected fields after resolution).
+
+## Permissions
+
+```typescript
+type DatafnPermissionsPolicy = {
+  read?: { fields: string[] };
+  write?: { fields: string[] };
+  ownerField?: string;
+};
+```
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `read.fields` | `string[]` | Fields allowed in select/filter/sort contexts. |
+| `write.fields` | `string[]` | Fields allowed in mutation records. |
+| `ownerField` | `string` | Optional field for owner-scoped authz logic. |
+
+```typescript
+{
+  name: "users",
+  version: 1,
+  fields: [
+    { name: "email", type: "string", required: true, unique: true },
+    { name: "displayName", type: "string", required: true },
+    { name: "role", type: "string", required: true, enum: ["admin", "member"] },
+    { name: "internalNotes", type: "string", required: false },
+  ],
+  permissions: {
+    read: { fields: ["email", "displayName", "role"] },
+    write: { fields: ["displayName"] },
+    ownerField: "email",
+  },
+}
+```
+
+## Remote-Only Resources
+
+`isRemoteOnly: true` keeps a resource out of local hydration/offline tables.
+
+```typescript
+{
+  name: "auditLogs",
+  version: 1,
+  isRemoteOnly: true,
+  fields: [
+    { name: "action", type: "string", required: true },
+    { name: "actor", type: "string", required: true },
+    { name: "timestamp", type: "date", required: true },
+  ],
+}
+```
+
+Useful for large append-only or sensitive datasets that should stay server-only.
+
+## See Also
+
+- [Capabilities](/docs/documentation/concepts/capabilities)
+- [System Fields](/docs/dfql/schema/system-fields)

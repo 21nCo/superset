@@ -1,0 +1,171 @@
+---
+title: Guards
+description: Optimistic concurrency control with conditional mutations.
+audience: guide
+applies_to: both
+---
+
+Guards enable conditional mutations using an `if` clause. The mutation only proceeds if the guard condition evaluates to true against the current state of the record. This provides optimistic concurrency control without requiring explicit locking.
+
+## Basic Usage
+
+Add an `if` clause to any mutation to make it conditional:
+
+```typescript
+await client.table("todos").mutate({
+  operation: "merge",
+  id: "t1",
+  record: { status: "done" },
+  if: { status: "active" },  // Only update if current status is "active"
+});
+```
+
+If the guard fails (the current record does not match the condition), the mutation is rejected.
+
+## How Guards Work
+
+1. The server fetches the current record from the database.
+2. The guard filter is evaluated against the fetched record.
+3. If the filter matches, the mutation proceeds.
+4. If the filter does not match, the mutation is rejected with an error.
+5. If the record does not exist, the guard fails (match: false).
+6. If the database read fails, the guard fails (fail-closed).
+
+```typescript
+async function evaluateGuard(
+  adapter: Adapter,
+  resource: string,
+  id: string,
+  guard: Record<string, unknown>,
+  schema: DatafnSchema,
+  namespace: string,
+): Promise<{ match: boolean }> {
+  const record = await adapter.findOne({
+    model: resource,
+    where: [{ field: "id", operator: "eq", value: id }],
+    namespace,
+  });
+
+  if (!record) return { match: false };
+
+  const match = evaluateFilter(record, guard, resource, schema);
+  return { match };
+}
+```
+
+## TOCTOU Prevention
+
+Guards run within the same database transaction as the mutation they protect. This prevents time-of-check-to-time-of-use (TOCTOU) race conditions:
+
+```typescript
+// Both the guard check and the update happen atomically
+await adapter.transaction(async (trx) => {
+  const { match } = await evaluateGuard(trx, "todos", "t1", guard, schema, namespace);
+  if (!match) throw new Error("Guard failed");
+
+  await trx.update({
+    model: "todos",
+    where: [{ field: "id", operator: "eq", value: "t1" }],
+    data: { status: "done" },
+    namespace,
+  });
+});
+```
+
+## Guard Filter Syntax
+
+Guards use the same filter syntax as queries:
+
+```typescript
+// Simple equality
+if: { status: "active" }
+
+// Comparison operators
+if: { priority: { $gte: 3 } }
+
+// Multiple conditions (implicit AND)
+if: { status: "active", assignedTo: "user-1" }
+
+// Logical operators
+if: {
+  $or: [
+    { status: "active" },
+    { status: "pending" },
+  ],
+}
+
+// Not equal
+if: { isArchived: { $ne: true } }
+```
+
+## Fail-Closed Behavior
+
+Guards are fail-closed by design:
+
+- **Record not found**: Guard fails. The mutation does not proceed.
+- **Database error**: Guard fails. Errors are logged for observability but the mutation is not executed.
+- **Invalid filter**: Guard fails.
+
+This ensures that mutations protected by guards never execute in an ambiguous state.
+
+## Use Cases
+
+### Prevent Stale Updates
+
+```typescript
+// Only update if version matches (optimistic concurrency)
+await client.table("documents").mutate({
+  operation: "merge",
+  id: "doc-1",
+  record: { content: "Updated content", version: 3 },
+  if: { version: 2 },
+});
+```
+
+### State Machine Transitions
+
+```typescript
+// Ensure valid state transitions
+await client.table("orders").mutate({
+  operation: "merge",
+  id: "order-1",
+  record: { status: "shipped" },
+  if: { status: "processing" },  // Can only ship from "processing"
+});
+```
+
+### Prevent Double-Processing
+
+```typescript
+// Only claim the task if it is unassigned
+await client.table("tasks").mutate({
+  operation: "merge",
+  id: "task-1",
+  record: { assignedTo: "worker-1", status: "in_progress" },
+  if: { assignedTo: null },
+});
+```
+
+## Transact with Guards
+
+Guards work within transact operations. Each mutation in the transaction can have its own guard:
+
+```typescript
+await client.transact([
+  {
+    resource: "inventory",
+    operation: "merge",
+    id: "item-1",
+    record: { quantity: 9 },
+    if: { quantity: { $gte: 1 } },  // Only if stock available
+  },
+  {
+    resource: "orders",
+    operation: "insert",
+    id: "order-1",
+    record: { itemId: "item-1", quantity: 1 },
+  },
+]);
+```
+
+If any guard within a transaction fails, the entire transaction is rolled back.

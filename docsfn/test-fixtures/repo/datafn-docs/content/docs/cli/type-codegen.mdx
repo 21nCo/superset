@@ -1,0 +1,120 @@
+---
+title: "Type Generation"
+description: "Generate TypeScript interfaces from your schema."
+audience: reference
+applies_to: typescript
+---
+
+## Overview
+
+The `generateTypes(schema)` function produces TypeScript interface definitions from a DataFn schema. The schema is validated before code generation -- invalid schemas are rejected deterministically via envelope.
+
+```typescript
+import { generateTypes } from "@datafn/cli";
+
+const code = generateTypes(mySchema);
+// Write `code` to a .ts file
+```
+
+## Generated Output
+
+For each resource, `generateTypes` produces:
+
+1. **Resource interfaces** -- one interface per resource with typed fields.
+2. **Join table interfaces** -- for `many-many` relations that have `metadata`, an interface with join columns and metadata fields.
+3. **`Tables` type** -- maps resource names (and join table names) to their interfaces.
+4. **`TypedClient` type** -- extends `DatafnClient` with typed table accessors.
+
+All output is **deterministic**: resources, fields, and join tables are sorted by name.
+
+## Field Type Mapping
+
+| Schema Type | TypeScript Type |
+|---|---|
+| `string` | `string` |
+| `number` | `number` |
+| `boolean` | `boolean` |
+| `date` | `number` |
+| `object` | `Record<string, unknown>` |
+| `array` | `unknown[]` |
+| `file` | `string` |
+| `json` | `unknown` |
+
+## Null and Undefined Handling
+
+- Fields with `required: true` are non-optional: `title: string`.
+- Fields with `required: false` are optional: `dueDate?: number`.
+
+## Example
+
+Given this schema:
+
+```typescript
+const schema = defineSchema({
+  resources: [
+    {
+      name: "tasks",
+      version: 1,
+      fields: [
+        { name: "title", type: "string", required: true },
+        { name: "priority", type: "number", required: false },
+        { name: "metadata", type: "json", required: false },
+      ],
+    },
+    {
+      name: "users",
+      version: 1,
+      fields: [
+        { name: "email", type: "string", required: true },
+        { name: "avatar", type: "file", required: false },
+      ],
+    },
+  ],
+  relations: [
+    {
+      from: "tasks",
+      to: "users",
+      type: "many-many",
+      relation: "assignees",
+      inverse: "assignedTasks",
+      metadata: [
+        { name: "role", type: "string" },
+      ],
+    },
+  ],
+});
+```
+
+The generated TypeScript is:
+
+```typescript
+import type { DatafnClient, DatafnTable } from "@datafn/client";
+
+export interface Tasks {
+  metadata?: unknown;
+  priority?: number;
+  title: string;
+}
+
+export interface Users {
+  avatar?: string;
+  email: string;
+}
+
+export interface __datafn_join_tasks_assignees {
+  fromId: string;
+  role: string;
+  toId: string;
+}
+
+export interface Tables {
+  tasks: Tasks;
+  users: Users;
+  __datafn_join_tasks_assignees: __datafn_join_tasks_assignees;
+}
+
+export type TypedClient = DatafnClient & {
+  tasks: DatafnTable<Tasks>;
+  users: DatafnTable<Users>;
+};
+```

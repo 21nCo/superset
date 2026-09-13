@@ -1,0 +1,72 @@
+---
+title: Memory Storage
+description: In-memory storage for testing and SSR.
+audience: guide
+applies_to: both
+---
+
+The `MemoryStorageAdapter` implements the full `DatafnStorageAdapter` interface using in-memory JavaScript `Map` objects. Data does not persist across page reloads or process restarts.
+
+## Use Cases
+
+- **Testing** -- Fast, deterministic storage for unit and integration tests.
+- **Server-side rendering** -- Temporary storage during SSR where IndexedDB is not available.
+- **Non-browser environments** -- Node.js scripts, CLI tools, or any environment without IndexedDB.
+
+## Usage
+
+```typescript
+import { MemoryStorageAdapter } from "@datafn/client";
+
+// Basic usage
+const storage = new MemoryStorageAdapter();
+
+// With resource validation
+const storage = new MemoryStorageAdapter(["todos", "projects"]);
+```
+
+When a list of resource names is provided, the adapter validates table names on every operation and throws an error for unknown resources. The built-in `kv` resource is always registered automatically.
+
+## Behavior
+
+The `MemoryStorageAdapter` provides the same semantics as the IndexedDB adapter:
+
+- **Deterministic ordering** -- `listRecords` returns records sorted by `id` ascending. `listJoinRows` sorts by composite `from:to` key.
+- **Changelog deduplication** -- `changelogAppend` deduplicates by `(clientId, mutationId)` pair using an O(1) Map index.
+- **Atomic merge** -- `mergeRecord` performs a read-modify-write with one-level-deep merge for object fields.
+- **Hydration state validation** -- State transitions are validated (e.g., cannot go from `ready` to `notStarted`).
+- **Cursor validation** -- Cursor values are validated before storage.
+
+## Example: Testing
+
+```typescript
+import { MemoryStorageAdapter } from "@datafn/client";
+import { createDatafnClient } from "@datafn/client";
+
+const storage = new MemoryStorageAdapter(["todos"]);
+
+const client = createDatafnClient({
+  schema,
+  storage,
+});
+
+// Storage is pre-populated for testing
+await storage.upsertRecord("todos", { id: "t1", title: "Test todo" });
+await storage.setHydrationState("todos", "ready");
+
+// Queries now run against in-memory storage
+const result = await client.table("todos").query({});
+```
+
+## Lifecycle
+
+```typescript
+// No-op (no external connections to close)
+await storage.close();
+
+// Clears all data, resets changelog sequence, recreates KV store
+await storage.clearAll();
+
+// Always returns healthy
+const { ok } = await storage.healthCheck(); // { ok: true, issues: [] }
+```

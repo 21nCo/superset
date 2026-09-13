@@ -1,0 +1,526 @@
+---
+title: "Relations"
+description: "Define, query, and mutate relationships between resources."
+audience: reference
+applies_to: both
+---
+
+## Defining Relations
+
+Relations define how resources are connected. DataFn supports four relation types: `one-many`, `many-one`, `many-many`, and `htree` (hierarchical tree).
+
+```typescript
+type DatafnRelationSchema = {
+  from: string | string[];
+  to: string | string[];
+  type: "one-many" | "many-one" | "many-many" | "htree";
+  relation?: string;
+  inverse?: string;
+  cache?: boolean;
+  capabilities?: Array<"timestamps" | "audit">;
+  metadata?: Array<{
+    name: string;
+    type: "string" | "number" | "boolean" | "date" | "object" | "json";
+  }>;
+  fkField?: string;
+  pathField?: string;
+  joinTable?: string;
+  joinColumns?: { from: string; to: string };
+};
+```
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `from` | `string \| string[]` | Source resource name(s). |
+| `to` | `string \| string[]` | Target resource name(s). |
+| `type` | `string` | Relation cardinality. |
+| `relation` | `string` | Optional name for the forward relation. |
+| `inverse` | `string` | Optional name for the inverse relation. |
+| `cache` | `boolean` | When `true`, enables relation caching for performance. |
+| `capabilities` | `Array<"timestamps" \| "audit">` | Server-managed capability fields on the join row (many-many only, explicit opt-in). |
+| `metadata` | `Array` | Extra fields stored on the join record (many-many only). |
+| `fkField` | `string` | Foreign key field name override for one-many / many-one. |
+| `pathField` | `string` | Materialized path field for htree relations. |
+| `joinTable` | `string` | Explicit join table name for many-many relations. |
+| `joinColumns` | `{ from, to }` | Column name overrides for the join table. |
+
+### One-to-Many
+
+A single record in the `from` resource relates to multiple records in the `to` resource. The foreign key is stored on the `to` side.
+
+```typescript
+const schema = defineSchema({
+  resources: [
+    {
+      name: "authors",
+      version: 1,
+      fields: [
+        { name: "name", type: "string", required: true },
+      ],
+    },
+    {
+      name: "books",
+      version: 1,
+      fields: [
+        { name: "title", type: "string", required: true },
+        { name: "authorId", type: "string", required: true },
+      ],
+      indices: { base: ["authorId"] },
+    },
+  ],
+  relations: [
+    {
+      from: "authors",
+      to: "books",
+      type: "one-many",
+      relation: "authorBooks",
+      fkField: "authorId",
+    },
+  ],
+});
+```
+
+### Many-to-One
+
+The inverse of one-to-many. Multiple records in the `from` resource point to a single record in the `to` resource.
+
+```typescript
+relations: [
+  {
+    from: "books",
+    to: "authors",
+    type: "many-one",
+    relation: "bookAuthor",
+    fkField: "authorId",
+  },
+]
+```
+
+### Many-to-Many
+
+Both sides can have multiple related records. DataFn uses a join table to store the associations. You can add `metadata` fields to the join record.
+
+```typescript
+const schema = defineSchema({
+  resources: [
+    {
+      name: "students",
+      version: 1,
+      fields: [
+        { name: "name", type: "string", required: true },
+      ],
+    },
+    {
+      name: "courses",
+      version: 1,
+      fields: [
+        { name: "title", type: "string", required: true },
+      ],
+    },
+  ],
+  relations: [
+    {
+      from: "students",
+      to: "courses",
+      type: "many-many",
+      relation: "enrollments",
+      joinTable: "student_courses",
+      joinColumns: { from: "student_id", to: "course_id" },
+      metadata: [
+        { name: "enrolledAt", type: "date" },
+        { name: "grade", type: "string" },
+      ],
+    },
+  ],
+});
+```
+
+The `metadata` array defines additional columns on the join table. These fields are stored alongside the association and can be read when querying the relation.
+
+### Relation Capabilities
+
+Many-many relations support an optional `capabilities` field that enables server-managed lifecycle fields on the join row. Relation capabilities are **explicit opt-in** and apply **only to `many-many` relations**.
+
+Relation capabilities are independent from resource capabilities. Enabling `timestamps`/`audit` on a resource does not automatically enable relation capability fields on join rows.
+
+```typescript
+relations: [
+  {
+    from: "todos",
+    to: "categories",
+    type: "many-many",
+    relation: "tags",
+    capabilities: ["timestamps", "audit"],
+    metadata: [
+      { name: "addedOrder", type: "number" },
+    ],
+  },
+]
+```
+
+The two supported capability values are:
+
+| Capability | Fields injected | Description |
+| --- | --- | --- |
+| `timestamps` | `createdAt`, `updatedAt` | Epoch-ms timestamps set on create and update. |
+| `audit` | `createdBy`, `updatedBy` | Actor ID set from server context on create and update. |
+
+For the resource-level capability model, see [Capabilities](/docs/documentation/concepts/capabilities).
+
+When both are declared, canonical order is always `timestamps` first, then `audit`.
+
+#### Server-ownership and readonly stripping
+
+Relation capability fields are **server-managed**. Any client-supplied values for `createdAt`, `updatedAt`, `createdBy`, or `updatedBy` in a relation payload are **stripped before persistence** — they cannot be forged by the client.
+
+- On the **create path** (`relate` for a new pair): the server sets all enabled fields (`createdAt`, `updatedAt`, `createdBy`, `updatedBy`).
+- On the **update path** (`relate` for an existing pair, or `modifyRelation`): the server updates `updatedAt` and `updatedBy`, but preserves the original `createdAt` and `createdBy`.
+
+#### Behavior without relation capabilities
+
+Schemas that omit `capabilities` on a relation are **unaffected**. No extra columns are added to the join table, and no fields are injected at runtime. All existing `relate`, `modifyRelation`, and `unrelate` behavior is preserved unchanged.
+
+#### Schema update note
+
+Enabling `capabilities` on an existing relation changes the join-table schema by adding new columns. After updating your schema definition, regenerate schema output and apply database changes before deploying:
+
+```bash
+npx datafn generate          # regenerates datafn-schema.drizzle.ts and datafn-types.ts
+npx drizzle-kit push         # applies the new columns
+```
+
+#### Metadata collision detection
+
+Schema validation rejects metadata field names that collide with capability-managed field names. If you declare `capabilities: ["timestamps"]` and also declare a metadata field named `createdAt`, validation returns a `CAPABILITY_FIELD_COLLISION` error. Use distinct names for user-defined metadata fields.
+
+### Hierarchical Tree (htree)
+
+The `htree` type represents a self-referencing tree structure using materialized paths. This is useful for categories, folder structures, or organizational hierarchies.
+
+```typescript
+const schema = defineSchema({
+  resources: [
+    {
+      name: "categories",
+      version: 1,
+      fields: [
+        { name: "name", type: "string", required: true },
+        { name: "parentId", type: "string", required: false, nullable: true },
+        { name: "path", type: "string", required: false },
+      ],
+      indices: { base: ["parentId", "path"] },
+    },
+  ],
+  relations: [
+    {
+      from: "categories",
+      to: "categories",
+      type: "htree",
+      relation: "categoryTree",
+      fkField: "parentId",
+      pathField: "path",
+    },
+  ],
+});
+```
+
+The `pathField` stores the materialized path (e.g., `"root/parent/child"`), enabling efficient ancestor and descendant queries without recursive joins.
+
+### Relation Payload Normalization
+
+When writing relation data through mutations, DataFn accepts multiple input formats and normalizes them internally using `normalizeRelationPayload`.
+
+```typescript
+import { normalizeRelationPayload } from "@datafn/core";
+
+// String -- single reference
+normalizeRelationPayload("course_123");
+// => [{ toId: "course_123", metadata: {} }]
+
+// Array of strings -- multiple references
+normalizeRelationPayload(["course_123", "course_456"]);
+// => [{ toId: "course_123", metadata: {} }, { toId: "course_456", metadata: {} }]
+
+// Object with $ref -- single reference with metadata
+normalizeRelationPayload({ $ref: "course_123", grade: "A" });
+// => [{ toId: "course_123", metadata: { grade: "A" } }]
+
+// Array of objects -- multiple references with metadata
+normalizeRelationPayload([
+  { $ref: "course_123", grade: "A" },
+  { $ref: "course_456", grade: "B+" },
+]);
+// => [
+//   { toId: "course_123", metadata: { grade: "A" } },
+//   { toId: "course_456", metadata: { grade: "B+" } },
+// ]
+```
+
+The `$ref` property identifies the target record ID. Any additional properties on the object become metadata stored on the join record.
+
+---
+
+## Querying Relations
+
+DFQL supports querying and mutating relationships between records. Relations are defined in the schema and can be traversed in queries or modified through mutation operations.
+
+## Querying Relations
+
+### Select Expansion Tokens
+
+Use select tokens to include related data in query results. See [Select and Expand](/docs/dfql/select) for the full token reference.
+
+```typescript
+// IDs only
+{ select: ["tags"] }
+// Result: { id: "1", tags: ["tag_1", "tag_2"] }
+
+// Expanded records
+{ select: ["tags.*"] }
+// Result: { id: "1", tags: [{ id: "tag_1", name: "urgent" }, ...] }
+
+// With join metadata
+{ select: ["tags.*#"] }
+// Result: { id: "1", tags: [{ id: "tag_1", name: "urgent", $relation_metadata: { order: 0 } }] }
+```
+
+### Relation Quantifier Filters
+
+Filter records based on properties of their related records. These operators are server-side only.
+
+#### $any
+
+Returns records where at least one related record matches the sub-filter:
+
+```typescript
+{
+  resource: "users",
+  version: 1,
+  filters: {
+    todos: {
+      $any: { completed: false, priority: { $gte: 5 } },
+    },
+  },
+}
+// Users who have at least one incomplete high-priority todo
+```
+
+#### $all
+
+Returns records where every related record matches the sub-filter. Returns `false` if no related records exist:
+
+```typescript
+{
+  resource: "projects",
+  version: 1,
+  filters: {
+    tasks: {
+      $all: { status: "done" },
+    },
+  },
+}
+// Projects where ALL tasks are done (excludes projects with no tasks)
+```
+
+#### $none
+
+Returns records where no related record matches the sub-filter. Returns `true` if no related records exist:
+
+```typescript
+{
+  resource: "users",
+  version: 1,
+  filters: {
+    tasks: {
+      $none: { overdue: true },
+    },
+  },
+}
+// Users with no overdue tasks (includes users with no tasks at all)
+```
+
+## Mutation Relation Payloads
+
+The `relations` field in a mutation carries the relationship data. Payloads are flexible and normalized to a consistent internal format.
+
+### Payload Formats
+
+```typescript
+// Single string ID
+relations: { assignee: "user_1" }
+
+// Array of string IDs
+relations: { tags: ["tag_1", "tag_2", "tag_3"] }
+
+// Object with $ref and metadata
+relations: {
+  tags: { $ref: "tag_1", order: 0 },
+}
+
+// Array of $ref objects
+relations: {
+  tags: [
+    { $ref: "tag_1", order: 0 },
+    { $ref: "tag_2", order: 1 },
+  ],
+}
+```
+
+All payload formats are normalized to `NormalizedRelation[]` internally:
+
+```typescript
+import { normalizeRelationPayload, type NormalizedRelation } from "@datafn/core";
+
+normalizeRelationPayload("user_1");
+// [{ toId: "user_1", metadata: {} }]
+
+normalizeRelationPayload(["tag_1", "tag_2"]);
+// [{ toId: "tag_1", metadata: {} }, { toId: "tag_2", metadata: {} }]
+
+normalizeRelationPayload({ $ref: "tag_1", order: 0 });
+// [{ toId: "tag_1", metadata: { order: 0 } }]
+```
+
+## Relate
+
+The `relate` operation creates or updates relationships. Behavior varies by relation type:
+
+### Many-One
+
+Updates the foreign key on the source record to point to the target:
+
+```typescript
+{
+  resource: "todos",
+  version: 1,
+  operation: "relate",
+  id: "todo_1",
+  relations: {
+    assignee: "user_1",
+  },
+}
+// Sets assigneeId = "user_1" on todo_1
+```
+
+Many-one relations expect a single target. Providing multiple targets returns an error.
+
+### One-Many
+
+Updates the foreign key on each target record to point to the source:
+
+```typescript
+{
+  resource: "users",
+  version: 1,
+  operation: "relate",
+  id: "user_1",
+  relations: {
+    todos: ["todo_1", "todo_2"],
+  },
+}
+// Sets userId = "user_1" on todo_1 and todo_2
+```
+
+### Many-Many
+
+Creates join table rows. If a row already exists for the same pair, it is updated (upsert):
+
+```typescript
+{
+  resource: "todos",
+  version: 1,
+  operation: "relate",
+  id: "todo_1",
+  relations: {
+    tags: [
+      { $ref: "tag_1", order: 0 },
+      { $ref: "tag_2", order: 1 },
+    ],
+  },
+}
+// Creates/updates join rows: todo_1 <-> tag_1, todo_1 <-> tag_2
+```
+
+The join row ID is a composite `${fromId}:${toId}`. Metadata fields (like `order`) are stored on the join row.
+
+## ModifyRelation
+
+Updates metadata on existing join rows. Only supported for many-many relations.
+
+```typescript
+{
+  resource: "todos",
+  version: 1,
+  operation: "modifyRelation",
+  id: "todo_1",
+  relations: {
+    tags: { $ref: "tag_1", order: 5 },
+  },
+}
+// Updates the order metadata on the existing todo_1 <-> tag_1 join row
+```
+
+If the join row does not exist, a `NOT_FOUND` error is returned.
+
+## Unrelate
+
+Removes relationships. Behavior varies by relation type:
+
+### Many-One
+
+Clears the foreign key on the source record:
+
+```typescript
+{
+  resource: "todos",
+  version: 1,
+  operation: "unrelate",
+  id: "todo_1",
+  relations: {
+    assignee: "user_1",
+  },
+}
+// Sets assigneeId = null on todo_1
+```
+
+### One-Many
+
+Clears the foreign key on each target record:
+
+```typescript
+{
+  resource: "users",
+  version: 1,
+  operation: "unrelate",
+  id: "user_1",
+  relations: {
+    todos: ["todo_1", "todo_2"],
+  },
+}
+// Sets userId = null on todo_1 and todo_2
+```
+
+### Many-Many
+
+Deletes the join table rows:
+
+```typescript
+{
+  resource: "todos",
+  version: 1,
+  operation: "unrelate",
+  id: "todo_1",
+  relations: {
+    tags: ["tag_1", "tag_2"],
+  },
+}
+// Deletes join rows: todo_1 <-> tag_1, todo_1 <-> tag_2
+```
+
+## Target Validation
+
+The `relate` operation validates that all target records exist before creating relationships. If any target ID does not correspond to an existing record, the operation returns a `NOT_FOUND` error with the missing ID.
+
+## Batch Optimization
+
+When the database adapter supports batch operations, one-many `relate` and `unrelate` operations use batch updates/deletes for efficiency. Similarly, many-many `unrelate` with multiple targets uses batch deletes when available.

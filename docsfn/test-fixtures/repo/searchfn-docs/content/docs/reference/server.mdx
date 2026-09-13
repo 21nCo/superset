@@ -1,0 +1,212 @@
+---
+title: Server API
+description: Expose SearchFn as an HTTP API with authorization, logging, and secret redaction.
+---
+
+## Creating a Server
+
+Use `createSearchFnServer()` to wrap any adapter behind HTTP endpoints.
+
+```typescript
+import { createSearchFnServer } from "@searchfn/server";
+import { PostgresAdapter } from "@searchfn/adapter-postgres";
+
+const server = await createSearchFnServer({
+  adapter: new PostgresAdapter({
+    connectionString: process.env.SEARCH_DB_URL!,
+  }),
+  basePath: "/searchfn",
+  authorize: async (ctx, action, payload) => {
+    return ctx.user?.role === "admin" || action === "search" || action === "status";
+  },
+});
+
+// Mount server.router with your HTTP framework adapter
+```
+
+## Configuration
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `adapter` | `SearchAdapter` | — | Required. The search adapter to use. |
+| `basePath` | `string` | `"/searchfn"` | URL prefix for all endpoints. |
+| `limits` | `Partial<ServerLimits>` | See below | Override default validation limits. |
+| `authorize` | `(ctx, action, payload) => boolean \| Promise<boolean>` | — | Per-action authorization callback. |
+| `logger` | `SearchFnLogger` | — | Custom structured logger. |
+
+### Server Limits
+
+| Limit | Default | Description |
+| --- | --- | --- |
+| `maxPayloadBytes` | `1,048,576` | Maximum request body size (1 MB). |
+| `maxQueryLength` | `1,000` | Maximum search query string length. |
+| `maxResourcesPerSearchAll` | `50` | Maximum resources in a `searchAll` request. |
+| `maxLimit` | `10,000` | Maximum `limit` parameter. |
+| `maxLimitPerResource` | `1,000` | Maximum `limitPerResource` parameter. |
+| `maxIndexBatch` | `10,000` | Maximum documents per `index` request. |
+
+## Endpoints
+
+All endpoints are prefixed with the configured `basePath`.
+
+### `GET /searchfn/status`
+
+Health check and adapter information.
+
+**Response:**
+```json
+{
+  "ok": true,
+  "result": {
+    "adapter": "postgres",
+    "capabilities": { "persistent": true, "searchAll": true, "fuzzy": true },
+    "uptimeMs": 84200
+  }
+}
+```
+
+### `POST /searchfn/index`
+
+Index documents into a resource.
+
+**Request:**
+```json
+{
+  "resource": "tasks",
+  "documents": [
+    { "id": "t-1", "fields": { "title": "Ship docs", "description": "Write the guide" } }
+  ]
+}
+```
+
+**Response:**
+```json
+{ "ok": true, "result": { "indexed": 1 } }
+```
+
+### `POST /searchfn/search`
+
+Search a single resource.
+
+**Request:**
+```json
+{
+  "resource": "tasks",
+  "query": "docs",
+  "limit": 10,
+  "fuzzy": true,
+  "fields": ["title"],
+  "fieldBoosts": { "title": 2.0 }
+}
+```
+
+**Response:**
+```json
+{ "ok": true, "result": { "ids": ["t-1", "t-3"] } }
+```
+
+### `POST /searchfn/search-all`
+
+Search across multiple resources.
+
+**Request:**
+```json
+{
+  "query": "docs",
+  "resources": ["tasks", "notes"],
+  "limitPerResource": 5
+}
+```
+
+**Response:**
+```json
+{
+  "ok": true,
+  "result": {
+    "results": [
+      { "resource": "tasks", "id": "t-1", "score": 1.5 },
+      { "resource": "notes", "id": "n-2", "score": 0.9 }
+    ]
+  }
+}
+```
+
+### `POST /searchfn/remove`
+
+Remove documents by ID.
+
+**Request:**
+```json
+{ "resource": "tasks", "ids": ["t-1", "t-2"] }
+```
+
+**Response:**
+```json
+{ "ok": true, "result": { "removed": 2 } }
+```
+
+### `POST /searchfn/clear`
+
+Clear all documents from a resource.
+
+**Request:**
+```json
+{ "resource": "tasks" }
+```
+
+**Response:**
+```json
+{ "ok": true, "result": { "cleared": "tasks" } }
+```
+
+## Authorization
+
+The `authorize` callback is called before every operation. It receives the request context, action name, and request payload:
+
+```typescript
+const server = await createSearchFnServer({
+  adapter,
+  authorize: async (ctx, action, payload) => {
+    if (action === "status") return true;
+    if (action === "search" || action === "searchAll") return !!ctx.user;
+    return ctx.user?.role === "admin";
+  },
+});
+```
+
+| Action | When called |
+| --- | --- |
+| `status` | `GET /searchfn/status` |
+| `index` | `POST /searchfn/index` |
+| `search` | `POST /searchfn/search` |
+| `searchAll` | `POST /searchfn/search-all` |
+| `remove` | `POST /searchfn/remove` |
+| `clear` | `POST /searchfn/clear` |
+
+Denied requests return a `FORBIDDEN` error envelope.
+
+## Structured Logging
+
+Pass a `logger` to receive structured log events for every operation:
+
+```typescript
+const server = await createSearchFnServer({
+  adapter,
+  logger: {
+    info: (msg, ctx) => console.log(msg, ctx),
+    warn: (msg, ctx) => console.warn(msg, ctx),
+    error: (msg, ctx) => console.error(msg, ctx),
+    debug: (msg, ctx) => console.debug(msg, ctx),
+  },
+});
+```
+
+Log context includes: `operation`, `adapter`, `durationMs`, `status`, `success`, and `errorCode` (on failure). Sensitive values (`apiKey`, `password`, `connectionString`, `token`, `authorization`, `secret`) are recursively redacted.
+
+## Closing the Server
+
+Call `close()` to shut down the server and dispose of the adapter:
+
+```typescript
+await server.close();
+```

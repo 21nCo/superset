@@ -1,0 +1,55 @@
+---
+title: "Mutation Execution"
+description: "Client mutation pipeline, including capability sanitization and optimistic injection."
+audience: reference
+applies_to: typescript
+---
+
+## Overview
+
+When you call `table.mutate(...)` (or table convenience methods like `trash`, `archive`, `share`), the client runs a mutation pipeline with hooks, codecs, offline routing, and event emission.
+
+## Execution Flow
+
+1. **Validate/enrich metadata** -- normalize context and mutation shape.
+2. **Run `beforeMutation` hooks** -- fail-closed.
+3. **Apply outbound date codec** -- date fields serialized consistently.
+4. **Sanitize readonly capability fields** -- strips server-owned fields from outbound payloads.
+5. **Route execution**:
+   - local-first/offline path when hydration and storage conditions are met,
+   - remote mutation call otherwise.
+6. **Optimistic capability injection** (local paths) -- inject lifecycle values for enabled capabilities to keep local state coherent.
+7. **Run `afterMutation` hooks** -- fail-open.
+8. **Emit events** -- `mutation_applied` or `mutation_rejected`.
+
+## Capability-Specific Client Behavior
+
+### Outbound stripping
+
+For capability-enabled resources, client transport/changelog payloads strip readonly fields such as:
+
+- `createdAt`, `updatedAt`
+- `createdBy`, `updatedBy`
+- `trashedAt`, `trashedBy`
+
+### Optimistic record enrichment
+
+On local-first/offline writes, optimistic records are enriched with capability values:
+
+- insert: create + update lifecycle fields
+- merge/replace: update lifecycle fields
+
+This is local UX behavior; server still remains source of truth.
+
+## Debouncing
+
+Only `merge` mutations are debounced. Debounced entries update local storage immediately, then append coalesced changelog entries when the debounce window flushes.
+
+## Offline and Remote Routing
+
+When remote transport fails with a recognized transport error and storage is configured, mutations are handled through the offline queue path and scheduled for push.
+
+## Related
+
+- [Client Mutations](/docs/documentation/client/mutations)
+- [Capabilities](/docs/documentation/concepts/capabilities)

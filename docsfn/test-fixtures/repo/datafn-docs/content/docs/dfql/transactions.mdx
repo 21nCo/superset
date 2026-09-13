@@ -1,0 +1,166 @@
+---
+title: "Transactions"
+description: "Execute atomic sequences of queries and mutations."
+audience: reference
+applies_to: both
+---
+
+DFQL transactions execute a sequence of queries and mutations as a single unit. When atomic mode is enabled (the default), all mutations either succeed together or are rolled back on failure.
+
+## Transaction Structure
+
+```typescript
+type DfqlTransact = {
+  transactionId?: string;   // Optional identifier for the transaction
+  atomic?: boolean;         // All-or-nothing semantics (default: true)
+  steps: Array<{
+    query?: DfqlQuery;
+    mutation?: DfqlMutation;
+  }>;
+};
+```
+
+Each step contains either a `query` or a `mutation`, not both.
+
+## Basic Transaction
+
+```typescript
+const transaction: DfqlTransact = {
+  atomic: true,
+  steps: [
+    {
+      mutation: {
+        resource: "accounts",
+        version: 1,
+        operation: "merge",
+        id: "acc_sender",
+        record: { balance: 900 },
+      },
+    },
+    {
+      mutation: {
+        resource: "accounts",
+        version: 1,
+        operation: "merge",
+        id: "acc_receiver",
+        record: { balance: 1100 },
+      },
+    },
+  ],
+};
+```
+
+Both account updates succeed or neither does.
+
+## Atomic Semantics
+
+When `atomic` is `true` (the default):
+
+- All steps execute sequentially within a database transaction (if the adapter supports it).
+- Later steps see the results of earlier steps.
+- If any mutation step fails, all prior mutations are rolled back.
+- The response marks rolled-back steps with `rolledBack: true`.
+- The overall result includes an error with code `TRANSACTION_ROLLED_BACK`.
+
+When `atomic` is `false`:
+
+- Steps execute sequentially but independently.
+- A failure in one step does not affect other steps.
+- All step results are returned regardless of individual failures.
+
+## Mixing Queries and Mutations
+
+Transactions can contain both queries and mutations. This is useful when a later step depends on data retrieved by an earlier step:
+
+```typescript
+const transaction: DfqlTransact = {
+  atomic: true,
+  steps: [
+    {
+      query: {
+        resource: "accounts",
+        version: 1,
+        filters: { id: "acc_1" },
+      },
+    },
+    {
+      mutation: {
+        resource: "transfers",
+        version: 1,
+        operation: "insert",
+        record: {
+          fromAccount: "acc_1",
+          amount: 100,
+          timestamp: Date.now(),
+        },
+      },
+    },
+  ],
+};
+```
+
+## Response Format
+
+The transaction response contains an array of results, one per step:
+
+```typescript
+// Success
+{
+  ok: true,
+  result: {
+    ok: true,
+    results: [
+      // Step 0 result (query or mutation result)
+      { data: [...] },
+      // Step 1 result
+      { ok: true, affectedIds: ["transfer_1"] },
+    ],
+  },
+}
+
+// Failure with rollback
+{
+  ok: true,
+  result: {
+    ok: false,
+    results: [
+      // Step 0: was successful, now rolled back
+      { ok: false, rolledBack: true, result: { ok: true, ... } },
+      // Step 1: the step that failed
+      { ok: false, error: { code: "VALIDATION_ERROR", message: "..." } },
+    ],
+    error: {
+      code: "TRANSACTION_ROLLED_BACK",
+      message: "Step 1 failed; all steps rolled back",
+    },
+  },
+}
+```
+
+## Step Limits
+
+The server enforces a maximum number of steps per transaction, configured via `limits.maxTransactSteps`. Transactions exceeding this limit are rejected before execution.
+
+## Database Transaction Support
+
+Atomic transactions require database adapter support for `db.transaction()`. The behavior depends on the adapter:
+
+| Adapter | Transaction Support |
+|---|---|
+| Drizzle (PostgreSQL, SQLite, etc.) | Full transaction support with rollback |
+| Memory adapter | Sequential execution without rollback |
+
+When the adapter does not support transactions, steps execute sequentially. In atomic mode, execution stops on the first failure, but prior steps are not rolled back.
+
+## Query Caching Within Transactions
+
+For sequential (non-transactional) execution, the server caches query results within the transaction scope. If the same query appears multiple times, the cached result is returned. The cache is invalidated when a mutation modifies the same resource.
+
+## Error Handling
+
+Transaction errors are reported at two levels:
+
+- **Step-level errors**: Each step result includes an `error` field if that step failed.
+- **Transaction-level errors**: The top-level result includes an `error` when the transaction as a whole did not succeed (e.g., rollback).
+
+If the database itself encounters an error (serialization failure, timeout, constraint violation), the transaction returns an `INTERNAL` error without falling back to sequential execution.

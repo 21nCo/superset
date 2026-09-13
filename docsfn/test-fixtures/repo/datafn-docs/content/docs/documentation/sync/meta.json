@@ -1,0 +1,4 @@
+{
+  "title": "Sync",
+  "pages": ["overview", "offline-first", "clone", "pull-push", "hydration", "clone-up", "cross-tab", "sharing-sync-lifecycle"]
+}

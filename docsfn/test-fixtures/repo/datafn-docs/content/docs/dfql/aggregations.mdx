@@ -1,0 +1,171 @@
+---
+title: "Aggregations"
+description: "Compute aggregate values over record sets."
+audience: reference
+applies_to: both
+---
+
+DFQL supports grouped aggregation queries using `groupBy`, `aggregations`, and `having`. These are analogous to SQL `GROUP BY`, aggregate functions, and `HAVING` clauses.
+
+## Supported Operations
+
+| Operation | Description |
+|---|---|
+| `count` | Total number of records in the group. Not null-filtered -- counts all records regardless of field value. |
+| `sum` | Sum of non-null numeric values. |
+| `min` | Minimum non-null value. |
+| `max` | Maximum non-null value. |
+| `avg` | Average of non-null numeric values. |
+
+## Basic Aggregation
+
+An aggregation query requires `groupBy` (an array of field names) and `aggregations` (a map of alias to `{ op, field }`):
+
+```typescript
+const query: DfqlQuery = {
+  resource: "orders",
+  version: 1,
+  groupBy: ["status"],
+  aggregations: {
+    totalAmount: { op: "sum", field: "amount" },
+    orderCount: { op: "count", field: "id" },
+  },
+};
+// Result: { groups: [
+//   { status: "pending", totalAmount: 2500, orderCount: 12 },
+//   { status: "shipped", totalAmount: 8400, orderCount: 34 },
+// ]}
+```
+
+## Multiple Group Keys
+
+Group by multiple fields to create composite groups:
+
+```typescript
+{
+  resource: "orders",
+  version: 1,
+  groupBy: ["status", "region"],
+  aggregations: {
+    total: { op: "sum", field: "amount" },
+    avgAmount: { op: "avg", field: "amount" },
+  },
+}
+// Groups: status + region combinations
+```
+
+## Null Semantics
+
+Aggregation follows SQL-like null semantics:
+
+- **count**: Returns the total number of records in the group, including those where the specified field is null or undefined. `count` counts records, not values.
+- **sum, min, max, avg**: Exclude null and undefined values from the calculation. If all values are null, the result is `null`.
+- **Empty groups**: If a group has zero records (which should not happen with groupBy), aggregations return `null`.
+
+```typescript
+// Given records: [{ amount: 10 }, { amount: null }, { amount: 20 }]
+// count("amount") = 3  (counts records, not non-null values)
+// sum("amount")   = 30 (excludes null)
+// avg("amount")   = 15 (30 / 2 non-null values)
+// min("amount")   = 10
+// max("amount")   = 20
+```
+
+## Having Clause
+
+Use `having` to filter groups after aggregation. The `having` clause uses the same filter syntax as regular query filters, but operates on the aggregated result rows (group keys and aggregation aliases):
+
+```typescript
+{
+  resource: "orders",
+  version: 1,
+  groupBy: ["customerId"],
+  aggregations: {
+    totalSpent: { op: "sum", field: "amount" },
+    orderCount: { op: "count", field: "id" },
+  },
+  having: {
+    totalSpent: { $gte: 1000 },
+    orderCount: { $gte: 5 },
+  },
+}
+// Only returns groups where totalSpent >= 1000 AND orderCount >= 5
+```
+
+## Combining with Filters
+
+Filters are applied before grouping. Use `filters` to narrow the input records, then `groupBy` and `aggregations` to summarize:
+
+```typescript
+{
+  resource: "orders",
+  version: 1,
+  filters: {
+    createdAt: { $after: 1700000000000 },
+    status: { $ne: "cancelled" },
+  },
+  groupBy: ["region"],
+  aggregations: {
+    revenue: { op: "sum", field: "amount" },
+    maxOrder: { op: "max", field: "amount" },
+  },
+  having: {
+    revenue: { $gt: 0 },
+  },
+}
+```
+
+## Sorting Aggregated Results
+
+Aggregation results can be sorted by group keys or aggregation aliases:
+
+```typescript
+{
+  resource: "orders",
+  version: 1,
+  groupBy: ["region"],
+  aggregations: {
+    revenue: { op: "sum", field: "amount" },
+  },
+  sort: ["-revenue"],
+}
+```
+
+If no `sort` is specified, results are sorted by the group keys in ascending order.
+
+## Pagination
+
+Aggregation results support the same pagination as regular queries. Use `limit`, `offset`, or `cursor` to paginate through grouped results:
+
+```typescript
+{
+  resource: "orders",
+  version: 1,
+  groupBy: ["customerId"],
+  aggregations: {
+    total: { op: "sum", field: "amount" },
+  },
+  sort: ["-total"],
+  limit: 10,
+}
+```
+
+## Programmatic Aggregation
+
+The `calculateAggregation` function computes a single aggregation over an array of records:
+
+```typescript
+import { calculateAggregation } from "@datafn/core";
+
+const records = [
+  { id: "1", amount: 100 },
+  { id: "2", amount: null },
+  { id: "3", amount: 200 },
+];
+
+calculateAggregation("sum", "amount", records);   // 300
+calculateAggregation("count", "amount", records);  // 3
+calculateAggregation("avg", "amount", records);    // 150
+calculateAggregation("min", "amount", records);    // 100
+calculateAggregation("max", "amount", records);    // 200
+```

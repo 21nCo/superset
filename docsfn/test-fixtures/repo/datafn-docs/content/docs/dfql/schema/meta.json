@@ -1,0 +1,10 @@
+{
+  "title": "Schema",
+  "pages": [
+    "index",
+    "resources",
+    "fields",
+    "relations",
+    "system-fields"
+  ]
+}

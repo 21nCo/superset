@@ -1,0 +1,66 @@
+---
+title: "Route Handlers"
+description: "Server route lifecycle and capability-aware execution notes."
+audience: reference
+applies_to: both
+---
+
+## Overview
+
+Route handlers share a common lifecycle:
+
+1. parse/validate body,
+2. authorize,
+3. normalize capability fields,
+4. execute,
+5. return envelope.
+
+## Query Handler (`POST /datafn/query`)
+
+- validates schema-bounded query shape,
+- resolves shareable access constraints,
+- injects capability auto-filters (`trash`/`archivable` defaults),
+- executes query plan (pushdown or in-memory/materialized),
+- runs after-query hooks.
+
+## Mutation Handler (`POST /datafn/mutation`)
+
+- validates mutation structure and operation,
+- validates capability gating for operation (`trash`, `archive`, `share`, etc.),
+- strips readonly capability-managed fields from records before execution,
+- executes mutation logic with idempotency + change tracking,
+- runs hooks and emits sync-visible changes.
+
+Supported operations include:
+
+- core: `insert`, `merge`, `replace`, `delete`
+- capability: `trash`, `restore`, `archive`, `unarchive`, `share`, `unshare`
+- relation: `relate`, `modifyRelation`, `unrelate`
+
+## Transact Handler (`POST /datafn/transact`)
+
+Executes query/mutation steps in transaction scope and returns ordered step results. Validation and capability enforcement apply to mutation steps the same way as direct mutation routes.
+
+## Sync Handlers
+
+### Clone (`POST /datafn/clone`)
+
+Returns full resource snapshots (optionally paginated) for hydration.
+
+### Pull (`POST /datafn/pull`)
+
+Returns ordered changes after cursor, bounded by configured limits.
+
+### Push (`POST /datafn/push`)
+
+Processes mutation batches from client changelog.
+
+Important parity rule: push path applies the same capability readonly stripping and capability operation semantics as direct mutation path.
+
+### Reconcile (`POST /datafn/reconcile`)
+
+Compares client and server resource state summaries to determine re-clone requirements.
+
+## Seed Handler (`POST /datafn/seed`)
+
+Applies initial data payloads, idempotently scoped to namespace.

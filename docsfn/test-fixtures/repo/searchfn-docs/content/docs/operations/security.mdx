@@ -1,0 +1,55 @@
+---
+title: Security
+description: Authorization, secret handling, and credential management for SearchFn.
+---
+
+## Authorization
+
+`createSearchFnServer` supports a per-action `authorize` callback. It is called before every operation with the request context, action name, and payload:
+
+```typescript
+const server = await createSearchFnServer({
+  adapter,
+  authorize: async (ctx, action, payload) => {
+    if (action === "status") return true;
+    if (action === "search" || action === "searchAll") return !!ctx.user;
+    return ctx.user?.role === "admin";
+  },
+});
+```
+
+### Actions
+
+| Action | Endpoint | Typical policy |
+| --- | --- | --- |
+| `status` | `GET /searchfn/status` | Allow all (health checks) |
+| `search` | `POST /searchfn/search` | Authenticated users |
+| `searchAll` | `POST /searchfn/search-all` | Authenticated users |
+| `index` | `POST /searchfn/index` | Admin or service accounts |
+| `remove` | `POST /searchfn/remove` | Admin or service accounts |
+| `clear` | `POST /searchfn/clear` | Admin only |
+
+Unauthorized requests return a `FORBIDDEN` error envelope with no details about the denial reason.
+
+## Secret Redaction
+
+The server automatically redacts sensitive values in structured logs. The following keys are recursively redacted:
+
+- `apiKey`
+- `password`
+- `secret`
+- `token`
+- `authorization`
+- `connectionString`
+
+Error responses never include backend credentials, connection strings, or internal stack traces.
+
+## Credential Management
+
+| Adapter | Credential | Storage recommendation |
+| --- | --- | --- |
+| PostgresAdapter | Connection string (DSN) | Secure secret store or encrypted environment variable |
+| MeilisearchAdapter | API key | Environment-level secret |
+| Elasticsearch/OpenSearch | API key or username/password | Secure runtime secret store |
+
+Never hardcode credentials in application code. Use environment variables at minimum, and a dedicated secret manager (AWS Secrets Manager, HashiCorp Vault, etc.) for production deployments.

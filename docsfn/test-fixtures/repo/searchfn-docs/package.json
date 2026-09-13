@@ -1,0 +1,37 @@
+{
+  "name": "@searchfn/docs",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 6002",
+    "prebuild": "node ./scripts/ensure-styled-jsx.mjs && fumadocs-mdx",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@21n/fonts": "^1.0.1",
+    "@superfunctions/docs-theme": "file:../../packages/docs-theme",
+    "@tailwindcss/postcss": "^4",
+    "fumadocs-core": "^15",
+    "fumadocs-mdx": "^11.10.1",
+    "fumadocs-ui": "^15",
+    "lightningcss": "^1.31.1",
+    "lucide-react": "^0.575.0",
+    "mermaid": "^11.12.3",
+    "next": "15.3.6",
+    "next-themes": "^0.4.6",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "styled-jsx": "5.1.6"
+  },
+  "devDependencies": {
+    "@types/mdx": "^2",
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "autoprefixer": "^10",
+    "postcss": "^8",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

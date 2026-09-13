@@ -1,0 +1,78 @@
+---
+title: "CLI Overview"
+description: "Command-line tools for DataFn schema management and code generation."
+audience: landing
+applies_to: typescript
+---
+
+## Overview
+
+The `@datafn/cli` package provides command-line tools for validating DataFn schemas and generating TypeScript types and database schema files from them.
+
+```bash
+npm install -D @datafn/cli
+```
+
+## Available Commands
+
+| Command | Description |
+|---|---|
+| `datafn generate` | Generate TypeScript types and database schemas from your schema file. |
+| `datafn validate` | Validate your schema file structure and integrity. |
+
+## Schema Auto-Discovery
+
+When no `--schema` flag is provided, the CLI searches for schema files in the following order:
+
+1. `schema.datafn.ts`
+2. `src/schema.datafn.ts`
+3. `schema.json`
+4. `src/schema.json`
+
+The first file found is used.
+
+## Schema File Formats
+
+### TypeScript (`.datafn.ts`)
+
+TypeScript schema files export a schema object built with `defineSchema()`:
+
+```typescript
+import { defineSchema } from "@datafn/core";
+
+export default defineSchema({
+  resources: [
+    {
+      name: "todos",
+      version: 1,
+      idPrefix: "td",
+      fields: [
+        { name: "title", type: "string", required: true },
+        { name: "completed", type: "boolean", required: true },
+      ],
+    },
+  ],
+});
+```
+
+### JSON (`.json`)
+
+JSON schema files use the same structure without the `defineSchema` wrapper:
+
+```json
+{
+  "resources": [
+    {
+      "name": "todos",
+      "version": 1,
+      "idPrefix": "td",
+      "fields": [
+        { "name": "title", "type": "string", "required": true },
+        { "name": "completed", "type": "boolean", "required": true }
+      ]
+    }
+  ]
+}
+```
+
+Both formats are validated identically at load time using `validateSchema()` from `@datafn/core`.

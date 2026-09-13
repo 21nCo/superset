@@ -1,0 +1,17 @@
+{
+  "title": "Documentation",
+  "root": true,
+  "pages": [
+    "index",
+    "concepts",
+    "client",
+    "server",
+    "sync",
+    "migrations",
+    "use-cases",
+    "storage",
+    "plugins",
+    "database",
+    "advanced"
+  ]
+}

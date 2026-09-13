@@ -1,0 +1,60 @@
+---
+title: "KV Utilities"
+description: "Built-in key-value resource utilities."
+audience: reference
+applies_to: typescript
+---
+
+## Constants
+
+```typescript
+const KV_RESOURCE_NAME = "kv";
+```
+
+## kvId
+
+Generates the canonical KV record ID from a key.
+
+```typescript
+function kvId(key: string): string;
+```
+
+```typescript
+kvId("settings");    // "kv:settings"
+kvId("theme");       // "kv:theme"
+```
+
+Throws if `key` is not a string.
+
+## ensureBuiltinKv
+
+Ensures the schema includes the built-in KV resource. If the schema already has a resource named `"kv"`, validates that its version is `1`. Otherwise, appends the KV resource definition.
+
+```typescript
+function ensureBuiltinKv(schema: DatafnSchema): DatafnSchema;
+```
+
+Returns a new schema object (does not mutate the input).
+
+## KV Resource Schema
+
+The built-in KV resource has the following definition:
+
+```typescript
+{
+  name: "kv",
+  version: 1,
+  idPrefix: "kv",
+  fields: [
+    { name: "id", type: "string", required: true },
+    { name: "value", type: "json", required: false },
+  ],
+  indices: ["id"],
+  permissions: {
+    read: { fields: ["id", "value"] },
+    write: { fields: ["id", "value"] },
+  },
+}
+```
+
+The KV resource is automatically added to the schema during server creation and Drizzle code generation. You do not need to declare it manually in your schema file.

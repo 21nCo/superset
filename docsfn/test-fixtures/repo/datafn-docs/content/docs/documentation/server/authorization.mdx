@@ -1,0 +1,205 @@
+---
+title: "Authorization"
+description: "Control access to resources and fields."
+audience: guide
+applies_to: both
+---
+
+import { Tab, Tabs } from "fumadocs-ui/components/tabs";
+
+## Overview
+
+DataFn enforces field-level authorization on every query and mutation. Access control is defined per-resource in your schema using `DatafnPermissionsPolicy`, and enforced server-side before any data is read or written.
+
+By default, resources without a permissions policy are **denied** (FORBIDDEN). This deny-by-default behavior ensures that new resources are not accidentally exposed.
+
+## Permissions Policy
+
+Define read and write field lists on each resource in your schema:
+
+```typescript
+const schema = {
+  resources: [
+    {
+      name: "tasks",
+      version: 1,
+      capabilities: ["timestamps"],
+      fields: [
+        { name: "title", type: "string" },
+        { name: "status", type: "string" },
+        { name: "assigneeId", type: "string" },
+        { name: "internalNotes", type: "string" },
+      ],
+      permissions: {
+        read: {
+          fields: ["title", "status", "assigneeId", "createdAt", "updatedAt"],
+        },
+        write: {
+          fields: ["title", "status", "assigneeId"],
+        },
+      },
+    },
+  ],
+};
+```
+
+In this example, `internalNotes` is excluded from both read and write policies. Any query selecting or filtering on `internalNotes`, or any mutation writing to it, will be rejected with `FORBIDDEN`.
+
+The `id` field is always allowed for both read and write operations.
+
+## Query Authorization
+
+When a query is executed, the server checks:
+
+- **Select fields**: Every selected field must appear in `read.fields`.
+- **Filter fields**: Every field referenced in `filters` must appear in `read.fields`.
+- **Sort fields**: Every field referenced in `sort` must appear in `read.fields`.
+- **Aggregation fields**: Every field referenced in `aggregations` must appear in `read.fields`.
+- **GroupBy fields**: Every field in `groupBy` must appear in `read.fields`.
+- **Having fields**: Every field in `having` must appear in `read.fields`.
+- **Search fields**: Every field in `search.fields` must appear in `read.fields`.
+
+```typescript
+// This query is REJECTED because "internalNotes" is not in read.fields
+{
+  resource: "tasks",
+  select: ["id", "title", "internalNotes"],
+}
+
+// This query is REJECTED because filtering on "internalNotes" is not allowed
+{
+  resource: "tasks",
+  filters: { internalNotes: { $like: "%secret%" } },
+}
+```
+
+## Mutation Authorization
+
+When a mutation is executed, the server checks:
+
+- **Record fields**: Every field in the `record` object must appear in `write.fields`.
+- **Relation operations**: For `relate`, `modifyRelation`, and `unrelate`, the relation name must appear in `write.fields`.
+
+```typescript
+// This mutation is REJECTED because "internalNotes" is not in write.fields
+{
+  resource: "tasks",
+  operation: "merge",
+  id: "task_1",
+  record: { internalNotes: "secret data" },
+}
+```
+
+## Request-Level Authorization
+
+The `authorize` callback runs on every request after JSON parsing but before execution. Use it to implement custom per-request authorization logic:
+
+<Tabs items={["TypeScript", "Python"]}>
+  <Tab value="TypeScript">
+    ```typescript
+    const server = await createDatafnServer({
+      schema,
+      db,
+      authorize: async (ctx, action, payload) => {
+        // Reject unauthenticated requests
+        if (!ctx.session?.userId) return false;
+
+        // Only admins can seed
+        if (action === "seed" && !ctx.session.isAdmin) return false;
+
+        return true;
+      },
+    });
+    ```
+  </Tab>
+  <Tab value="Python">
+    ```python
+    async def authorize(ctx, action, payload):
+        # Reject unauthenticated requests
+        if not ctx.get("user"):
+            return False
+
+        # Only admins can seed
+        if action == "seed" and not ctx["user"].get("is_admin"):
+            return False
+
+        return True
+
+    server = create_datafn_server({
+        "schema": schema,
+        "db": my_db_adapter,
+        "authorize": authorize,
+    })
+    ```
+  </Tab>
+</Tabs>
+
+The `action` parameter is one of: `"status"`, `"query"`, `"mutation"`, `"transact"`, `"seed"`, `"clone"`, `"pull"`, `"push"`, `"reconcile"`.
+
+Returning `false` produces an HTTP 403 response:
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "Authorization denied",
+    "details": { "path": "$" }
+  }
+}
+```
+
+JSON parsing always happens **before** the `authorize` callback. This ensures that malformed JSON returns `DFQL_INVALID` (400), not `FORBIDDEN` (403).
+
+## allowUnknownResources
+
+By default, any resource without a `permissions` policy is denied:
+
+```typescript
+// Server config
+{
+  allowUnknownResources: false, // default
+}
+```
+
+Set `allowUnknownResources: true` to bypass this check. This is intended only for development and testing:
+
+```typescript
+const server = await createDatafnServer({
+  schema,
+  db,
+  allowUnknownResources: true, // allow all resources in development
+});
+```
+
+## Debug Mode
+
+In debug mode (the default in non-production environments), authorization errors include the resource name and a hint:
+
+```
+No authorization policy found for resource 'tasks'. Define a policy or use allowUnknownResources: true to allow.
+```
+
+In production (`debug: false`), the same error produces a generic message:
+
+```
+Authorization denied
+```
+
+This prevents leaking schema details to clients.
+
+## Python Handler Architecture
+
+In the Python SDK, each DataFn route is backed by a handler module in `datafn/handlers/`. All handlers follow the same pattern: parse the request payload, validate against the schema, execute the operation via the database adapter, and return a DataFn envelope response.
+
+| Handler | Route | Description |
+|---|---|---|
+| `handle_query` | `POST /datafn/query` | Execute a DFQL query via `adapter.find_many()`. |
+| `handle_mutation` | `POST /datafn/mutation` | Execute a DFQL mutation with idempotency support. |
+| `handle_transact` | `POST /datafn/transact` | Execute multi-step transactions within a single database transaction. |
+| `handle_seed` | `POST /datafn/seed` | Bulk insert seed data. |
+| `handle_clone` | `POST /datafn/clone` | Paginated full-resource clone for offline hydration. |
+| `handle_pull` | `POST /datafn/pull` | Incremental changes since a cursor. |
+| `handle_push` | `POST /datafn/push` | Apply client-side mutations with change tracking. |
+
+Error codes match the TypeScript implementation: `SCHEMA_INVALID`, `DFQL_INVALID`, `DFQL_UNKNOWN_RESOURCE`, `DFQL_UNKNOWN_FIELD`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `LIMIT_EXCEEDED`, `INTERNAL`.

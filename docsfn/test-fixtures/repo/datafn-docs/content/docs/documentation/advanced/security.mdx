@@ -1,0 +1,157 @@
+---
+title: Security
+description: Security measures built into DataFn.
+audience: guide
+applies_to: both
+---
+
+DataFn implements multiple layers of security to protect data integrity, prevent unauthorized access, and defend against common web application attacks.
+
+## Deny-by-Default Authorization
+
+Resources without an explicit permissions policy are forbidden by default. Every resource must declare read and write field policies:
+
+```typescript
+{
+  name: "todos",
+  version: 1,
+  fields: [
+    { name: "title", type: "string", required: true },
+    { name: "status", type: "string", required: false },
+  ],
+  permissions: {
+    read: { fields: ["title", "status"] },
+    write: { fields: ["title", "status"] },
+  },
+}
+```
+
+If no `permissions` block is defined, all queries and mutations against the resource return `FORBIDDEN`. This can be overridden for development with `allowUnknownResources: true`, but this should never be used in production.
+
+Authorization is enforced on:
+
+- Query select fields
+- Query filter fields
+- Aggregation fields and groupBy
+- Sort fields
+- Search fields
+- Having clauses
+- Mutation record fields
+- Relation operations
+
+## Server-Derived Namespaces
+
+The namespace for row-level data isolation is always derived on the server via the `namespaceProvider`. The client never supplies a namespace value. This prevents a compromised client from accessing another namespace's data:
+
+```typescript
+// Server-side: namespace is derived from namespaceProvider, never from request body
+namespaceProvider: {
+  getNamespace: (ctx) => ns(ctx.session.orgId, ctx.session.userId),
+},
+// The resolved namespace is applied to all queries and mutations automatically
+```
+
+Additional namespace security guarantees:
+
+- **Empty validation**: An empty namespace string throws `NAMESPACE_INVALID`.
+- **Error propagation**: If `namespaceProvider.getNamespace()` throws, the error propagates.
+- **WebSocket isolation**: WebSocket connections are scoped to the namespace derived at connection time.
+
+## Prototype Pollution Protection
+
+All incoming payloads (queries, mutations, sync messages) are checked for prototype pollution attempts. Keys like `__proto__`, `constructor`, and `prototype` are rejected before processing:
+
+```typescript
+// These payloads are rejected:
+{ "__proto__": { "isAdmin": true } }
+{ "constructor": { "prototype": { "isAdmin": true } } }
+```
+
+## Path Traversal Protection
+
+REST endpoints validate resource names and record IDs to prevent path traversal attacks. Inputs containing `..`, `/`, or `\` are rejected:
+
+```
+GET /datafn/rest/../../etc/passwd  -> Rejected
+GET /datafn/rest/todos/../secrets  -> Rejected
+```
+
+## Sensitive Field Redaction
+
+Fields marked with `encrypt: true` in the schema are redacted from log output. This prevents sensitive data (passwords, API keys, PII) from appearing in server logs:
+
+```typescript
+{
+  name: "users",
+  version: 1,
+  fields: [
+    { name: "email", type: "string", required: true },
+    { name: "apiKey", type: "string", required: false, encrypt: true },
+  ],
+}
+```
+
+In logs, encrypted fields appear as `[REDACTED]` instead of their actual values.
+
+## WebSocket Authentication
+
+WebSocket connections require authentication at connection time. The client sends a `hello` message with its client ID and cursors. The server validates the connection before accepting messages:
+
+```typescript
+// Client -> Server (on connect)
+{
+  "type": "hello",
+  "clientId": "client-abc-123",
+  "cursors": { "todos": "42" }
+}
+```
+
+Unauthenticated WebSocket connections are rejected.
+
+## Error Message Redaction
+
+In production mode (`debug: false`), error messages are stripped of internal details that could leak schema structure or implementation details:
+
+```typescript
+// debug: true (development)
+{ "code": "FORBIDDEN", "message": "No authorization policy found for resource 'secrets'" }
+
+// debug: false (production)
+{ "code": "FORBIDDEN", "message": "Authorization denied" }
+```
+
+## Content-Type Validation
+
+The server validates `Content-Type` headers on all incoming requests. Only `application/json` is accepted for DFQL endpoints. Requests with incorrect content types are rejected before any processing occurs.
+
+## Rate Limiting
+
+DataFn includes built-in rate limiting to prevent denial-of-service attacks. Rate limits can be configured per endpoint:
+
+```typescript
+const server = createDatafnServer({
+  schema,
+  rateLimit: {
+    enabled: true,
+    windowMs: 60000,     // 1 minute window
+    maxRequests: 100,    // Max 100 requests per window
+  },
+});
+```
+
+When the rate limit is exceeded, the server returns a `LIMIT_EXCEEDED` error.
+
+## Security Checklist
+
+| Measure | Description |
+|---------|-------------|
+| Deny-by-default auth | Resources without policies are forbidden |
+| Server-derived namespace | Client cannot specify namespace |
+| Prototype pollution check | `__proto__`, `constructor`, `prototype` blocked |
+| Path traversal check | `..`, `/`, `\` in resource/ID rejected |
+| Sensitive field redaction | `encrypt: true` fields hidden in logs |
+| WebSocket auth | Authentication required at connection time |
+| Error redaction | Internal details hidden in production |
+| Content-Type validation | Only `application/json` accepted |
+| Rate limiting | Configurable per-endpoint limits |
+| Idempotency | Prevents replay attacks via deduplication |

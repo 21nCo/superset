@@ -1,0 +1,185 @@
+---
+title: SearchProvider
+description: Interface contract for pluggable search providers in DataFn.
+audience: reference
+applies_to: typescript
+---
+
+The `SearchProvider` interface defines the contract that any search backend must implement to integrate with DataFn's client and server search routing. It is exported from `@datafn/core`.
+
+```typescript
+import type { SearchProvider } from "@datafn/core";
+```
+
+## Interface
+
+```typescript
+interface SearchProvider {
+  readonly name: string;
+  search(params: SearchParams): Promise<string[]>;
+  searchAll?(params: SearchAllParams): Promise<Array<{ resource: string; id: string; score: number }>>;
+  updateIndices(params: UpdateIndicesParams): Promise<void>;
+  initialize?(config: InitializeConfig): Promise<void>;
+  dispose?(): Promise<void>;
+}
+```
+
+## Required Members
+
+### `name`
+
+```typescript
+readonly name: string;
+```
+
+Unique identifier for the provider. Used in logs and diagnostics.
+
+### `search`
+
+```typescript
+search(params: {
+  resource: string;
+  query: string;
+  type?: "fullText" | "semantic";
+  fields?: string[];
+  limit?: number;
+  prefix?: boolean;
+  fuzzy?: boolean | number;
+  fieldBoosts?: Record<string, number>;
+  signal?: AbortSignal;
+}): Promise<string[]>;
+```
+
+Search a single resource. Returns an array of matching record IDs (as strings), ordered by relevance.
+
+| Param | Type | Description |
+| --- | --- | --- |
+| `resource` | `string` | Resource name to search. |
+| `query` | `string` | Search text. |
+| `type` | `"fullText" \| "semantic"` | Search mode. Defaults to `"fullText"`. |
+| `fields` | `string[]` | Optional subset of indexed fields to search. |
+| `limit` | `number` | Maximum number of results. |
+| `prefix` | `boolean` | Enable prefix token matching. |
+| `fuzzy` | `boolean \| number` | Enable fuzzy matching. A number sets the tolerance/distance. |
+| `fieldBoosts` | `Record<string, number>` | Per-field relevance weights. Values must be finite positive numbers. |
+| `signal` | `AbortSignal` | Optional abort signal for cancellation. |
+
+### `updateIndices`
+
+```typescript
+updateIndices(params: {
+  resource: string;
+  records: Record<string, unknown>[];
+  operation: "upsert" | "delete";
+}): Promise<void>;
+```
+
+Called by DataFn after mutations to keep the search index current.
+
+| Param | Type | Description |
+| --- | --- | --- |
+| `resource` | `string` | Resource being updated. |
+| `records` | `Record<string, unknown>[]` | Records to index or remove. Each record includes an `id` field. |
+| `operation` | `"upsert" \| "delete"` | Whether to add/update or remove records from the index. |
+
+## Optional Members
+
+### `searchAll`
+
+```typescript
+searchAll?(params: {
+  query: string;
+  resources?: string[];
+  fields?: string[];
+  limit?: number;
+  limitPerResource?: number;
+  prefix?: boolean;
+  fuzzy?: boolean | number;
+  fieldBoosts?: Record<string, number>;
+  signal?: AbortSignal;
+}): Promise<Array<{ resource: string; id: string; score: number }>>;
+```
+
+Cross-resource search. Returns ranked results across multiple resources. Used by `client.search()`.
+
+If not implemented, DataFn falls back to calling `search()` per resource and merging results by score.
+
+| Param | Type | Description |
+| --- | --- | --- |
+| `query` | `string` | Search text. |
+| `resources` | `string[]` | Resources to search. Omit to search all. |
+| `fields` | `string[]` | Optional subset of indexed fields. |
+| `limit` | `number` | Maximum total results. |
+| `limitPerResource` | `number` | Maximum results per resource. |
+| `prefix` | `boolean` | Enable prefix token matching. |
+| `fuzzy` | `boolean \| number` | Enable fuzzy matching. |
+| `fieldBoosts` | `Record<string, number>` | Per-field relevance weights. |
+| `signal` | `AbortSignal` | Optional abort signal for cancellation. |
+
+### `initialize`
+
+```typescript
+initialize?(config: {
+  resources: Array<{ name: string; searchFields: string[] }>;
+}): Promise<void>;
+```
+
+Called once at client startup with resource/searchField mappings derived from the schema. Use this to set up indices, allocate storage, or pre-warm caches.
+
+### `dispose`
+
+```typescript
+dispose?(): Promise<void>;
+```
+
+Called when the client is destroyed. Use this to release resources, close connections, or flush pending writes.
+
+## Implementing a Custom Provider
+
+```typescript
+import type { SearchProvider } from "@datafn/core";
+
+const myProvider: SearchProvider = {
+  name: "my-custom-search",
+
+  async search({ resource, query, prefix, fuzzy, fieldBoosts, limit }) {
+    // Query your search backend and return matching IDs
+    const results = await mySearchBackend.query(resource, query, { prefix, fuzzy, fieldBoosts });
+    return results.slice(0, limit).map((r) => r.id);
+  },
+
+  async updateIndices({ resource, records, operation }) {
+    if (operation === "upsert") {
+      await mySearchBackend.index(resource, records);
+    } else {
+      await mySearchBackend.remove(resource, records.map((r) => r.id));
+    }
+  },
+
+  async initialize({ resources }) {
+    for (const { name, searchFields } of resources) {
+      await mySearchBackend.ensureIndex(name, searchFields);
+    }
+  },
+
+  async dispose() {
+    await mySearchBackend.close();
+  },
+};
+```
+
+## Pre-Built Providers
+
+The `@searchfn/datafn-provider` package bridges any [SearchFn](/docs/dfql/search#setting-up-a-search-provider) adapter into the `SearchProvider` interface:
+
+```typescript
+import { createSearchProvider } from "@searchfn/datafn-provider";
+import { IndexedDbAdapter } from "@searchfn/adapter-indexeddb";
+
+const provider = createSearchProvider(
+  new IndexedDbAdapter({ dbName: "my-app-search" }),
+  { resourceFields: { tasks: ["title", "description"] } },
+);
+```
+
+See [Search — Setting Up a Search Provider](/docs/dfql/search#setting-up-a-search-provider) for the full setup guide.

@@ -1,0 +1,346 @@
+---
+title: "Namespaces"
+description: "Isolate data between tenants, users, or any grouping with composable namespace strings."
+audience: concept
+applies_to: both
+---
+
+## Overview
+
+DataFn provides built-in data isolation through row-level namespace partitioning. When enabled (the default), every record is stamped with a namespace string, and all queries and mutations are automatically scoped to that namespace.
+
+A **namespace** is an opaque string that partitions data rows. It can represent any grouping -- tenants, users, teams, projects, device groups, or arbitrary hierarchies. DataFn doesn't impose a structure; you compose the string however your application needs.
+
+This ensures that namespaces can never read or modify each other's data, even though all records are stored in the same database tables.
+
+## The `ns()` Helper
+
+The `ns()` function composes namespace strings from segments. It joins non-empty segments with `:` and throws if the result would be empty.
+
+```typescript
+import { ns } from "@datafn/core";
+
+ns("org-acme", "user-123");     // "org-acme:user-123"
+ns("user-1");                   // "user-1"
+ns("org", "", "user");          // "org:user" (empty segments filtered)
+ns("a", "b", "c");              // "a:b:c"
+ns();                           // throws Error (empty namespace)
+```
+
+`ns` is also re-exported from `@datafn/client` for convenience.
+
+### Why use `ns()` instead of string concatenation?
+
+A namespace is just a string -- you _can_ construct it manually with template literals or concatenation. `ns()` exists because the common mistakes it prevents are subtle and hard to debug:
+
+- **Empty segment filtering.** Segment values (e.g., org ID, user ID) are often `undefined` or `""` at runtime (e.g., a user without an org). Manual concatenation produces broken namespaces like `":user-123"` or `"undefined:user-123"`. `ns()` silently filters empty/falsy segments, producing `"user-123"` instead.
+- **Empty result validation.** If _all_ segments are empty, `ns()` throws immediately rather than returning `""`. An empty namespace is a data isolation breach -- all users would read/write the same partition. Manual concatenation would silently produce `""` and you wouldn't notice until production.
+- **Consistent separator.** DataFn uses `:` as the canonical segment separator. Using `ns()` across your codebase ensures the same convention everywhere -- no mix of `/`, `-`, `_`, or `.` that makes querying the `__ns` column harder.
+
+```typescript
+// Manual — these bugs are easy to introduce
+const orgId = user.orgId;       // might be undefined
+const ns1 = `${orgId}:${user.id}`;  // "undefined:user-123" — wrong partition!
+const ns2 = `${orgId ?? ""}:${user.id}`; // ":user-123" — leading colon
+const ns3 = [orgId, user.id].filter(Boolean).join(":"); // correct, but verbose
+
+// ns() — handles all of the above
+const ns4 = ns(orgId, user.id); // "user-123" (orgId filtered) or "org-1:user-123"
+```
+
+If you prefer manual construction, that's fine -- DataFn doesn't enforce `ns()`. The namespace is just a `string`. But `ns()` eliminates the class of bugs where a missing segment silently corrupts your data partitioning.
+
+## Enabling Namespaces
+
+Namespace isolation is controlled by the `namespaced` flag on the schema. It defaults to `true`.
+
+```typescript
+import { defineSchema } from "@datafn/core";
+
+// Namespace isolation is ON by default
+const schema = defineSchema({
+  resources: [
+    {
+      name: "tasks",
+      version: 1,
+      fields: [
+        { name: "title", type: "string", required: true },
+      ],
+    },
+  ],
+});
+
+// Explicitly disable for single-namespace deployments
+const singleNamespaceSchema = defineSchema({
+  namespaced: false,
+  resources: [
+    {
+      name: "tasks",
+      version: 1,
+      fields: [
+        { name: "title", type: "string", required: true },
+      ],
+    },
+  ],
+});
+```
+
+You can check whether a schema has namespace isolation enabled with the `isNamespaced()` helper:
+
+```typescript
+import { isNamespaced } from "@datafn/core";
+
+isNamespaced(schema);               // true (default)
+isNamespaced(singleNamespaceSchema); // false
+```
+
+## How It Works
+
+### The `__ns` Column
+
+When namespace isolation is active, the database adapter is wrapped with row-level namespace isolation. This wrapper:
+
+- **Reads**: Prepends a `WHERE __ns = :namespace` clause to every query.
+- **Writes**: Stamps the `__ns` column on every insert.
+- **Updates**: Strips `__ns` from update data (the namespace is immutable once set).
+- **Outputs**: Strips the `__ns` column from all returned records (transparent to application code).
+
+The `__ns` column is managed entirely by the framework. Your application code never needs to reference it directly.
+
+### Internal Operations
+
+Internal CRUD operations (system tables like change tracking and idempotency) bypass the namespace wrapper. This ensures that server-managed infrastructure data is not scoped to individual namespaces.
+
+## Server: `namespaceProvider`
+
+The `namespaceProvider` on the server configuration maps incoming requests to a namespace string. It has two functions:
+
+- **`getNamespace(ctx)`** -- Required. Returns the namespace string for the current request. Must return a non-empty string.
+- **`getActorId(ctx)`** -- Optional. Returns an identifier for audit attribution (who performed the action). Errors are non-fatal.
+
+```typescript
+import { createDatafnServer } from "@datafn/server";
+import { ns } from "@datafn/core";
+
+const server = await createDatafnServer({
+  schema,
+  db: adapter,
+  namespaceProvider: {
+    getNamespace: (ctx) => ns(ctx.session.orgId, ctx.session.userId),
+    getActorId: (ctx) => ctx.session.userId,
+  },
+});
+```
+
+### Namespace Resolution Order
+
+The server resolves the namespace using this priority:
+
+1. **`namespaceProvider.getNamespace(ctx)`** -- If configured. Validates non-empty; throws `NAMESPACE_INVALID` on empty string.
+2. **Default: `"datafn"`** -- Used when no provider is configured.
+
+### Actor ID Resolution
+
+Actor ID is resolved separately from namespace:
+
+1. **`namespaceProvider.getActorId(ctx)`** -- If configured. Errors are logged but don't fail the request.
+2. **`undefined`** -- No actor attribution.
+
+### Example: Common Namespace Patterns
+
+```typescript
+// Per-user isolation
+namespaceProvider: {
+  getNamespace: (ctx) => ns("user", ctx.auth.userId),
+},
+
+// Organization + user isolation
+namespaceProvider: {
+  getNamespace: (ctx) => ns(ctx.auth.orgId, ctx.auth.userId),
+  getActorId: (ctx) => ctx.auth.userId,
+},
+
+// Team-based isolation
+namespaceProvider: {
+  getNamespace: (ctx) => ns("team", ctx.params.teamId),
+  getActorId: (ctx) => ctx.auth.userId,
+},
+
+// Project-scoped (no user dimension)
+namespaceProvider: {
+  getNamespace: (ctx) => ns("project", ctx.params.projectId),
+},
+```
+
+### Deriving Namespaces from Auth Middleware
+
+In production, the namespace is derived from the authenticated user's session. Your HTTP framework's auth middleware (JWT validation, session lookup, etc.) populates the request context _before_ DataFn's `namespaceProvider` reads it. Here's a typical pattern with Hono:
+
+```typescript
+import { Hono } from "hono";
+import { createDatafnServer } from "@datafn/server";
+import { toHono } from "@superfunctions/http-hono";
+import { ns } from "@datafn/core";
+
+const app = new Hono();
+
+// Auth middleware — runs before DataFn routes, populates ctx.session
+app.use("*", async (ctx, next) => {
+  const token = ctx.req.header("Authorization")?.replace("Bearer ", "");
+  if (!token) {
+    return ctx.json({ error: "Unauthorized" }, 401);
+  }
+  const session = await verifyJwt(token); // your JWT / session logic
+  ctx.set("session", session);            // { userId, orgId, role, ... }
+  await next();
+});
+
+const datafn = await createDatafnServer({
+  schema,
+  db: adapter,
+
+  // namespaceProvider reads what the auth middleware placed on ctx
+  namespaceProvider: {
+    getNamespace: (ctx) => ns(ctx.var.session.orgId, ctx.var.session.userId),
+    getActorId: (ctx) => ctx.var.session.userId,
+  },
+
+  authorize: async (ctx, action, payload) => {
+    return ctx.var.session.role === "admin" || action === "query";
+  },
+});
+
+app.route("/", toHono(datafn.router));
+```
+
+The same pattern applies with Express, Fastify, or any other framework -- the auth middleware sets up the session context, and `namespaceProvider` simply reads it. DataFn doesn't handle authentication itself; it only needs the resolved namespace string.
+
+## Client: `namespace`
+
+On the client side, the `namespace` option identifies which namespace the client operates in. It is used to create isolated local storage (e.g., separate IndexedDB databases per namespace).
+
+```typescript
+import { createDatafnClient, IndexedDbStorageAdapter, ns } from "@datafn/client";
+
+const client = createDatafnClient({
+  schema,
+  clientId: "device-abc-123",
+  namespace: ns("org-456", "user-123"),
+  storage: (ns) => IndexedDbStorageAdapter.createForNamespace("my-app", ns),
+  sync: { remote: "https://api.example.com/datafn" },
+});
+```
+
+### `currentNamespace()`
+
+Retrieve the resolved namespace of an active client:
+
+```typescript
+client.currentNamespace();  // "org-456:user-123"
+```
+
+### Switching Namespace
+
+Use `switchContext()` to switch the client to a different namespace at runtime:
+
+```typescript
+await client.switchContext({
+  namespace: ns("org-789", "user-123"),
+});
+```
+
+## Storage Factory
+
+When `storage` is a factory function, DataFn calls it with the namespace string to create an isolated storage adapter:
+
+```typescript
+const client = createDatafnClient({
+  schema,
+  clientId: "device-abc",
+  namespace: ns("org-456", "user-123"),
+  storage: (namespace) =>
+    IndexedDbStorageAdapter.createForNamespace("my-app", namespace),
+  sync: { remote: "https://api.example.com/datafn" },
+});
+```
+
+The factory is called once with the namespace string. If no `namespace` is provided, `storage` must be a direct adapter instance (not a factory).
+
+## Configuration
+
+The `rowLevelNamespace` option on the server provides fine-grained control:
+
+```typescript
+const server = await createDatafnServer({
+  schema,
+  db: adapter,
+  namespaceProvider: {
+    getNamespace: (ctx) => ns(ctx.session.orgId, ctx.session.userId),
+  },
+
+  // Auto-enabled when namespaceProvider is present (default behavior)
+  // Equivalent to:
+  rowLevelNamespace: {
+    enabled: true,
+    columnName: "__ns",
+    mandatory: true,
+  },
+});
+```
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `enabled` | `boolean` | `true` | Enable or disable the namespace wrapper. |
+| `columnName` | `string` | `"__ns"` | Column name used for namespace isolation. |
+| `mandatory` | `boolean` | `true` | When `true`, throws `NamespaceRequiredError` if no namespace is provided. |
+
+### Disabling Row-Level Namespace
+
+Set `rowLevelNamespace: false` to disable the wrapper even when `namespaceProvider` is present. This is useful if you want per-user namespace context for sync isolation without per-query namespace filtering.
+
+```typescript
+const server = await createDatafnServer({
+  schema,
+  db: adapter,
+  namespaceProvider: {
+    getNamespace: (ctx) => ns("user", ctx.session.userId),
+  },
+  rowLevelNamespace: false,
+});
+```
+
+## Auto-Wrapping Behavior
+
+The server applies namespace wrapping based on the adapter type and configuration:
+
+| Condition | Wrapping Applied |
+| --- | --- |
+| `namespaced: false` on schema | No |
+| `rowLevelNamespace: false` on server | No |
+| SQL adapter with schema constraints | Yes (always, even without `namespaceProvider`) |
+| In-memory adapter with `namespaceProvider` | Yes |
+| In-memory adapter without `namespaceProvider` | No |
+
+SQL adapters (like Drizzle) are always wrapped when namespace isolation is active because the generated schema includes a `NOT NULL` constraint on the `__ns` column. In-memory adapters are only wrapped when a `namespaceProvider` is present, since there is no schema constraint to enforce.
+
+## Transactions
+
+The namespace wrapper is applied to transaction child adapters as well. When you run operations inside a transaction, namespace isolation is preserved automatically.
+
+```typescript
+// Namespace isolation works inside transactions
+await client.transact({
+  atomic: true,
+  steps: [
+    { mutation: { resource: "tasks", version: 1, operation: "insert", id: "tsk:a", record: { title: "Task A" } } },
+    { mutation: { resource: "tasks", version: 1, operation: "insert", id: "tsk:b", record: { title: "Task B" } } },
+  ],
+});
+// Both records are stamped with the current namespace
+```
+
+## Security
+
+- **Server-derived**: The namespace is always derived on the server via `namespaceProvider`. The client never supplies a namespace to the server. A compromised client cannot access another namespace's data.
+- **Empty validation**: An empty namespace string throws `NAMESPACE_INVALID`.
+- **Error propagation**: If `namespaceProvider.getNamespace()` throws, the error propagates -- the server does not silently fall back to a default namespace.

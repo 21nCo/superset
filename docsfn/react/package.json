@@ -1,0 +1,88 @@
+{
+  "name": "@docsfn/react",
+  "version": "0.0.3",
+  "description": "React components and helpers for docsfn",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "peerDependencies": {
+    "@searchfn/client": "^0.3.0",
+    "react": "^18.3.0 || ^19.0.0",
+    "react-dom": "^18.3.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@searchfn/client": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@docsfn/core": "0.0.6",
+    "@uifn/react": "0.0.2",
+    "lucide-react": "^0.575.0",
+    "markdown-to-jsx": "^7.3.2"
+  },
+  "devDependencies": {
+    "@searchfn/client": "0.3.0",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "jsdom": "^24.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./DocsContent": {
+      "types": "./dist/DocsContent.d.ts",
+      "import": "./dist/DocsContent.js",
+      "require": "./dist/DocsContent.cjs"
+    },
+    "./ApiReferenceRenderer": {
+      "types": "./dist/ApiReferenceRenderer.d.ts",
+      "import": "./dist/ApiReferenceRenderer.js",
+      "require": "./dist/ApiReferenceRenderer.cjs"
+    },
+    "./EmbeddedPage": {
+      "types": "./dist/EmbeddedPage.d.ts",
+      "import": "./dist/EmbeddedPage.js",
+      "require": "./dist/EmbeddedPage.cjs"
+    },
+    "./YouTubeEmbed": {
+      "types": "./dist/YouTubeEmbed.d.ts",
+      "import": "./dist/YouTubeEmbed.js",
+      "require": "./dist/YouTubeEmbed.cjs"
+    },
+    "./theme.css": "./dist/theme.css",
+    "./theme-base.css": "./dist/theme-base.css"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run"
+  },
+  "author": "21n",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/21nCo/super-functions/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/21nCo/super-functions.git",
+    "directory": "docsfn/react"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ]
+}

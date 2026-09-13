@@ -1,0 +1,115 @@
+---
+title: "Execution Engine"
+description: "Query and mutation execution internals."
+audience: reference
+applies_to: both
+---
+
+## DataStore Interface
+
+The execution engine operates through a `DataStore` abstraction. Two implementations are provided:
+
+### DbDataStore
+
+Wraps a database adapter (`@superfunctions/db` `Adapter`) for persistent storage. All operations pass through the adapter's query builder.
+
+### MemoryStore
+
+In-memory implementation using `Map<string, Map<string, Record>>`. Used for testing and local-only mode.
+
+## Query Execution
+
+### Planning and Classification
+
+Queries are classified by type to optimize execution:
+
+| Classification | Condition | Strategy |
+|---|---|---|
+| **Find by ID** | `filter.id.$eq` present | Direct record lookup. |
+| **Pushdown** | Database adapter available | Translate DFQL to SQL and execute at the database level. |
+| **Memory scan** | No adapter or pushdown not possible | Load all records, apply filters in-memory. |
+
+### Pushdown Query Execution
+
+When a database adapter is available, the query engine pushes as much work as possible to the database:
+
+- **Filters** -- translated to SQL WHERE clauses.
+- **Sort** -- translated to SQL ORDER BY.
+- **Limit/Cursor** -- translated to SQL LIMIT/OFFSET or keyset pagination.
+- **Aggregations** -- translated to SQL aggregate functions (COUNT, SUM, AVG, MIN, MAX).
+
+Fields and operators not supported by pushdown fall back to in-memory evaluation after the database query returns.
+
+## Mutation Execution
+
+### Flow
+
+1. **Guard evaluation** -- check field-level constraints (required, readonly, enum, min/max, pattern, unique).
+2. **Relation handling** -- for mutations with relation payloads, normalize and execute join table operations.
+3. **Store operation** -- execute the create/update/delete against the data store.
+4. **Change tracking** -- record the mutation in the `__datafn_changes` internal table with a monotonic sequence number.
+
+Capability-enabled operations (`trash`, `restore`, `archive`, `unarchive`, `share`, `unshare`) flow through the same execution path with additional capability checks and field injection/stripping rules.
+
+### Guard Store
+
+Validates field constraints at mutation time:
+
+- **Required** -- non-null check on insert.
+- **Readonly** -- reject updates to readonly fields.
+- **Unique** -- check for existing records with the same value (scoped to namespace).
+- **Enum** -- value must be in the allowed set.
+- **Min/Max** -- numeric range validation.
+- **MinLength/MaxLength** -- string length validation.
+- **Pattern** -- regex validation.
+
+## Change Tracking
+
+The `ChangeTrackingService` records every mutation as a change entry:
+
+```typescript
+{
+  serverSeq: number;    // Monotonic sequence
+  resource: string;
+  action: "insert" | "merge" | "replace" | "delete";
+  recordId: string;
+  data: Record<string, unknown>;
+  timestamp: number;
+  namespace: string;
+}
+```
+
+Changes are stored in the `__datafn_changes` internal table and queried by the pull handler.
+
+## Sequence Store
+
+Generates monotonic sequence numbers for change tracking. Multiple backends:
+
+| Implementation | Backend | Description |
+|---|---|---|
+| `RedisSequenceStore` | Redis | Atomic `INCR` on a Redis key. Highest throughput. |
+| `KVSequenceStore` | KV Store | `incr()` on a KV key. |
+| `DatabaseSequenceStore` | Database | Row-level locking with `SELECT ... FOR UPDATE`. |
+| Combined sequence chain | Primary + database chain | Coordinates primary sequence allocation with database continuity. |
+
+The `createSequenceStore` factory selects the implementation based on `dbMapping.serverseq`:
+
+```typescript
+const store = createSequenceStore({
+  db,
+  redis,
+  kvStore,
+  dbMapping: { serverseq: "redis" },
+});
+```
+
+## Internal Tables
+
+The execution engine manages two internal tables:
+
+| Table | Purpose |
+|---|---|
+| `__datafn_changes` | Change tracking entries for sync pull. |
+| `__datafn_idempotency` | Idempotency records for mutation deduplication. |
+
+These tables are automatically created by the database adapter and are transparent to application code.

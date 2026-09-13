@@ -1,0 +1,8 @@
+{
+  "title": "Product",
+  "pages": [
+    { "key": "index", "label": "Overview" },
+    { "key": "quickstart", "label": "Quickstart" },
+    { "key": "authentication", "label": "Authentication" }
+  ]
+}
