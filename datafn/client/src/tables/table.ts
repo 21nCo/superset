@@ -65,6 +65,16 @@ type FieldName<Field> = Field extends { readonly name: infer Name extends string
   ? Name
   : never;
 
+type NullableFieldValue<Field, Value> = Field extends {
+  readonly nullable?: infer Nullable;
+}
+  ? "nullable" extends keyof Field
+    ? true extends Nullable
+      ? Value | null
+      : Value
+    : Value
+  : Value;
+
 type IsAny<T> = 0 extends (1 & T) ? true : false;
 type RequiredFields<Fields> = Extract<Fields, { readonly required: true }>;
 type OptionalFields<Fields> = Exclude<Fields, { readonly required: true }>;
@@ -101,6 +111,45 @@ type DatafnCapabilityRecord = {
   visibility?: string;
 };
 
+type DatafnSchemaRelations<S extends DatafnSchema> =
+  IsAny<S> extends true
+    ? never
+    : DatafnSchema extends S
+      ? never
+      : DatafnSchemaLiteral<S> extends { readonly relations: readonly (infer Relation)[] }
+        ? Relation
+        : S extends { readonly relations: readonly (infer Relation)[] }
+          ? Relation
+          : never;
+
+type EndpointNames<Endpoint> = Endpoint extends string
+  ? Endpoint
+  : Endpoint extends readonly (infer Name extends string)[]
+    ? Name
+    : never;
+
+type InheritsInactiveDependents<Relation> = Relation extends {
+  readonly inheritsInactive: true;
+  readonly type: infer Type;
+  readonly from: infer From;
+  readonly to: infer To;
+}
+  ? Type extends "many-many"
+    ? never
+    : Type extends "many-one"
+      ? EndpointNames<From>
+      : EndpointNames<To>
+  : never;
+
+/**
+ * Runtime-owned fields a resource receives from schema structure, e.g.
+ * `isAncestorInactive` on the dependent side of an `inheritsInactive` relation.
+ */
+export type DatafnSystemRecord<S extends DatafnSchema, Name extends string> =
+  Name extends InheritsInactiveDependents<DatafnSchemaRelations<S>>
+    ? { isAncestorInactive: boolean }
+    : {};
+
 export type DatafnResourceRecord<
   S extends DatafnSchema,
   Name extends string,
@@ -110,19 +159,17 @@ export type DatafnResourceRecord<
         [F in RequiredFields<Field> as FieldName<F>]: F extends {
           readonly type: infer Type;
         }
-          ? DatafnFieldValue<Type, F>
+          ? NullableFieldValue<F, DatafnFieldValue<Type, F>>
           : unknown;
       } & {
         [F in OptionalFields<Field> as FieldName<F>]?: F extends {
           readonly type: infer Type;
-          readonly nullable: false;
         }
-          ? DatafnFieldValue<Type, F>
-          : F extends { readonly type: infer Type }
-            ? DatafnFieldValue<Type, F> | null
-            : unknown;
+          ? NullableFieldValue<F, DatafnFieldValue<Type, F>>
+          : unknown;
       }
       & DatafnCapabilityRecord
+      & DatafnSystemRecord<S, Name>
     : Record<string, unknown> & DatafnCapabilityRecord;
 
 export type DatafnFilter<TRecord = Record<string, unknown>> =

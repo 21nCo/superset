@@ -12,9 +12,11 @@
     "@solidjs/router": "^0.15.4",
     "@solidjs/start": "1.0.11",
     "@uifn/components": "*",
+    "@uifn/components-solid": "*",
     "@uifn/examples-shared": "*",
     "@uifn/patterns": "*",
     "@uifn/sf": "*",
+    "@uifn/solid": "*",
     "solid-js": "^1.9.10",
     "vinxi": "0.4.3"
   },

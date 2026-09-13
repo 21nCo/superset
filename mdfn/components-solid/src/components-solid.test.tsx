@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
+// vi.waitFor used below for async visual editor mount (dynamic import); fixed delays flake on GHA.
 import { render } from "solid-js/web";
 import { createEditor, Transaction } from "@mdfn/core";
 import { createMarkdownProjector } from "@mdfn/markdown";
@@ -38,12 +39,14 @@ describe("Solid authoring components", () => {
     const controller = createEditor({ markdown: "# Reactive", projector: createMarkdownProjector() });
     const target = document.createElement("div");
     const dispose = render(() => <MdfnEditorShell controller={controller} mode="visual" />, target);
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(target.querySelector('[data-mdfn-source-fallback="true"]')).toBeNull();
-    expect(target.querySelector('[data-mdfn-editor="visual"]')).not.toBeNull();
+    await vi.waitFor(() => {
+      expect(target.querySelector('[data-mdfn-source-fallback="true"]')).toBeNull();
+      expect(target.querySelector('[data-mdfn-editor="visual"]')).not.toBeNull();
+    });
     controller.dispatch(new Transaction().replaceSource(0, 0, "Updated "));
     await Promise.resolve();
     expect(target.querySelector('[data-mdfn-source-fallback="true"]')).toBeNull();
+    expect(target.querySelector('[data-mdfn-editor="visual"]')).not.toBeNull();
     dispose();
   });
 

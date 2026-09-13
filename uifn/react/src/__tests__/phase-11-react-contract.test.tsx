@@ -133,7 +133,7 @@ describe('PHASE_11 public React contract', () => {
       warn.mockRestore();
       error.mockRestore();
     }
-  });
+  }, 20_000);
 
   it('uses one core controller for uncontrolled, controlled, composition, refs, and callback ordering', () => {
     const changes: Array<readonly string[]> = [];

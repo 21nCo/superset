@@ -18,6 +18,7 @@ import {
 import { runBeforeMutation, runAfterMutation } from "./plugins/run-hooks.js";
 import { serializeDateFields } from "./codecs/date.js";
 import {
+  assertNoSystemFieldWrite,
   sanitizeCapabilityReadonlyFields,
 } from "./capability-fields.js";
 import {
@@ -217,10 +218,12 @@ function sanitizeCapabilityFieldsInMutationPayload(
 ): unknown | unknown[] {
   if (!schema) return payload;
   if (Array.isArray(payload)) {
-    return payload.map((entry) =>
-      sanitizeCapabilityReadonlyFields(schema, entry as Record<string, unknown>),
-    );
+    return payload.map((entry) => {
+      assertNoSystemFieldWrite(schema, entry as Record<string, unknown>);
+      return sanitizeCapabilityReadonlyFields(schema, entry as Record<string, unknown>);
+    });
   }
+  assertNoSystemFieldWrite(schema, payload as Record<string, unknown>);
   return sanitizeCapabilityReadonlyFields(
     schema,
     payload as Record<string, unknown>,

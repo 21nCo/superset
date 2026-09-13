@@ -62,7 +62,7 @@ export function decideMergeMode(
     const hasProvided =
       Object.prototype.hasOwnProperty.call(delta, field.name) &&
       (delta as Record<string, unknown>)[field.name] !== undefined &&
-      (delta as Record<string, unknown>)[field.name] !== null;
+      ((delta as Record<string, unknown>)[field.name] !== null || field.nullable === true);
     const hasDefault = field.default !== undefined;
 
     if (!hasProvided && !hasDefault) return { mode: "not_found" };

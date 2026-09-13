@@ -38,7 +38,6 @@
 | Function | Description |
 | --- | --- |
 | [uiFn](./uifn) | Reusable frontend component primitives, themes, framework adapters, catalogs, registry delivery, and design-system tooling.<br><br>**Packages:** `@uifn/*` |
-| docFn | AI native documentation platform.<br><br>**Packages:** [npm](https://www.npmjs.com/package/docfn) |
 
 ## Infrastructure and meta
 
@@ -46,7 +45,7 @@
 | --- | --- |
 | hostFn | Handy CLI and dashboard for all hosting needs.<br><br>**Packages:** [npm](https://www.npmjs.com/package/hostfn) |
 | extFn | Complete extension development platform. Frontend framework agnostic, with hot-reload, automatic bundling, scanning and publishing.<br><br>**Packages:** [npm](https://www.npmjs.com/org/extfn) |
-| apiFn | AI native API client and testing.<br><br>**Packages:** [npm](https://www.npmjs.com/org/apifn) |
+| [apiFn](./apifn) | AI native API client and testing, including the `@apifn/docsfn` OpenAPI reference plugin.<br><br>**Packages:** [npm](https://www.npmjs.com/org/apifn) |
 
 
 ## Contributing

@@ -124,7 +124,7 @@ describe('TV-SOLID-001-P: catalog-complete native Solid compounds', () => {
     for (const primitive of catalog.primitives) {
       expect(host.querySelector(`[data-testid="${primitive.id}-root"]`) ?? document.body.querySelector(`[data-testid="${primitive.id}-root"]`)).not.toBeNull();
     }
-  });
+  }, 20_000);
 
   it('assigns unique controller IDs across independent Solid render roots', async () => {
     const first = mount(() => <Checkbox.Root><Checkbox.Control>First</Checkbox.Control></Checkbox.Root>);

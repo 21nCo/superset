@@ -6,7 +6,12 @@ from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
-from .storage import OAuthBrowserAuthSubject, OAuthConnectionSubject, OAuthStateRecord, OAuthStateStore
+from .storage import (
+    OAuthBrowserAuthSubject,
+    OAuthConnectionSubject,
+    OAuthStateRecord,
+    OAuthStateStore,
+)
 
 OAuthIntentSubject = Union[OAuthConnectionSubject, OAuthBrowserAuthSubject]
 OAuthCoreErrorCode = Literal[

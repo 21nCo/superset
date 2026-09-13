@@ -3,7 +3,7 @@
 from datetime import datetime
 
 import pytest
-from superfunctions.db import CreateParams
+from superfunctions.db import CreateParams, FindManyParams, WhereClause
 
 from sendfn.database.helpers import (
     create_email_transaction,
@@ -309,3 +309,16 @@ async def test_bulk_suppression_add_rejects_malformed_entries_with_validation_er
 
     assert exc_info.value.code == "SENDFN_VALIDATION_ERROR"
     assert str(exc_info.value) == "Each bulk suppression entry must include 'email' and 'reason'"
+
+@pytest.mark.asyncio
+async def test_memory_adapter_combines_mixed_where_connectors() -> None:
+    db = MemoryAdapter()
+    for identifier, enabled in [("a", True), ("b", True), ("c", False)]:
+        await db.create(CreateParams(model="items", data={"id": identifier, "enabled": enabled}))
+    rows = await db.find_many(FindManyParams(model="items", where=[
+        WhereClause(field="id", value="a"),
+        WhereClause(field="id", value="b", connector="OR"),
+        WhereClause(field="enabled", value=True, connector="AND"),
+    ]))
+    assert sorted(row["id"] for row in rows) == ["a", "b"]
+    assert db._matches_where({}, []) is True

@@ -15,6 +15,7 @@ import {
   relationTargetEndpoint,
   relationFkFieldForManyOne,
   resolveEndpointResource,
+  resourceRequiresAncestorInactive,
   type DatafnRelationDirection,
   type DatafnRelationMatch,
 } from "@datafn/core";
@@ -148,8 +149,7 @@ function isRecordEffectivelyInactive(record: Record<string, unknown> | null | un
 }
 
 function resourceSupportsAncestorInactive(schema: DatafnSchema, resource: string): boolean {
-  const resourceSchema = schema.resources.find((candidate) => candidate.name === resource);
-  return resourceSchema?.fields.some((field) => field.name === "isAncestorInactive") === true;
+  return resourceRequiresAncestorInactive(schema.relations, resource);
 }
 
 function dependentEndpoint(relation: DatafnRelationSchema): string | readonly string[] {
@@ -181,7 +181,11 @@ async function listRecords(
   }) as Record<string, unknown>[];
 }
 
-async function resolveAncestorInactive(
+/**
+ * Computes whether `record` should carry `isAncestorInactive` based on the
+ * current state of its parents across all `inheritsInactive` relations.
+ */
+export async function resolveAncestorInactive(
   adapter: Adapter,
   schema: DatafnSchema,
   resource: string,
